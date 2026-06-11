@@ -1,0 +1,14 @@
+{
+  "hosting": {
+    "site": "canil-gcm",
+    "source": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "frameworksBackend": {
+      "region": "southamerica-east1"
+    }
+  }
+}

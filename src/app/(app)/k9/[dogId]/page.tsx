@@ -1,0 +1,955 @@
+"use client";
+
+import {
+  Activity,
+  ArrowLeft,
+  CalendarDays,
+  CheckCircle2,
+  CircleAlert,
+  ClipboardCheck,
+  Dog,
+  FileText,
+  HeartPulse,
+  IdCard,
+  Pencil,
+  Scale,
+  ShieldCheck,
+  Stethoscope,
+  Syringe,
+  Target,
+  UserRound,
+} from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useMemo } from "react";
+
+import { useAccessControl } from "@/features/access/providers/access-control-provider";
+import {
+  DataState,
+  EntityImage,
+  StatusPill,
+} from "@/features/effective/components/effective-ui";
+import {
+  profileDate,
+  profileNumber,
+  profileRecordDate,
+  profileText,
+  useK9ProfileData,
+  type ProfileRecord,
+} from "@/features/effective/hooks/use-k9-profile-data";
+import { specialtyLabel } from "@/features/effective/hooks/use-effective-data";
+import { canonicalModality } from "@/features/effective/lib/k9-modalities";
+import { paths } from "@/lib/routes/paths";
+import { cn } from "@/lib/utils";
+
+type TimelineItem = {
+  category: "health" | "occurrence" | "training" | "weight" | "document";
+  date: Date;
+  detail: string;
+  id: string;
+  title: string;
+};
+
+const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+function normalized(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function firstDate(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) return null;
+  for (const key of keys) {
+    const parsed = profileDate(record[key]);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function ageLabel(date: Date | null) {
+  if (!date) return "Nao informada";
+  const now = new Date();
+  let years = now.getFullYear() - date.getFullYear();
+  let months = now.getMonth() - date.getMonth();
+  if (now.getDate() < date.getDate()) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  return `${Math.max(0, years)} ano(s) e ${Math.max(0, months)} mes(es)`;
+}
+
+function dateLabel(date: Date | null) {
+  return date ? dateFormatter.format(date) : "Nao informado";
+}
+
+function eventType(record: ProfileRecord) {
+  const explicit = normalized(profileText(record, ["type"]));
+  if (explicit) return explicit;
+  const legacy = normalized(profileText(record, ["logType"]));
+  if (legacy.includes("vacin")) return "vaccination";
+  if (legacy.includes("exame")) return "exam";
+  return legacy || "other";
+}
+
+function eventTitle(record: ProfileRecord) {
+  const type = eventType(record);
+  const subtype = profileText(record, ["subtype", "title", "name"]);
+  const labels: Record<string, string> = {
+    antiparasitic: "Antiparasitario",
+    consultation: "Consulta",
+    exam: "Exame",
+    medication: "Medicacao",
+    other: "Evento de saude",
+    surgery: "Cirurgia",
+    symptom: "Sintoma",
+    vaccination: "Vacina",
+  };
+  return subtype ? `${labels[type] ?? "Saude"}: ${subtype}` : labels[type] ?? type;
+}
+
+function sessionTitle(record: ProfileRecord) {
+  return (
+    profileText(record, [
+      "trainingType",
+      "training_type",
+      "specialty",
+      "type",
+      "activityType",
+    ]) ?? "Sessao de treino"
+  ).replaceAll("_", " ");
+}
+
+function occurrenceTitle(record: ProfileRecord) {
+  return (
+    profileText(record, [
+      "type_name",
+      "typeName",
+      "nature_name",
+      "nature",
+      "type_code",
+    ]) ?? "Ocorrencia"
+  );
+}
+
+function occurrenceStatus(record: ProfileRecord) {
+  const status = normalized(profileText(record, ["status"]));
+  if (["finalized", "finalized_with_pending", "sealed"].includes(status)) {
+    return "Finalizada";
+  }
+  if (status === "awaiting_signatures") return "Aguardando assinaturas";
+  return status ? status.replaceAll("_", " ") : "Registrada";
+}
+
+function specialtyStatus(record: ProfileRecord) {
+  const status = normalized(profileText(record, ["status", "state"]));
+  if (["operational", "operacional"].includes(status)) {
+    return { label: "Operacional", tone: "green" as const };
+  }
+  if (["in_formation", "formation", "em_formacao"].includes(status)) {
+    return { label: "Em formacao", tone: "blue" as const };
+  }
+  if (["maintenance", "manutencao"].includes(status)) {
+    return { label: "Manutencao", tone: "amber" as const };
+  }
+  return { label: "Nao iniciada", tone: "slate" as const };
+}
+
+function dogStatus(dog: ProfileRecord, specialties: ProfileRecord[]) {
+  const status = normalized(profileText(dog, ["status", "situacao"]));
+  if (!["ativo", "active", ""].includes(status)) {
+    return { label: profileText(dog, ["status"]) ?? "Fora de operacao", tone: "violet" as const };
+  }
+  if (
+    specialties.some((specialty) =>
+      ["operational", "operacional"].includes(
+        normalized(profileText(specialty, ["status"])),
+      ),
+    )
+  ) {
+    return { label: "Operacional", tone: "green" as const };
+  }
+  if (
+    specialties.some((specialty) =>
+      ["in_formation", "formation", "em_formacao"].includes(
+        normalized(profileText(specialty, ["status"])),
+      ),
+    )
+  ) {
+    return { label: "Em formacao", tone: "blue" as const };
+  }
+  return { label: "Ativo", tone: "slate" as const };
+}
+
+function weightValue(record: ProfileRecord | null) {
+  return profileNumber(record, ["weight_kg", "weightKg", "weight", "peso"]);
+}
+
+function MetricCard({
+  detail,
+  icon: Icon,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  icon: typeof Activity;
+  label: string;
+  tone: "cyan" | "green" | "blue" | "violet";
+  value: string;
+}) {
+  const tones = {
+    blue: "border-blue-300/20 bg-blue-300/10 text-blue-200",
+    cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-200",
+    green: "border-emerald-300/20 bg-emerald-300/10 text-emerald-200",
+    violet: "border-violet-300/20 bg-violet-300/10 text-violet-200",
+  };
+  return (
+    <article className="rounded-2xl border border-white/9 bg-[#0b1628]/82 p-4">
+      <div className="flex items-center gap-4">
+        <span
+          className={cn(
+            "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border",
+            tones[tone],
+          )}
+        >
+          <Icon className="h-6 w-6" />
+        </span>
+        <div>
+          <p className="text-xs text-slate-500">{label}</p>
+          <p className="mt-1 font-mono text-2xl font-black text-white">{value}</p>
+          <p className="mt-1 text-[11px] text-slate-500">{detail}</p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function SectionCard({
+  children,
+  className,
+  title,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  title: string;
+}) {
+  return (
+    <section
+      className={cn(
+        "rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.2)]",
+        className,
+      )}
+    >
+      <h2 className="text-sm font-black text-white">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+export default function K9ProfilePage() {
+  const { can } = useAccessControl();
+  const params = useParams<{ dogId: string }>();
+  const dogId = decodeURIComponent(params.dogId ?? "");
+  const data = useK9ProfileData(dogId);
+
+  const view = useMemo(() => {
+    if (!data.dog) return null;
+    const dog = data.dog;
+    const specialtiesByModality = new Map<string, ProfileRecord>();
+    for (const specialty of data.specialties) {
+      const modality =
+        profileText(specialty, ["type", "modality", "name"]) ?? specialty._id;
+      specialtiesByModality.set(
+        canonicalModality(modality),
+        specialty,
+      );
+    }
+    for (const progress of data.trainingProgress) {
+      const modality =
+        profileText(progress, ["modality", "type", "name"]) ?? progress._id;
+      const key = canonicalModality(modality);
+      specialtiesByModality.set(key, {
+        ...(specialtiesByModality.get(key) ?? {}),
+        ...progress,
+        _id: progress._id,
+        _source: progress._source,
+        modality,
+      });
+    }
+    const specialtyRecords = Array.from(specialtiesByModality.values());
+    const conductorRa = profileText(dog, [
+      "conductorRa",
+      "conductor_ra",
+      "handlerId",
+      "handler_id",
+    ]);
+    const conductor =
+      data.users.find(
+        (user) =>
+          profileText(user, ["ra", "_id", "id"]) === conductorRa,
+      ) ?? null;
+    const weights = [...data.weightRecords].sort(
+      (a, b) =>
+        (profileRecordDate(b)?.getTime() ?? 0) -
+        (profileRecordDate(a)?.getTime() ?? 0),
+    );
+    const latestWeight = weights[0] ?? null;
+    const canonicalWeight = weightValue(latestWeight);
+    const currentWeight = canonicalWeight ?? profileNumber(dog, ["weight"]);
+    const idealMin = profileNumber(dog, ["idealWeightMin", "ideal_weight_min"]);
+    const idealMax = profileNumber(dog, ["idealWeightMax", "ideal_weight_max"]);
+    const weightState =
+      canonicalWeight == null
+        ? { label: "Sem pesagem canonica", tone: "violet" as const }
+        : idealMin == null || idealMax == null
+          ? { label: "Faixa ideal ausente", tone: "amber" as const }
+          : canonicalWeight >= idealMin && canonicalWeight <= idealMax
+            ? { label: "Dentro da faixa ideal", tone: "green" as const }
+            : { label: "Fora da faixa ideal", tone: "amber" as const };
+
+    const healthEvents = [...data.healthEvents].sort(
+      (a, b) =>
+        (profileRecordDate(b)?.getTime() ?? 0) -
+        (profileRecordDate(a)?.getTime() ?? 0),
+    );
+    const vaccines = healthEvents.filter(
+      (record) => eventType(record) === "vaccination",
+    );
+    const latestVaccine = vaccines[0] ?? null;
+    const vaccineDate =
+      (latestVaccine && profileRecordDate(latestVaccine)) ||
+      firstDate(dog, ["lastVaccineDate", "last_vaccine_date"]);
+    const explicitDue =
+      latestVaccine &&
+      firstDate(latestVaccine, ["nextDueDate", "next_due_date"]);
+    const vaccineDue = explicitDue;
+    const vaccineDays = vaccineDue
+      ? Math.ceil(
+          (vaccineDue.getTime() - new Date().setHours(0, 0, 0, 0)) /
+            86_400_000,
+        )
+      : null;
+    const vaccineState =
+      vaccineDate == null
+        ? { label: "Sem registro", tone: "violet" as const }
+        : vaccineDays == null
+          ? { label: "Prazo nao informado", tone: "slate" as const }
+        : vaccineDays < 0
+          ? { label: "Vencida", tone: "amber" as const }
+          : vaccineDays <= 30
+            ? { label: "Vence em breve", tone: "amber" as const }
+            : { label: "Em dia", tone: "green" as const };
+
+    const sessions = [...data.trainingSessions].sort(
+      (a, b) =>
+        (profileRecordDate(b)?.getTime() ?? 0) -
+        (profileRecordDate(a)?.getTime() ?? 0),
+    );
+    const occurrences = [...data.occurrences].sort(
+      (a, b) =>
+        (profileRecordDate(b)?.getTime() ?? 0) -
+        (profileRecordDate(a)?.getTime() ?? 0),
+    );
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const sessions30 = sessions.filter(
+      (record) => (profileRecordDate(record)?.getTime() ?? 0) >= thirtyDaysAgo.getTime(),
+    );
+    const occurrences30 = occurrences.filter(
+      (record) => (profileRecordDate(record)?.getTime() ?? 0) >= thirtyDaysAgo.getTime(),
+    );
+
+    const timeline: TimelineItem[] = [
+      ...healthEvents.map((record) => ({
+        category: "health" as const,
+        date: profileRecordDate(record) ?? new Date(0),
+        detail:
+          profileText(record, [
+            "healthObservations",
+            "professionalClinic",
+            "vetName",
+          ]) ?? "Registro de saude",
+        id: `health:${record._id}`,
+        title: eventTitle(record),
+      })),
+      ...weights.map((record) => ({
+        category: "weight" as const,
+        date: profileRecordDate(record) ?? new Date(0),
+        detail: `${weightValue(record)?.toFixed(1) ?? "--"} kg`,
+        id: `weight:${record._id}`,
+        title: "Pesagem registrada",
+      })),
+      ...sessions.map((record) => ({
+        category: "training" as const,
+        date: profileRecordDate(record) ?? new Date(0),
+        detail:
+          profileText(record, ["location", "local", "result", "status"]) ??
+          "Sessao registrada",
+        id: `training:${record._source}:${record._id}`,
+        title: sessionTitle(record),
+      })),
+      ...occurrences.map((record) => ({
+        category: "occurrence" as const,
+        date: profileRecordDate(record) ?? new Date(0),
+        detail: occurrenceStatus(record),
+        id: `occurrence:${record._id}`,
+        title: occurrenceTitle(record),
+      })),
+      ...data.documents.map((record) => ({
+        category: "document" as const,
+        date: profileRecordDate(record) ?? new Date(0),
+        detail: profileText(record, ["tipo", "type", "emissor"]) ?? "Documento",
+        id: `document:${record._source}:${record._id}`,
+        title: profileText(record, ["nome", "name", "title"]) ?? "Documento anexado",
+      })),
+    ]
+      .filter((item) => item.date.getTime() > 0)
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 7);
+
+    return {
+      conductor,
+      conductorRa,
+      canonicalWeight,
+      currentWeight,
+      dog,
+      healthEvents,
+      idealMax,
+      idealMin,
+      latestVaccine,
+      occurrences,
+      occurrences30,
+      sessions,
+      sessions30,
+      specialtyRecords,
+      timeline,
+      vaccineDate,
+      vaccineDue,
+      vaccineState,
+      weightState,
+    };
+  }, [data]);
+
+  if (data.loading && !data.dog) {
+    return <DataState error={null} loading noun="o perfil do K9" />;
+  }
+
+  if (data.error && !data.dog) {
+    return <DataState error={data.error} loading={false} noun="o perfil do K9" />;
+  }
+
+  if (!view) {
+    return (
+      <div className="space-y-5">
+        <Link
+          className="inline-flex items-center gap-2 text-sm font-bold text-cyan-300"
+          href={paths.k9}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar ao efetivo K9
+        </Link>
+        <div className="rounded-3xl border border-dashed border-white/10 p-12 text-center">
+          <Dog className="mx-auto h-12 w-12 text-slate-600" />
+          <h1 className="mt-4 text-xl font-black text-white">K9 nao localizado</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            O documento dogs/{dogId} nao existe ou nao esta acessivel.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const dog = view.dog;
+  const name = profileText(dog, ["name", "nome"]) ?? "K9";
+  const breed = profileText(dog, ["breed", "raca"]) ?? "Raca nao informada";
+  const sex = profileText(dog, ["sex", "sexo"]) ?? "Sexo nao informado";
+  const birthDate = firstDate(dog, ["dateOfBirth", "date_of_birth"]);
+  const registration =
+    profileText(dog, [
+      "matricula",
+      "registrationNumber",
+      "registration_number",
+      "rga",
+    ]) ?? dogId;
+  const imageUrl = profileText(dog, [
+    "profileImageUrl",
+    "profile_image_url",
+    "photoUrl",
+    "image_url",
+  ]);
+  const microchip = profileText(dog, ["microchip"]);
+  const color = profileText(dog, ["cor", "color"]);
+  const status = dogStatus(dog, view.specialtyRecords);
+  const conductorName =
+    profileText(view.conductor, [
+      "callsign",
+      "callSign",
+      "nome_guerra",
+      "name",
+    ]) ??
+    view.conductorRa ??
+    "Nao vinculado";
+  const conductorPhoto = profileText(view.conductor, [
+    "photoUrl",
+    "photo_url",
+    "image_url",
+  ]);
+  const lastExam =
+    view.healthEvents.find((record) => eventType(record) === "exam") ?? null;
+  const lastExamDate = lastExam ? profileRecordDate(lastExam) : null;
+  const timelineIcons = {
+    document: FileText,
+    health: HeartPulse,
+    occurrence: ShieldCheck,
+    training: Target,
+    weight: Scale,
+  };
+  const timelineTones = {
+    document: "text-amber-200 bg-amber-300/10 border-amber-300/20",
+    health: "text-emerald-200 bg-emerald-300/10 border-emerald-300/20",
+    occurrence: "text-blue-200 bg-blue-300/10 border-blue-300/20",
+    training: "text-violet-200 bg-violet-300/10 border-violet-300/20",
+    weight: "text-cyan-200 bg-cyan-300/10 border-cyan-300/20",
+  };
+  const canEditK9 = can("k9", "edit");
+
+  return (
+    <div className="space-y-5">
+      {data.error ? (
+        <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs text-amber-100/80">
+          O cadastro principal foi carregado, mas uma fonte complementar nao
+          respondeu: {data.error}
+        </div>
+      ) : null}
+
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <div>
+          <Link
+            className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-300"
+            href={paths.k9}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Efetivo K9
+          </Link>
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-white">
+            Perfil do K9
+          </h1>
+          <p className="mt-2 text-sm text-slate-400">
+            Cadastro, formacao, saude e atividade operacional em uma unica visao.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canEditK9 ? (
+            <Link
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-bold text-cyan-200 transition hover:bg-cyan-300/[0.12]"
+              href={`/k9/${encodeURIComponent(dogId)}/edit`}
+            >
+              <Pencil className="h-4 w-4" />
+              Editar cadastro
+            </Link>
+          ) : null}
+          <span className="rounded-xl border border-white/10 bg-white/[0.035] px-4 py-2 text-xs font-semibold text-slate-400">
+            Perfil consultivo
+          </span>
+          <StatusPill label={status.label} tone={status.tone} />
+        </div>
+      </div>
+
+      <section className="relative overflow-hidden rounded-3xl border border-cyan-200/15 bg-[#0a172a]/90 p-5 shadow-[0_28px_90px_rgba(0,0,0,0.26)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_20%,rgba(34,211,238,0.12),transparent_32%),linear-gradient(125deg,transparent_62%,rgba(59,130,246,0.08))]" />
+        <div className="relative grid gap-6 lg:grid-cols-[210px_1fr]">
+          <EntityImage
+            alt={name}
+            className="h-[210px] w-full"
+            fallback={Dog}
+            src={imageUrl}
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-4xl font-black text-white">{name}</h2>
+              <StatusPill label={status.label} tone={status.tone} />
+            </div>
+            <p className="mt-2 font-mono text-sm font-bold text-cyan-300">
+              MAT. {registration}
+            </p>
+            <div className="mt-5 grid gap-4 border-y border-white/8 py-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { icon: Dog, label: "Raca", value: breed },
+                { icon: IdCard, label: "Sexo", value: sex },
+                { icon: CalendarDays, label: "Idade", value: ageLabel(birthDate) },
+                {
+                  icon: Scale,
+                  label: "Peso atual",
+                  value:
+                    view.currentWeight == null
+                      ? "Sem registro"
+                      : `${view.currentWeight.toFixed(1)} kg`,
+                },
+              ].map((item) => (
+                <div className="flex items-center gap-3" key={item.label}>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.045] text-cyan-200">
+                    <item.icon className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                      {item.label}
+                    </p>
+                    <p className="mt-1 truncate text-sm font-bold text-slate-200">
+                      {item.value}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {view.specialtyRecords.length ? (
+                view.specialtyRecords.map((specialty) => (
+                  <span
+                    className="rounded-lg border border-blue-300/20 bg-blue-300/8 px-3 py-1.5 text-xs font-semibold text-blue-200"
+                    key={specialty._id}
+                  >
+                    {specialtyLabel(
+                      profileText(specialty, ["modality", "type", "name"]) ??
+                        specialty._id,
+                    )}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-slate-500">
+                  Nenhuma especialidade ativa registrada.
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+        <MetricCard
+          detail="status derivado de vacina e proxima dose"
+          icon={Syringe}
+          label="Vacinacao"
+          tone="green"
+          value={view.vaccineState.label}
+        />
+        <MetricCard
+          detail={view.weightState.label}
+          icon={Scale}
+          label="Peso canonico"
+          tone="cyan"
+          value={
+            view.canonicalWeight == null
+              ? "--"
+              : `${view.canonicalWeight.toFixed(1)} kg`
+          }
+        />
+        <MetricCard
+          detail="sessoes registradas nos ultimos 30 dias"
+          icon={Target}
+          label="Treinos recentes"
+          tone="violet"
+          value={String(view.sessions30.length)}
+        />
+        <MetricCard
+          detail="ocorrencias vinculadas nos ultimos 30 dias"
+          icon={ShieldCheck}
+          label="Missoes recentes"
+          tone="blue"
+          value={String(view.occurrences30.length)}
+        />
+      </section>
+
+      <div className="grid gap-5 2xl:grid-cols-4">
+        <SectionCard title="Resumo do K9">
+          <dl className="mt-4 space-y-3 text-xs">
+            {[
+              ["Identificacao", registration],
+              ["Microchip", microchip ?? "Nao informado"],
+              ["Nascimento", dateLabel(birthDate)],
+              ["Pelagem", color ?? "Nao informada"],
+              ["Situacao cadastral", profileText(dog, ["status"]) ?? "Ativo"],
+            ].map(([label, value]) => (
+              <div className="flex justify-between gap-4" key={label}>
+                <dt className="text-slate-500">{label}</dt>
+                <dd className="text-right font-semibold text-slate-200">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </SectionCard>
+
+        <SectionCard title="Saude por evidencia">
+          <div className="mt-4 space-y-3">
+            <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-xs text-slate-300">
+                  <Syringe className="h-4 w-4 text-emerald-300" />
+                  Vacinacao
+                </span>
+                <StatusPill
+                  label={view.vaccineState.label}
+                  tone={view.vaccineState.tone}
+                />
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Ultima: {dateLabel(view.vaccineDate)} - Proxima:{" "}
+                {dateLabel(view.vaccineDue)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-xs text-slate-300">
+                  <Scale className="h-4 w-4 text-cyan-300" />
+                  Faixa de peso
+                </span>
+                <StatusPill
+                  label={view.weightState.label}
+                  tone={view.weightState.tone}
+                />
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Ideal:{" "}
+                {view.idealMin != null && view.idealMax != null
+                  ? `${view.idealMin.toFixed(1)}-${view.idealMax.toFixed(1)} kg`
+                  : "nao cadastrada"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
+              <div className="flex items-center gap-2 text-xs text-slate-300">
+                <Stethoscope className="h-4 w-4 text-blue-300" />
+                Ultimo exame
+              </div>
+              <p className="mt-2 text-sm font-bold text-white">
+                {lastExam
+                  ? profileText(lastExam, ["subtype", "title"]) ?? "Exame registrado"
+                  : "Sem exame localizado"}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                {dateLabel(lastExamDate)}
+              </p>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Especialidades operacionais">
+          <div className="mt-4 space-y-3">
+            {view.specialtyRecords.length ? (
+              view.specialtyRecords.map((specialty) => {
+                const presentation = specialtyStatus(specialty);
+                const currentModule = profileText(specialty, [
+                  "current_module",
+                  "currentModule",
+                  "phase",
+                ]);
+                return (
+                  <div
+                    className="rounded-xl border border-white/8 bg-white/[0.025] p-3"
+                    key={specialty._id}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-bold text-slate-200">
+                        {specialtyLabel(
+                          profileText(specialty, ["modality", "type", "name"]) ??
+                            specialty._id,
+                        )}
+                      </p>
+                      <StatusPill
+                        label={presentation.label}
+                        tone={presentation.tone}
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      {currentModule
+                        ? `Modulo/fase atual: ${currentModule}`
+                        : "Estado lido do cadastro da especialidade"}
+                    </p>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-slate-500">
+                Nenhuma especialidade cadastrada.
+              </p>
+            )}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Condutor vinculado">
+          <div className="mt-4 flex items-center gap-4">
+            <EntityImage
+              alt={conductorName}
+              className="h-20 w-20 shrink-0 rounded-full"
+              fallback={UserRound}
+              src={conductorPhoto}
+            />
+            <div className="min-w-0">
+              <p className="truncate text-lg font-black text-white">
+                {conductorName}
+              </p>
+              <p className="mt-1 font-mono text-xs text-slate-500">
+                RA {view.conductorRa ?? "--"}
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                {profileText(view.conductor, ["unit", "unidade"]) ??
+                  "Unidade nao informada"}
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 rounded-xl border border-white/8 bg-white/[0.025] p-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+              Natureza do vinculo
+            </p>
+            <p className="mt-2 text-xs font-semibold text-slate-300">
+              Condutor titular registrado em dogs.conductorRa
+            </p>
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="grid gap-5 2xl:grid-cols-[1.15fr_0.85fr]">
+        <SectionCard title="Treinos recentes">
+          <div className="mt-4 grid gap-3">
+            {view.sessions.slice(0, 6).map((session) => (
+              <article
+                className="grid gap-3 rounded-2xl border border-white/8 bg-white/[0.025] p-4 md:grid-cols-[9rem_1fr_auto]"
+                key={`${session._source}:${session._id}`}
+              >
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                    Data
+                  </p>
+                  <p className="mt-1 font-mono text-xs text-slate-300">
+                    {dateLabel(profileRecordDate(session))}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-bold capitalize text-white">
+                    {sessionTitle(session)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {profileText(session, ["location", "local"]) ??
+                      "Local nao informado"}
+                  </p>
+                </div>
+                <div className="md:text-right">
+                  <p className="text-xs font-bold capitalize text-cyan-100">
+                    {profileText(session, ["result", "status", "phase"]) ??
+                      "Registrado"}
+                  </p>
+                  <p className="mt-1 font-mono text-[11px] text-slate-500">
+                    {profileText(session, [
+                      "handlerId",
+                      "handler_id",
+                      "conductor",
+                      "conductor_ra",
+                    ]) ?? "--"}
+                  </p>
+                </div>
+              </article>
+            ))}
+            {!view.sessions.length ? (
+              <p className="py-8 text-center text-sm text-slate-500">
+                Nenhuma sessao de treino localizada.
+              </p>
+            ) : null}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Linha do tempo recente">
+          <div className="relative mt-4 space-y-4 before:absolute before:bottom-3 before:left-[17px] before:top-3 before:w-px before:bg-cyan-300/18">
+            {view.timeline.map((item) => {
+              const Icon = timelineIcons[item.category];
+              return (
+                <div className="relative flex gap-3" key={item.id}>
+                  <span
+                    className={cn(
+                      "z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
+                      timelineTones[item.category],
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1 border-b border-white/7 pb-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="font-bold text-slate-200">{item.title}</p>
+                      <span className="font-mono text-[10px] text-slate-600">
+                        {dateTimeFormatter.format(item.date)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs capitalize text-slate-500">
+                      {item.detail}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            {!view.timeline.length ? (
+              <p className="pl-12 text-sm text-slate-500">
+                Nenhum evento recente localizado.
+              </p>
+            ) : null}
+          </div>
+        </SectionCard>
+      </div>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/8 bg-[#0b1628]/70 p-4">
+          <p className="flex items-center gap-2 text-xs font-bold text-slate-300">
+            <ClipboardCheck className="h-4 w-4 text-cyan-300" />
+            Registros consolidados
+          </p>
+          <p className="mt-3 font-mono text-2xl font-black text-white">
+            {data.healthEvents.length +
+              data.weightRecords.length +
+              data.trainingSessions.length +
+              data.occurrences.length}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/8 bg-[#0b1628]/70 p-4">
+          <p className="flex items-center gap-2 text-xs font-bold text-slate-300">
+            <FileText className="h-4 w-4 text-amber-300" />
+            Documentos
+          </p>
+          <p className="mt-3 font-mono text-2xl font-black text-white">
+            {data.documents.length}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/8 bg-[#0b1628]/70 p-4">
+          <p className="flex items-center gap-2 text-xs font-bold text-slate-300">
+            {view.vaccineState.tone === "green" &&
+            view.weightState.tone === "green" ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+            ) : (
+              <CircleAlert className="h-4 w-4 text-amber-300" />
+            )}
+            Evidencia administrativa
+          </p>
+          <p className="mt-3 text-sm font-bold text-white">
+            {view.vaccineState.tone === "green" &&
+            view.weightState.tone === "green"
+              ? "Vacina e peso em conformidade"
+              : "Ha dados de saude a revisar"}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Indicador administrativo; nao substitui avaliacao veterinaria.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}

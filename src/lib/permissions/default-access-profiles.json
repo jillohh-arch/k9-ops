@@ -1,0 +1,251 @@
+{
+  "version": 2,
+  "actions": [
+    {
+      "id": "view",
+      "label": "Visualizar",
+      "description": "Permite visualizar informacoes e listas."
+    },
+    {
+      "id": "create",
+      "label": "Criar",
+      "description": "Permite criar novos registros."
+    },
+    {
+      "id": "edit",
+      "label": "Editar",
+      "description": "Permite alterar registros existentes."
+    },
+    {
+      "id": "archive",
+      "label": "Arquivar",
+      "description": "Permite arquivar registros com trilha de auditoria."
+    },
+    {
+      "id": "export",
+      "label": "Exportar",
+      "description": "Permite exportar dados e relatorios."
+    },
+    {
+      "id": "approve",
+      "label": "Aprovar",
+      "description": "Permite aprovar solicitacoes e transicoes sensiveis."
+    },
+    {
+      "id": "audit",
+      "label": "Auditar",
+      "description": "Permite consultar trilhas e evidencias de auditoria."
+    }
+  ],
+  "modules": [
+    {
+      "id": "dashboard",
+      "label": "Dashboard",
+      "path": "/dashboard",
+      "category": "gestao"
+    },
+    {
+      "id": "k9",
+      "label": "Efetivo K9",
+      "path": "/k9",
+      "category": "efetivo"
+    },
+    {
+      "id": "humans",
+      "label": "Efetivo Humano",
+      "path": "/humans",
+      "category": "efetivo"
+    },
+    {
+      "id": "binomials",
+      "label": "Binomios",
+      "path": "/binomials",
+      "category": "efetivo"
+    },
+    {
+      "id": "vehicles",
+      "label": "Viaturas",
+      "path": "/vehicles",
+      "category": "operacao"
+    },
+    {
+      "id": "occurrences",
+      "label": "Ocorrencias / Central",
+      "path": "/occurrences",
+      "category": "operacao"
+    },
+    {
+      "id": "training",
+      "label": "Treinamentos",
+      "path": "/training",
+      "category": "formacao"
+    },
+    {
+      "id": "training_matrix",
+      "label": "Prontidao K9",
+      "path": "/training-matrix",
+      "category": "formacao"
+    },
+    {
+      "id": "health",
+      "label": "Saude",
+      "path": "/health",
+      "category": "saude"
+    },
+    {
+      "id": "inventory",
+      "label": "Estoque",
+      "path": "/inventory",
+      "category": "logistica"
+    },
+    {
+      "id": "reports",
+      "label": "Relatorios",
+      "path": "/reports",
+      "category": "gestao"
+    },
+    {
+      "id": "audit",
+      "label": "Auditoria",
+      "path": "/audit",
+      "category": "governanca"
+    },
+    {
+      "id": "access",
+      "label": "Acessos / Perfis",
+      "path": "/access",
+      "category": "governanca"
+    },
+    {
+      "id": "settings",
+      "label": "Configuracoes",
+      "path": "/settings",
+      "category": "governanca"
+    },
+    {
+      "id": "me",
+      "label": "Meu Perfil",
+      "path": "/me",
+      "category": "pessoal"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "condutor",
+      "name": "Condutor",
+      "slug": "condutor",
+      "description": "Usuario operacional do mobile. Registra ocorrencias, treinos, saude operacional e consulta seus dados no web.",
+      "status": "active",
+      "level": "operacional",
+      "tone": "blue",
+      "role_keys": ["condutor", "handler", "mobile_user"],
+      "module_tags": ["Mobile", "Meu K9", "Ocorrencias", "Treinos"],
+      "scope": "own_records",
+      "permissions": {
+        "dashboard": ["view"],
+        "k9": ["view"],
+        "binomials": ["view"],
+        "occurrences": ["view", "create", "edit"],
+        "training": ["view", "create", "edit"],
+        "health": ["view", "create", "edit"],
+        "reports": ["view"],
+        "me": ["view", "edit"]
+      }
+    },
+    {
+      "id": "instrutor_k9",
+      "name": "Instrutor K9",
+      "slug": "instrutor_k9",
+      "description": "Responsavel por formacao, avaliacao e evolucao tecnica dos caes, com acesso mobile e web.",
+      "status": "active",
+      "level": "tecnico",
+      "tone": "cyan",
+      "role_keys": ["instrutor_k9", "instrutor", "adestrador", "condutor"],
+      "module_tags": ["Formacao", "Avaliacao", "Curriculos", "Mobile"],
+      "permissions": {
+        "dashboard": ["view"],
+        "k9": ["view", "edit", "export"],
+        "binomials": ["view", "edit"],
+        "occurrences": ["view", "create", "edit", "export"],
+        "training": ["view", "create", "edit", "approve", "export", "audit"],
+        "training_matrix": ["view", "create", "edit", "approve", "export", "audit"],
+        "health": ["view", "create", "edit"],
+        "reports": ["view", "export"],
+        "audit": ["view"],
+        "me": ["view", "edit"]
+      }
+    },
+    {
+      "id": "subinspetor_inspetor",
+      "name": "Subinspetor / Inspetor",
+      "slug": "subinspetor_inspetor",
+      "description": "Gestao web da unidade: efetivo, operacao, relatorios, saude, treinos e viaturas. Sem acesso ao mobile.",
+      "status": "active",
+      "level": "gestao",
+      "tone": "amber",
+      "role_keys": ["gestor", "subinspetor", "inspetor", "subinspetor_inspetor"],
+      "module_tags": ["Gestao", "Efetivo", "Relatorios", "Operacao"],
+      "permissions": {
+        "dashboard": ["view", "export", "audit"],
+        "k9": ["view", "create", "edit", "archive", "export", "audit"],
+        "humans": ["view", "create", "edit", "archive", "export", "audit"],
+        "binomials": ["view", "create", "edit", "archive", "export", "audit"],
+        "vehicles": ["view", "create", "edit", "archive", "export", "audit"],
+        "occurrences": ["view", "edit", "archive", "export", "approve", "audit"],
+        "training": ["view", "edit", "approve", "export", "audit"],
+        "training_matrix": ["view", "edit", "approve", "export", "audit"],
+        "health": ["view", "edit", "archive", "export", "audit"],
+        "inventory": ["view", "export"],
+        "reports": ["view", "export", "audit"],
+        "audit": ["view", "export", "audit"],
+        "me": ["view", "edit"]
+      }
+    },
+    {
+      "id": "almoxarifado",
+      "name": "Almoxarifado",
+      "slug": "almoxarifado",
+      "description": "Controle de estoque, materiais, entradas, saidas, inventario e relatorios de insumos.",
+      "status": "active",
+      "level": "logistica",
+      "tone": "orange",
+      "role_keys": ["inventory_manager", "almoxarifado", "estoque"],
+      "module_tags": ["Estoque", "Materiais", "Inventario"],
+      "permissions": {
+        "dashboard": ["view"],
+        "inventory": ["view", "create", "edit", "archive", "export", "audit"],
+        "reports": ["view", "export"],
+        "audit": ["view"],
+        "me": ["view", "edit"]
+      }
+    },
+    {
+      "id": "administrador",
+      "name": "Administrador",
+      "slug": "administrador",
+      "description": "Acesso total ao sistema, incluindo usuarios, perfis, configuracoes, auditoria e todos os modulos.",
+      "status": "active",
+      "level": "maximo",
+      "tone": "violet",
+      "role_keys": ["admin", "administrador", "admin_master"],
+      "module_tags": ["Todos os modulos", "Acessos", "Configuracoes", "Auditoria"],
+      "permissions": {
+        "dashboard": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "k9": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "humans": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "binomials": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "vehicles": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "occurrences": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "training": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "training_matrix": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "health": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "inventory": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "reports": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "audit": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "access": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "settings": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "me": ["view", "edit"]
+      }
+    }
+  ]
+}

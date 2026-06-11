@@ -9,6 +9,14 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "canil-gcm.firebasestorage.app",
+      },
+      {
+        protocol: "https",
+        hostname: "**.firebasestorage.app",
+      },
+      {
+        protocol: "https",
         hostname: "storage.googleapis.com",
       },
       {

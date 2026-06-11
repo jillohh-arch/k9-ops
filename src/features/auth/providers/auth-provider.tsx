@@ -5,7 +5,15 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  where,
+} from "firebase/firestore";
 import {
   createContext,
   useCallback,
@@ -21,15 +29,23 @@ import { auth, db } from "@/lib/firebase/client";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 type UserMirror = {
+  access_profile?: string;
+  access_profile_id?: string;
   auth_uid?: string;
   accessLevel?: string;
+  accessProfile?: string;
+  accessProfileId?: string;
   callSign?: string;
   callsign?: string;
   email?: string;
   image_url?: string;
   nome?: string;
   name?: string;
+  photo_url?: string;
   photoUrl?: string;
+  profile_image_url?: string;
+  profileImageUrl?: string;
+  permissions_version?: number;
   role?: string;
   roles?: string[];
   training_role?: string;
@@ -90,10 +106,37 @@ function firstStringValue(...values: unknown[]) {
   );
 }
 
+async function findUserMirrorByField(field: string, value: string) {
+  const snapshot = await getDocs(
+    query(collection(db, "users"), where(field, "==", value), limit(1)),
+  );
+  const match = snapshot.docs[0];
+
+  return match
+    ? { ra: match.id, userMirror: match.data() as UserMirror }
+    : null;
+}
+
+async function findUserMirrorByAuthIdentity(user: User) {
+  for (const field of ["auth_uid", "authUid", "uid"]) {
+    const resolved = await findUserMirrorByField(field, user.uid);
+    if (resolved) return resolved;
+  }
+
+  if (user.email) {
+    for (const field of ["email", "institutional_email", "institutionalEmail"]) {
+      const resolved = await findUserMirrorByField(field, user.email);
+      if (resolved) return resolved;
+    }
+  }
+
+  return null;
+}
+
 async function loadAuthProfile(user: User): Promise<AuthProfile> {
   const token = await user.getIdTokenResult();
   const claims = token.claims as Record<string, unknown>;
-  const ra = getRaFromUser(user, claims);
+  let ra = getRaFromUser(user, claims);
 
   let userMirror: UserMirror | null = null;
 
@@ -101,6 +144,19 @@ async function loadAuthProfile(user: User): Promise<AuthProfile> {
     try {
       const snapshot = await getDoc(doc(db, "users", ra));
       userMirror = snapshot.exists() ? (snapshot.data() as UserMirror) : null;
+    } catch {
+      userMirror = null;
+    }
+  }
+
+  if (!userMirror) {
+    try {
+      const resolved = await findUserMirrorByAuthIdentity(user);
+
+      if (resolved) {
+        ra = resolved.ra;
+        userMirror = resolved.userMirror;
+      }
     } catch {
       userMirror = null;
     }
@@ -135,7 +191,10 @@ async function loadAuthProfile(user: User): Promise<AuthProfile> {
     ),
     photoUrl: firstStringValue(
       userMirror?.photoUrl,
+      userMirror?.photo_url,
       userMirror?.image_url,
+      userMirror?.profileImageUrl,
+      userMirror?.profile_image_url,
       user.photoURL,
     ),
     ra,

@@ -8,19 +8,24 @@ import {
   Dog,
   FileText,
   HeartPulse,
+  Pencil,
   Pill,
+  Plus,
   Scale,
+  Search,
   ShieldCheck,
   Stethoscope,
   Syringe,
   TestTube2,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { EntityImage } from "@/features/effective/components/effective-ui";
 import { useDashboardPeriod } from "@/features/dashboard/providers/dashboard-period-provider";
+import { HealthEventHub } from "@/features/health/components/health-event-hub";
 import {
   useHealthData,
   type HealthDogSummary,
@@ -29,6 +34,13 @@ import {
 } from "@/features/health/hooks/use-health-data";
 import { paths } from "@/lib/routes/paths";
 import { cn } from "@/lib/utils";
+
+type ReadinessFilter =
+  | "all"
+  | "attention"
+  | "critical"
+  | "incomplete"
+  | "ready";
 
 const numberFormatter = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 0,
@@ -86,6 +98,11 @@ function formatWeight(value: number | null) {
   return value == null ? "--" : `${weightFormatter.format(value)} kg`;
 }
 
+function formatRange(range: HealthDogSummary["idealRange"]) {
+  if (!range) return "nao cadastrada";
+  return `${weightFormatter.format(range.min)}-${weightFormatter.format(range.max)} kg`;
+}
+
 function percent(value: number, total: number) {
   if (!total) return 0;
   return Math.round((value / total) * 100);
@@ -96,6 +113,32 @@ function daysUntil(date: Date | null) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return Math.ceil((date.getTime() - today.getTime()) / 86_400_000);
+}
+
+function searchText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function hasIssue(
+  dog: HealthDogSummary,
+  severity: "critical" | "missing" | "warning",
+) {
+  return dog.issues.some((issue) => issue.severity === severity);
+}
+
+function matchesReadinessFilter(
+  dog: HealthDogSummary,
+  filter: ReadinessFilter,
+) {
+  if (filter === "ready") return dog.ready;
+  if (filter === "critical") return hasIssue(dog, "critical");
+  if (filter === "attention") return hasIssue(dog, "warning");
+  if (filter === "incomplete") return hasIssue(dog, "missing");
+  return true;
 }
 
 function EventTypeIcon({
@@ -444,6 +487,205 @@ function AttentionCard({ dog }: { dog: HealthDogSummary }) {
   );
 }
 
+function DataGapRow({ dog }: { dog: HealthDogSummary }) {
+  const gaps = [
+    dog.weight === "missing_range" ? "faixa ideal" : null,
+    dog.weight === "missing" ? "peso canonico" : null,
+    dog.vaccine === "missing" ? "vacina" : null,
+    dog.exam === "missing" ? "exame" : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return (
+    <article className="grid gap-3 rounded-2xl border border-cyan-200/10 bg-white/[0.035] p-4 md:grid-cols-[1fr_auto] md:items-center">
+      <div className="flex min-w-0 items-start gap-3">
+        <EntityImage
+          alt={dog.dogName}
+          className="h-12 w-12 shrink-0 rounded-xl"
+          fallback={Dog}
+          src={dog.photoUrl}
+        />
+        <div className="min-w-0">
+          <p className="truncate font-black text-white">{dog.dogName}</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Corrigir: {gaps.join(", ")}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge tone={dog.weight === "missing_range" ? "yellow" : "slate"}>
+              faixa {formatRange(dog.idealRange)}
+            </Badge>
+            <Badge tone={dog.weight === "missing" ? "yellow" : "slate"}>
+              peso {formatWeight(dog.latestWeightKg)}
+            </Badge>
+          </div>
+        </div>
+      </div>
+      <Link
+        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100 transition hover:border-cyan-200/50 hover:bg-cyan-300/15"
+        href={`${paths.k9}/${encodeURIComponent(dog.dogId)}/edit`}
+      >
+        Ajustar cadastro
+        <ArrowRight className="h-4 w-4" />
+      </Link>
+    </article>
+  );
+}
+
+function healthStatus(dog: HealthDogSummary) {
+  if (hasIssue(dog, "critical")) {
+    return { label: "Critico", tone: "red" as const };
+  }
+  if (hasIssue(dog, "missing")) {
+    return { label: "Incompleto", tone: "yellow" as const };
+  }
+  if (hasIssue(dog, "warning")) {
+    return { label: "Atencao", tone: "yellow" as const };
+  }
+  if (dog.ready) {
+    return { label: "Pronto", tone: "green" as const };
+  }
+  return { label: "Revisar", tone: "slate" as const };
+}
+
+function vaccineStatus(dog: HealthDogSummary) {
+  if (dog.vaccine === "current") {
+    return { label: "Em dia", tone: "green" as const };
+  }
+  if (dog.vaccine === "due_soon") {
+    return { label: "A vencer", tone: "yellow" as const };
+  }
+  if (dog.vaccine === "overdue") {
+    return { label: "Vencida", tone: "red" as const };
+  }
+  return { label: "Sem registro", tone: "slate" as const };
+}
+
+function weightStatus(dog: HealthDogSummary) {
+  if (dog.weight === "in_range") {
+    return { label: "Na faixa", tone: "green" as const };
+  }
+  if (dog.weight === "out_of_range") {
+    return { label: "Fora da faixa", tone: "yellow" as const };
+  }
+  if (dog.weight === "missing_range") {
+    return { label: "Sem faixa ideal", tone: "yellow" as const };
+  }
+  return { label: "Sem pesagem", tone: "slate" as const };
+}
+
+function examStatus(dog: HealthDogSummary) {
+  if (dog.exam === "current") {
+    return { label: "Em dia", tone: "green" as const };
+  }
+  if (dog.exam === "due") {
+    return { label: "Revisar", tone: "yellow" as const };
+  }
+  return { label: "Sem registro", tone: "slate" as const };
+}
+
+function ReadinessRow({
+  canEdit,
+  dog,
+}: {
+  canEdit: boolean;
+  dog: HealthDogSummary;
+}) {
+  const status = healthStatus(dog);
+  const vaccine = vaccineStatus(dog);
+  const weight = weightStatus(dog);
+  const exam = examStatus(dog);
+
+  return (
+    <article className="rounded-[1.35rem] border border-cyan-200/10 bg-white/[0.035] p-4 transition hover:border-cyan-200/25 hover:bg-white/[0.05]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(220px,1.35fr)_minmax(150px,0.8fr)_minmax(190px,1fr)_minmax(145px,0.75fr)_minmax(110px,0.55fr)_auto] xl:items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <EntityImage
+            alt={dog.dogName}
+            className="h-14 w-14 shrink-0 rounded-2xl"
+            fallback={Dog}
+            src={dog.photoUrl}
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate font-black text-white">{dog.dogName}</p>
+              <Badge tone={status.tone}>{status.label}</Badge>
+            </div>
+            <p className="mt-1 line-clamp-1 text-xs text-slate-500">
+              {dog.issues[0]?.label ?? "Sem pendencias calculadas"}
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            Vacinacao
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge tone={vaccine.tone}>{vaccine.label}</Badge>
+            <span className="font-mono text-xs text-slate-400">
+              {formatDate(dog.latestVaccineDueAt)}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            Peso e faixa
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge tone={weight.tone}>{weight.label}</Badge>
+            <span className="font-mono text-xs text-slate-400">
+              {formatWeight(dog.latestWeightKg)}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            ideal {formatRange(dog.idealRange)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            Exame
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge tone={exam.tone}>{exam.label}</Badge>
+            <span className="font-mono text-xs text-slate-400">
+              {formatDate(dog.latestExamAt)}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            Documentos
+          </p>
+          <p className="mt-2 font-mono text-lg font-black text-white">
+            {formatNumber(dog.documentsCount)}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 xl:justify-end">
+          <Link
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-black text-slate-200 transition hover:border-cyan-200/30 hover:text-cyan-100"
+            href={`${paths.k9}/${encodeURIComponent(dog.dogId)}`}
+          >
+            Abrir
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          {canEdit ? (
+            <Link
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100 transition hover:border-cyan-200/45 hover:bg-cyan-300/15"
+              href={`${paths.k9}/${encodeURIComponent(dog.dogId)}/edit`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Corrigir
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function CategoryCard({
   detail,
   icon: Icon,
@@ -496,8 +738,14 @@ function CategoryCard({
 }
 
 export default function HealthPage() {
+  const { can } = useAccessControl();
   const { periodDays, periodLabel } = useDashboardPeriod();
   const data = useHealthData(periodDays);
+  const [readinessFilter, setReadinessFilter] =
+    useState<ReadinessFilter>("all");
+  const [readinessSearch, setReadinessSearch] = useState("");
+  const [healthHubOpen, setHealthHubOpen] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const loading = data.loading;
   const buckets = data.dogs.reduce(
     (accumulator, dog) => {
@@ -506,14 +754,78 @@ export default function HealthPage() {
     },
     { critical: 0, healthy: 0, incomplete: 0, warning: 0 },
   );
-  const monitored = data.metrics.total - data.metrics.incomplete;
   const vaccineOk = data.dogs.filter((dog) => dog.vaccine === "current").length;
   const examOk = data.dogs.filter((dog) => dog.exam === "current").length;
   const weightOk = data.dogs.filter((dog) => dog.weight === "in_range").length;
   const withDocs = data.dogs.filter((dog) => dog.documentsCount > 0).length;
+  const missingRange = data.dogs.filter(
+    (dog) => dog.weight === "missing_range",
+  ).length;
+  const missingWeight = data.dogs.filter((dog) => dog.weight === "missing").length;
+  const missingVaccine = data.dogs.filter(
+    (dog) => dog.vaccine === "missing",
+  ).length;
+  const dataGaps = data.dogs.filter(
+    (dog) =>
+      dog.weight === "missing_range" ||
+      dog.weight === "missing" ||
+      dog.vaccine === "missing" ||
+      dog.exam === "missing",
+  );
   const medicationEvents = data.recentEvents.filter((event) =>
     event.type.toLowerCase().includes("med"),
   ).length;
+  const canEditK9 = can("k9", "edit");
+  const canWriteHealth = can("health", "create") || can("health", "edit");
+  const readinessCounts = useMemo(
+    () => ({
+      all: data.dogs.length,
+      attention: data.dogs.filter((dog) => hasIssue(dog, "warning")).length,
+      critical: data.dogs.filter((dog) => hasIssue(dog, "critical")).length,
+      incomplete: data.dogs.filter((dog) => hasIssue(dog, "missing")).length,
+      ready: data.dogs.filter((dog) => dog.ready).length,
+    }),
+    [data.dogs],
+  );
+  const filteredDogs = useMemo(() => {
+    const needle = searchText(readinessSearch);
+    return [...data.dogs]
+      .filter((dog) => {
+        const matchesSearch =
+          !needle ||
+          [
+            dog.dogName,
+            dog.status,
+            ...dog.issues.flatMap((issue) => [issue.label, issue.detail]),
+          ].some((value) => searchText(value).includes(needle));
+        return (
+          matchesSearch && matchesReadinessFilter(dog, readinessFilter)
+        );
+      })
+      .sort((a, b) => {
+        const score = (dog: HealthDogSummary) =>
+          hasIssue(dog, "critical")
+            ? 4
+            : hasIssue(dog, "missing")
+              ? 3
+              : hasIssue(dog, "warning")
+                ? 2
+                : dog.ready
+                  ? 0
+                  : 1;
+        return score(b) - score(a) || a.dogName.localeCompare(b.dogName);
+      });
+  }, [data.dogs, readinessFilter, readinessSearch]);
+  const readinessFilters: Array<{
+    id: ReadinessFilter;
+    label: string;
+  }> = [
+    { id: "all", label: "Todos" },
+    { id: "ready", label: "Prontos" },
+    { id: "attention", label: "Atencao" },
+    { id: "critical", label: "Criticos" },
+    { id: "incomplete", label: "Dados incompletos" },
+  ];
 
   return (
     <div className="space-y-5">
@@ -531,17 +843,45 @@ export default function HealthPage() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge tone={data.metrics.critical > 0 ? "red" : "green"}>
-            {loading ? "..." : `${formatNumber(data.metrics.critical)} criticos`}
-          </Badge>
-          <Badge tone="cyan">
-            {loading
-              ? "..."
-              : `${formatNumber(data.metrics.periodEvents)} registros em ${periodLabel.toLowerCase()}`}
-          </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={data.metrics.critical > 0 ? "red" : "green"}>
+              {loading ? "..." : `${formatNumber(data.metrics.critical)} criticos`}
+            </Badge>
+            <Badge tone="cyan">
+              {loading
+                ? "..."
+                : `${formatNumber(data.metrics.periodEvents)} registros em ${periodLabel.toLowerCase()}`}
+            </Badge>
+          </div>
+          {canWriteHealth ? (
+            <button
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-[#031018] shadow-[0_0_26px_rgba(34,211,238,0.16)] transition hover:bg-cyan-200"
+              onClick={() => {
+                setSaveMessage(null);
+                setHealthHubOpen(true);
+              }}
+              type="button"
+            >
+              <Plus className="h-4 w-4" />
+              Registrar evento
+            </button>
+          ) : null}
         </div>
       </header>
+
+      {saveMessage ? (
+        <div className="flex items-center justify-between gap-4 rounded-[1.25rem] border border-emerald-300/20 bg-emerald-300/[0.06] px-4 py-3 text-sm text-emerald-100">
+          <span>{saveMessage}</span>
+          <button
+            className="text-xs font-black uppercase tracking-[0.14em] text-emerald-200"
+            onClick={() => setSaveMessage(null)}
+            type="button"
+          >
+            Fechar
+          </button>
+        </div>
+      ) : null}
 
       {data.errors.length ? (
         <div className="rounded-[1.5rem] border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm text-amber-100">
@@ -559,12 +899,12 @@ export default function HealthPage() {
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <MetricCard
-          detail={`${percent(monitored, data.metrics.total)}% do efetivo`}
-          footer={`${formatNumber(data.metrics.incomplete)} nao monitorado(s)`}
+          detail={`${percent(data.metrics.ready, data.metrics.total)}% do efetivo`}
+          footer="vacina vigente + peso canonico na faixa"
           icon={ShieldCheck}
-          label="K9 monitorados"
-          tone="cyan"
-          value={loading ? "..." : formatNumber(monitored)}
+          label="Prontos por evidencia"
+          tone="emerald"
+          value={loading ? "..." : `${formatNumber(data.metrics.ready)} / ${formatNumber(data.metrics.total)}`}
         />
         <MetricCard
           detail="Nos proximos 30 dias"
@@ -575,22 +915,88 @@ export default function HealthPage() {
           value={loading ? "..." : formatNumber(data.metrics.vaccinesDueSoon)}
         />
         <MetricCard
-          detail="Aguardando avaliacao"
-          footer={`${formatNumber(data.metrics.examsDue)} exame(s) pendente(s)`}
-          icon={Stethoscope}
-          label="Consultas pendentes"
+          detail="Fora do intervalo ideal"
+          footer={`${formatNumber(missingRange)} sem faixa ideal | ${formatNumber(missingWeight)} sem peso`}
+          icon={Scale}
+          label="Peso em atencao"
           tone="blue"
-          value={loading ? "..." : formatNumber(data.metrics.examsDue)}
+          value={loading ? "..." : formatNumber(data.metrics.weightAttention)}
         />
         <MetricCard
-          detail="Requerem atencao imediata"
-          footer="Ver detalhes no bloco de atencao"
+          detail="Falta dado essencial"
+          footer={`${formatNumber(missingVaccine)} sem vacina | ${formatNumber(data.metrics.examsDue)} exame(s) a revisar`}
           icon={Activity}
-          label="Alertas clinicos"
-          tone="red"
-          value={loading ? "..." : formatNumber(data.metrics.critical)}
+          label="Lacunas de prontidao"
+          tone={data.metrics.incomplete > 0 ? "amber" : "cyan"}
+          value={loading ? "..." : formatNumber(data.metrics.incomplete)}
         />
       </section>
+
+      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <Panel
+          action={<Badge tone={dataGaps.length ? "yellow" : "green"}>{formatNumber(dataGaps.length)} K9</Badge>}
+          subtitle="Pontos que impedem uma leitura confiavel de prontidao."
+          title="Lacunas de prontidao"
+        >
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-cyan-200/10 bg-white/[0.035] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                Sem faixa ideal
+              </p>
+              <p className="mt-3 font-mono text-3xl font-black text-white">
+                {formatNumber(missingRange)}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                minimo e maximo no cadastro K9
+              </p>
+            </div>
+            <div className="rounded-2xl border border-cyan-200/10 bg-white/[0.035] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                Sem peso canonico
+              </p>
+              <p className="mt-3 font-mono text-3xl font-black text-white">
+                {formatNumber(missingWeight)}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                sem registro em weight_records
+              </p>
+            </div>
+            <div className="rounded-2xl border border-cyan-200/10 bg-white/[0.035] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                Sem vacina
+              </p>
+              <p className="mt-3 font-mono text-3xl font-black text-white">
+                {formatNumber(missingVaccine)}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                nenhuma vacinacao localizada
+              </p>
+            </div>
+          </div>
+          <p className="mt-4 text-xs leading-5 text-slate-500">
+            O painel nao presume aptidao clinica: ele mostra se ha evidencia
+            minima cadastrada para defender a prontidao do K9.
+          </p>
+        </Panel>
+
+        <Panel
+          action={<Badge tone="cyan">{dataGaps.slice(0, 3).length} exibidos</Badge>}
+          subtitle="Atalhos para completar cadastro e parametros."
+          title="Corrigir primeiro"
+        >
+          {loading ? (
+            <EmptyState label="Carregando lacunas..." />
+          ) : dataGaps.length ? (
+            <div className="space-y-3">
+              {dataGaps.slice(0, 3).map((dog) => (
+                <DataGapRow dog={dog} key={dog.dogId} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState label="Nenhuma lacuna essencial encontrada." />
+          )}
+        </Panel>
+      </div>
 
       <div className="grid gap-5 2xl:grid-cols-[1.35fr_0.8fr]">
         <Panel
@@ -706,48 +1112,57 @@ export default function HealthPage() {
       </section>
 
       <Panel
-        action={<Badge tone="cyan">{data.dogs.length} K9</Badge>}
-        subtitle="Resumo compacto por prontuario. Clique no K9 para abrir o perfil detalhado."
-        title="Efetivo K9 por prontuario"
+        action={<Badge tone="cyan">{filteredDogs.length} exibidos</Badge>}
+        subtitle="Busca, filtros e evidencias essenciais de cada prontuario."
+        title="Prontidao K9"
       >
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/8 bg-[#0b1628]/72 p-3 xl:flex-row xl:items-center">
+          <label className="relative min-w-0 flex-1 xl:max-w-[420px]">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.035] pl-11 pr-4 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35"
+              onChange={(event) => setReadinessSearch(event.target.value)}
+              placeholder="Buscar K9 ou pendencia..."
+              type="search"
+              value={readinessSearch}
+            />
+          </label>
+          <div className="flex flex-1 flex-wrap gap-2">
+            {readinessFilters.map((filter) => (
+              <button
+                className={cn(
+                  "inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition",
+                  readinessFilter === filter.id
+                    ? "border-cyan-300/30 bg-cyan-300/12 text-cyan-100"
+                    : "border-white/8 bg-white/[0.025] text-slate-400 hover:border-cyan-200/20 hover:text-slate-200",
+                )}
+                key={filter.id}
+                onClick={() => setReadinessFilter(filter.id)}
+                type="button"
+              >
+                {filter.label}
+                <span className="rounded-full bg-black/20 px-2 py-0.5 font-mono text-xs">
+                  {readinessCounts[filter.id]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {loading ? (
           <EmptyState label="Carregando efetivo..." />
-        ) : data.dogs.length ? (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {data.dogs.map((dog) => (
-              <Link
-                className="group grid gap-4 rounded-2xl border border-cyan-200/10 bg-white/[0.035] p-4 transition hover:border-cyan-200/25 hover:bg-white/[0.055] sm:grid-cols-[1fr_auto]"
-                href={`${paths.k9}/${dog.dogId}`}
+        ) : filteredDogs.length ? (
+          <div className="space-y-3">
+            {filteredDogs.map((dog) => (
+              <ReadinessRow
+                canEdit={canEditK9}
+                dog={dog}
                 key={dog.dogId}
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <EntityImage
-                    alt={dog.dogName}
-                    className="h-12 w-12 shrink-0 rounded-xl"
-                    fallback={Dog}
-                    src={dog.photoUrl}
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate font-black text-white group-hover:text-cyan-100">
-                      {dog.dogName}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      peso {formatWeight(dog.latestWeightKg)} | vacina{" "}
-                      {formatDate(dog.latestVaccineDueAt)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone={dog.ready ? "green" : "yellow"}>
-                    {dog.ready ? "pronto" : "revisar"}
-                  </Badge>
-                  <ArrowRight className="h-4 w-4 text-slate-500 group-hover:text-cyan-200" />
-                </div>
-              </Link>
+              />
             ))}
           </div>
         ) : (
-          <EmptyState label="Nenhum K9 ativo encontrado." />
+          <EmptyState label="Nenhum K9 corresponde aos filtros atuais." />
         )}
       </Panel>
 
@@ -756,6 +1171,13 @@ export default function HealthPage() {
           sincronizando
         </div>
       ) : null}
+
+      <HealthEventHub
+        dogs={data.dogs}
+        onClose={() => setHealthHubOpen(false)}
+        onSaved={setSaveMessage}
+        open={healthHubOpen}
+      />
     </div>
   );
 }

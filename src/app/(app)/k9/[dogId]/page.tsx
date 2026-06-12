@@ -8,20 +8,35 @@ import {
   CircleAlert,
   ClipboardCheck,
   Dog,
+  ExternalLink,
   FileText,
   HeartPulse,
   IdCard,
   Pencil,
+  Pill,
+  Plus,
   Scale,
   ShieldCheck,
   Stethoscope,
   Syringe,
   Target,
+  TrendingDown,
+  TrendingUp,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceArea,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import {
@@ -39,6 +54,10 @@ import {
 } from "@/features/effective/hooks/use-k9-profile-data";
 import { specialtyLabel } from "@/features/effective/hooks/use-effective-data";
 import { canonicalModality } from "@/features/effective/lib/k9-modalities";
+import {
+  HealthEventHub,
+  type HealthHubSection,
+} from "@/features/health/components/health-event-hub";
 import { paths } from "@/lib/routes/paths";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +68,13 @@ type TimelineItem = {
   id: string;
   title: string;
 };
+
+type HealthTab =
+  | "clinical"
+  | "documents"
+  | "overview"
+  | "vaccines"
+  | "weight";
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -200,6 +226,43 @@ function weightValue(record: ProfileRecord | null) {
   return profileNumber(record, ["weight_kg", "weightKg", "weight", "peso"]);
 }
 
+function recordUrl(record: ProfileRecord) {
+  return profileText(record, [
+    "url",
+    "downloadUrl",
+    "download_url",
+    "documentUrl",
+    "document_url",
+    "attachmentUrl",
+  ]);
+}
+
+function vaccineState(record: ProfileRecord) {
+  const dueDate = firstDate(record, [
+    "nextDueDate",
+    "next_due_date",
+    "due_at",
+    "dueAt",
+  ]);
+  if (!dueDate) {
+    return {
+      dueDate: null,
+      label: "Prazo nao informado",
+      tone: "slate" as const,
+    };
+  }
+  const days = Math.ceil(
+    (dueDate.getTime() - new Date().setHours(0, 0, 0, 0)) / 86_400_000,
+  );
+  if (days < 0) {
+    return { dueDate, label: "Vencida", tone: "amber" as const };
+  }
+  if (days <= 30) {
+    return { dueDate, label: "Vence em breve", tone: "amber" as const };
+  }
+  return { dueDate, label: "Em dia", tone: "green" as const };
+}
+
 function MetricCard({
   detail,
   icon: Icon,
@@ -247,7 +310,7 @@ function SectionCard({
 }: {
   children: React.ReactNode;
   className?: string;
-  title: string;
+  title?: string;
 }) {
   return (
     <section
@@ -256,7 +319,7 @@ function SectionCard({
         className,
       )}
     >
-      <h2 className="text-sm font-black text-white">{title}</h2>
+      {title ? <h2 className="text-sm font-black text-white">{title}</h2> : null}
       {children}
     </section>
   );
@@ -267,6 +330,11 @@ export default function K9ProfilePage() {
   const params = useParams<{ dogId: string }>();
   const dogId = decodeURIComponent(params.dogId ?? "");
   const data = useK9ProfileData(dogId);
+  const [healthTab, setHealthTab] = useState<HealthTab>("overview");
+  const [healthHubOpen, setHealthHubOpen] = useState(false);
+  const [healthHubSection, setHealthHubSection] =
+    useState<HealthHubSection>("vaccination");
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const view = useMemo(() => {
     if (!data.dog) return null;
@@ -331,6 +399,9 @@ export default function K9ProfilePage() {
     const vaccines = healthEvents.filter(
       (record) => eventType(record) === "vaccination",
     );
+    const clinicalEvents = healthEvents.filter(
+      (record) => eventType(record) !== "vaccination",
+    );
     const latestVaccine = vaccines[0] ?? null;
     const vaccineDate =
       (latestVaccine && profileRecordDate(latestVaccine)) ||
@@ -374,6 +445,11 @@ export default function K9ProfilePage() {
     const occurrences30 = occurrences.filter(
       (record) => (profileRecordDate(record)?.getTime() ?? 0) >= thirtyDaysAgo.getTime(),
     );
+    const documents = [...data.documents].sort(
+      (a, b) =>
+        (profileRecordDate(b)?.getTime() ?? 0) -
+        (profileRecordDate(a)?.getTime() ?? 0),
+    );
 
     const timeline: TimelineItem[] = [
       ...healthEvents.map((record) => ({
@@ -411,7 +487,7 @@ export default function K9ProfilePage() {
         id: `occurrence:${record._id}`,
         title: occurrenceTitle(record),
       })),
-      ...data.documents.map((record) => ({
+      ...documents.map((record) => ({
         category: "document" as const,
         date: profileRecordDate(record) ?? new Date(0),
         detail: profileText(record, ["tipo", "type", "emissor"]) ?? "Documento",
@@ -427,8 +503,10 @@ export default function K9ProfilePage() {
       conductor,
       conductorRa,
       canonicalWeight,
+      clinicalEvents,
       currentWeight,
       dog,
+      documents,
       healthEvents,
       idealMax,
       idealMin,
@@ -439,9 +517,11 @@ export default function K9ProfilePage() {
       sessions30,
       specialtyRecords,
       timeline,
+      vaccines,
       vaccineDate,
       vaccineDue,
       vaccineState,
+      weights,
       weightState,
     };
   }, [data]);
@@ -528,6 +608,46 @@ export default function K9ProfilePage() {
     weight: "text-cyan-200 bg-cyan-300/10 border-cyan-300/20",
   };
   const canEditK9 = can("k9", "edit");
+  const canWriteHealth = can("health", "create") || can("health", "edit");
+  const weightChartData = [...view.weights]
+    .reverse()
+    .map((record) => {
+      const date = profileRecordDate(record);
+      return {
+        date: date ? dateFormatter.format(date) : "--",
+        fullDate: date ? dateTimeFormatter.format(date) : "Data nao informada",
+        weight: weightValue(record),
+      };
+    })
+    .filter(
+      (item): item is { date: string; fullDate: string; weight: number } =>
+        item.weight != null,
+    );
+  const weightValues = weightChartData.map((item) => item.weight);
+  const weightDomainValues = [
+    ...weightValues,
+    ...(view.idealMin == null ? [] : [view.idealMin]),
+    ...(view.idealMax == null ? [] : [view.idealMax]),
+  ];
+  const weightDomain =
+    weightDomainValues.length > 0
+      ? [
+          Math.max(0, Math.floor(Math.min(...weightDomainValues) - 1)),
+          Math.ceil(Math.max(...weightDomainValues) + 1),
+        ]
+      : [0, 40];
+  const previousWeight =
+    view.weights.length > 1 ? weightValue(view.weights[1]) : null;
+  const weightDelta =
+    view.canonicalWeight != null && previousWeight != null
+      ? view.canonicalWeight - previousWeight
+      : null;
+
+  function openHealthHub(section: HealthHubSection) {
+    setSaveMessage(null);
+    setHealthHubSection(section);
+    setHealthHubOpen(true);
+  }
 
   return (
     <div className="space-y-5">
@@ -675,6 +795,19 @@ export default function K9ProfilePage() {
         />
       </section>
 
+      {saveMessage ? (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.06] px-4 py-3 text-sm text-emerald-100">
+          <span>{saveMessage}</span>
+          <button
+            className="text-xs font-black uppercase tracking-[0.14em] text-emerald-200"
+            onClick={() => setSaveMessage(null)}
+            type="button"
+          >
+            Fechar
+          </button>
+        </div>
+      ) : null}
+
       <div className="grid gap-5 2xl:grid-cols-4">
         <SectionCard title="Resumo do K9">
           <dl className="mt-4 space-y-3 text-xs">
@@ -821,6 +954,678 @@ export default function K9ProfilePage() {
         </SectionCard>
       </div>
 
+      <SectionCard
+        className="overflow-hidden p-0"
+        title=""
+      >
+        <div className="border-b border-white/8 px-5 pt-5">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+            <div className="flex items-start gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
+                <HeartPulse className="h-6 w-6" />
+              </span>
+              <div>
+                <h2 className="text-xl font-black text-white">
+                  Prontuario clinico
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Vacinas, pesagem canonica e evidencias de saude do K9.
+                </p>
+              </div>
+            </div>
+            {canWriteHealth ? (
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-[#031018] transition hover:bg-cyan-200"
+                onClick={() => openHealthHub("clinical")}
+                type="button"
+              >
+                <Plus className="h-4 w-4" />
+                Registrar evento
+              </button>
+            ) : null}
+          </div>
+
+          <div className="mt-5 flex gap-1 overflow-x-auto">
+            {[
+              { id: "overview" as const, label: "Resumo" },
+              {
+                id: "vaccines" as const,
+                label: `Vacinas (${view.vaccines.length})`,
+              },
+              {
+                id: "weight" as const,
+                label: `Peso (${view.weights.length})`,
+              },
+              {
+                id: "clinical" as const,
+                label: `Atendimentos (${view.clinicalEvents.length})`,
+              },
+              {
+                id: "documents" as const,
+                label: `Documentos (${view.documents.length})`,
+              },
+            ].map((tab) => (
+              <button
+                className={cn(
+                  "whitespace-nowrap border-b-2 px-4 py-3 text-sm font-black transition",
+                  healthTab === tab.id
+                    ? "border-cyan-300 text-cyan-100"
+                    : "border-transparent text-slate-500 hover:text-slate-300",
+                )}
+                key={tab.id}
+                onClick={() => setHealthTab(tab.id)}
+                type="button"
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-5">
+          {healthTab === "overview" ? (
+            <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <article className="rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.055] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-300/10 text-emerald-200">
+                      <Syringe className="h-5 w-5" />
+                    </span>
+                    <StatusPill
+                      label={view.vaccineState.label}
+                      tone={view.vaccineState.tone}
+                    />
+                  </div>
+                  <p className="mt-4 text-xs uppercase tracking-[0.14em] text-slate-500">
+                    Carteira de vacinacao
+                  </p>
+                  <p className="mt-2 text-2xl font-black text-white">
+                    {view.vaccines.length} registro(s)
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Proxima dose: {dateLabel(view.vaccineDue)}
+                  </p>
+                  <button
+                    className="mt-4 text-xs font-black text-cyan-200"
+                    onClick={() => setHealthTab("vaccines")}
+                    type="button"
+                  >
+                    Ver carteira completa
+                  </button>
+                </article>
+
+                <article className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.055] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200">
+                      <Scale className="h-5 w-5" />
+                    </span>
+                    <StatusPill
+                      label={view.weightState.label}
+                      tone={view.weightState.tone}
+                    />
+                  </div>
+                  <p className="mt-4 text-xs uppercase tracking-[0.14em] text-slate-500">
+                    Peso atual
+                  </p>
+                  <p className="mt-2 font-mono text-2xl font-black text-white">
+                    {view.canonicalWeight == null
+                      ? "--"
+                      : `${view.canonicalWeight.toFixed(1)} kg`}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Ideal:{" "}
+                    {view.idealMin != null && view.idealMax != null
+                      ? `${view.idealMin.toFixed(1)} a ${view.idealMax.toFixed(1)} kg`
+                      : "faixa nao cadastrada"}
+                  </p>
+                  <button
+                    className="mt-4 text-xs font-black text-cyan-200"
+                    onClick={() => setHealthTab("weight")}
+                    type="button"
+                  >
+                    Ver evolucao do peso
+                  </button>
+                </article>
+              </div>
+
+              <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-white">
+                      Ultimas evidencias clinicas
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Registros reais da subcolecao health_events.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/10 px-3 py-1 font-mono text-xs text-slate-400">
+                    {view.healthEvents.length} eventos
+                  </span>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {view.healthEvents.slice(0, 4).map((event) => (
+                    <article
+                      className="flex items-center gap-3 rounded-xl border border-white/7 bg-white/[0.025] p-3"
+                      key={event._id}
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-300/10 text-emerald-200">
+                        <HeartPulse className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-slate-200">
+                          {eventTitle(event)}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          {profileText(event, [
+                            "vetName",
+                            "professionalClinic",
+                            "healthObservations",
+                          ]) ?? "Sem complemento informado"}
+                        </p>
+                      </div>
+                      <span className="font-mono text-[10px] text-slate-600">
+                        {dateLabel(profileRecordDate(event))}
+                      </span>
+                    </article>
+                  ))}
+                  {!view.healthEvents.length ? (
+                    <p className="py-8 text-center text-sm text-slate-500">
+                      Nenhum evento clinico localizado.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {healthTab === "vaccines" ? (
+            <div>
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-lg font-black text-white">
+                    Carteira de vacinacao
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Aplicacao, validade e responsabilidade profissional.
+                  </p>
+                </div>
+                {canWriteHealth ? (
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.07] px-4 py-2.5 text-sm font-black text-emerald-100"
+                    onClick={() => openHealthHub("vaccination")}
+                    type="button"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Registrar vacina
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-5 grid gap-3">
+                {view.vaccines.map((vaccine) => {
+                  const state = vaccineState(vaccine);
+                  return (
+                    <article
+                      className="grid gap-4 rounded-2xl border border-white/8 bg-white/[0.025] p-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr_auto]"
+                      key={vaccine._id}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
+                          <Syringe className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <p className="font-black text-white">
+                            {profileText(vaccine, [
+                              "subtype",
+                              "vaccineName",
+                              "vaccine_name",
+                              "title",
+                            ]) ?? "Vacina sem nome"}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Aplicada em {dateLabel(profileRecordDate(vaccine))}
+                          </p>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
+                          Proxima dose
+                        </p>
+                        <p className="mt-2 font-mono text-sm font-bold text-slate-200">
+                          {dateLabel(state.dueDate)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
+                          Responsavel
+                        </p>
+                        <p className="mt-2 text-sm font-bold text-slate-200">
+                          {profileText(vaccine, ["vetName"]) ?? "Nao informado"}
+                        </p>
+                        <p className="mt-1 font-mono text-[10px] text-slate-500">
+                          {profileText(vaccine, ["professionalCrmv"]) ??
+                            profileText(vaccine, ["professionalClinic"]) ??
+                            "Sem CRMV/clinica"}
+                        </p>
+                      </div>
+                      <div className="lg:text-right">
+                        <StatusPill label={state.label} tone={state.tone} />
+                      </div>
+                    </article>
+                  );
+                })}
+                {!view.vaccines.length ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center">
+                    <Syringe className="mx-auto h-10 w-10 text-slate-700" />
+                    <p className="mt-3 text-sm text-slate-500">
+                      Nenhuma vacina localizada no prontuario.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {healthTab === "weight" ? (
+            <div>
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-lg font-black text-white">
+                    Evolucao do peso
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Serie canonica de dogs/{dogId}/weight_records.
+                  </p>
+                </div>
+                {canWriteHealth ? (
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2.5 text-sm font-black text-cyan-100"
+                    onClick={() => openHealthHub("weight")}
+                    type="button"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Registrar pesagem
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_280px]">
+                <div className="min-h-[340px] rounded-2xl border border-cyan-300/12 bg-black/15 p-4">
+                  {weightChartData.length ? (
+                    <ResponsiveContainer height={300} width="100%">
+                      <AreaChart data={weightChartData}>
+                        <defs>
+                          <linearGradient id="weightFill" x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.38} />
+                            <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                          stroke="rgba(148,163,184,0.08)"
+                          vertical={false}
+                        />
+                        <XAxis
+                          axisLine={false}
+                          dataKey="date"
+                          tick={{ fill: "#64748b", fontSize: 11 }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          domain={weightDomain}
+                          tick={{ fill: "#64748b", fontSize: 11 }}
+                          tickFormatter={(value) => `${value} kg`}
+                          tickLine={false}
+                          width={56}
+                        />
+                        {view.idealMin != null && view.idealMax != null ? (
+                          <ReferenceArea
+                            fill="#34d399"
+                            fillOpacity={0.08}
+                            stroke="#34d399"
+                            strokeDasharray="4 4"
+                            strokeOpacity={0.35}
+                            y1={view.idealMin}
+                            y2={view.idealMax}
+                          />
+                        ) : null}
+                        <Tooltip
+                          contentStyle={{
+                            background: "#081426",
+                            border: "1px solid rgba(34,211,238,0.2)",
+                            borderRadius: "12px",
+                            color: "#e2e8f0",
+                          }}
+                          formatter={(value) => [
+                            `${Number(value).toFixed(1)} kg`,
+                            "Peso",
+                          ]}
+                          labelFormatter={(_, payload) =>
+                            payload[0]?.payload.fullDate ?? ""
+                          }
+                        />
+                        <Area
+                          dataKey="weight"
+                          fill="url(#weightFill)"
+                          stroke="#22d3ee"
+                          strokeWidth={3}
+                          type="monotone"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-[300px] flex-col items-center justify-center text-center">
+                      <Scale className="h-10 w-10 text-slate-700" />
+                      <p className="mt-3 text-sm text-slate-500">
+                        Nenhuma pesagem canonica localizada.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+                  <article className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+                    <p className="text-xs text-slate-500">Peso atual</p>
+                    <p className="mt-2 font-mono text-2xl font-black text-white">
+                      {view.canonicalWeight == null
+                        ? "--"
+                        : `${view.canonicalWeight.toFixed(1)} kg`}
+                    </p>
+                    {weightDelta != null ? (
+                      <p
+                        className={cn(
+                          "mt-2 flex items-center gap-1 text-xs font-bold",
+                          weightDelta > 0
+                            ? "text-amber-200"
+                            : weightDelta < 0
+                              ? "text-emerald-200"
+                              : "text-slate-400",
+                        )}
+                      >
+                        {weightDelta > 0 ? (
+                          <TrendingUp className="h-4 w-4" />
+                        ) : weightDelta < 0 ? (
+                          <TrendingDown className="h-4 w-4" />
+                        ) : null}
+                        {weightDelta === 0
+                          ? "Sem variacao"
+                          : `${weightDelta > 0 ? "+" : ""}${weightDelta.toFixed(1)} kg`}
+                      </p>
+                    ) : null}
+                  </article>
+                  <article className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+                    <p className="text-xs text-slate-500">Faixa ideal</p>
+                    <p className="mt-2 font-mono text-lg font-black text-white">
+                      {view.idealMin != null && view.idealMax != null
+                        ? `${view.idealMin.toFixed(1)}-${view.idealMax.toFixed(1)} kg`
+                        : "Nao cadastrada"}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Parametro administrativo do cadastro.
+                    </p>
+                  </article>
+                  <article className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+                    <p className="text-xs text-slate-500">Historico</p>
+                    <p className="mt-2 font-mono text-2xl font-black text-white">
+                      {view.weights.length}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      pesagem(ns) preservada(s)
+                    </p>
+                  </article>
+                </div>
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-2xl border border-white/8">
+                {view.weights.slice(0, 8).map((record, index) => (
+                  <div
+                    className="grid gap-2 border-b border-white/7 bg-white/[0.018] px-4 py-3 last:border-b-0 sm:grid-cols-[8rem_1fr_auto]"
+                    key={record._id}
+                  >
+                    <span className="font-mono text-xs text-slate-500">
+                      {dateLabel(profileRecordDate(record))}
+                    </span>
+                    <span className="text-sm text-slate-400">
+                      {profileText(record, ["context"])?.replaceAll("_", " ") ??
+                        "Contexto nao informado"}
+                      {index === 0 ? " - registro atual" : ""}
+                    </span>
+                    <span className="font-mono text-sm font-black text-white">
+                      {weightValue(record)?.toFixed(1) ?? "--"} kg
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {healthTab === "clinical" ? (
+            <div>
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-lg font-black text-white">
+                    Atendimentos e tratamentos
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Exames, consultas, medicacoes e demais eventos clinicos.
+                  </p>
+                </div>
+                {canWriteHealth ? (
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-300/20 bg-blue-300/[0.07] px-4 py-2.5 text-sm font-black text-blue-100"
+                    onClick={() => openHealthHub("clinical")}
+                    type="button"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Registrar atendimento
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-5 grid gap-3">
+                {view.clinicalEvents.map((event) => {
+                  const type = eventType(event);
+                  const dueDate = firstDate(event, [
+                    "nextDueDate",
+                    "next_due_date",
+                    "due_at",
+                    "dueAt",
+                  ]);
+                  const attachmentUrl = recordUrl(event);
+                  const EventIcon =
+                    type === "medication" || type === "antiparasitic"
+                      ? Pill
+                      : Stethoscope;
+                  return (
+                    <article
+                      className="rounded-2xl border border-white/8 bg-white/[0.025] p-4"
+                      key={event._id}
+                    >
+                      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-blue-300/20 bg-blue-300/10 text-blue-200">
+                            <EventIcon className="h-5 w-5" />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-black text-white">
+                                {eventTitle(event)}
+                              </p>
+                              <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                                {type.replaceAll("_", " ")}
+                              </span>
+                            </div>
+                            <p className="mt-1 font-mono text-xs text-slate-500">
+                              {dateLabel(profileRecordDate(event))}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {dueDate ? (
+                            <span className="rounded-xl border border-amber-300/15 bg-amber-300/[0.055] px-3 py-2 text-xs text-amber-100">
+                              Retorno:{" "}
+                              <strong className="font-mono">
+                                {dateLabel(dueDate)}
+                              </strong>
+                            </span>
+                          ) : null}
+                          {attachmentUrl ? (
+                            <a
+                              className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2 text-xs font-black text-cyan-100"
+                              href={attachmentUrl}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              Abrir anexo
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 border-t border-white/7 pt-4 md:grid-cols-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
+                            Profissional
+                          </p>
+                          <p className="mt-1 text-sm font-bold text-slate-300">
+                            {profileText(event, ["vetName"]) ?? "Nao informado"}
+                          </p>
+                          <p className="mt-1 font-mono text-[10px] text-slate-500">
+                            {profileText(event, ["professionalCrmv"]) ??
+                              "CRMV nao informado"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
+                            Clinica / unidade
+                          </p>
+                          <p className="mt-1 text-sm font-bold text-slate-300">
+                            {profileText(event, ["professionalClinic"]) ??
+                              "Nao informada"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
+                            Observacoes
+                          </p>
+                          <p className="mt-1 text-sm leading-5 text-slate-400">
+                            {profileText(event, ["healthObservations"]) ??
+                              "Nenhuma observacao registrada."}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+                {!view.clinicalEvents.length ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center">
+                    <Stethoscope className="mx-auto h-10 w-10 text-slate-700" />
+                    <p className="mt-3 text-sm text-slate-500">
+                      Nenhum atendimento clinico localizado.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {healthTab === "documents" ? (
+            <div>
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-lg font-black text-white">
+                    Laudos e documentos
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Arquivos preservados no prontuario e fontes legadas.
+                  </p>
+                </div>
+                {canWriteHealth ? (
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300/20 bg-amber-300/[0.07] px-4 py-2.5 text-sm font-black text-amber-100"
+                    onClick={() => openHealthHub("document")}
+                    type="button"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Anexar documento
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                {view.documents.map((document) => {
+                  const url = recordUrl(document);
+                  return (
+                    <article
+                      className="flex min-h-36 flex-col justify-between rounded-2xl border border-white/8 bg-white/[0.025] p-4"
+                      key={`${document._source}:${document._id}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-300/20 bg-amber-300/10 text-amber-200">
+                          <FileText className="h-5 w-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="break-words font-black text-white">
+                            {profileText(document, [
+                              "nome",
+                              "name",
+                              "title",
+                              "fileName",
+                            ]) ?? "Documento sem nome"}
+                          </p>
+                          <p className="mt-1 text-xs capitalize text-slate-500">
+                            {profileText(document, [
+                              "tipo",
+                              "type",
+                              "category",
+                            ]) ?? "documento"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-5 flex items-end justify-between gap-3 border-t border-white/7 pt-3">
+                        <div>
+                          <p className="text-xs text-slate-500">
+                            {profileText(document, ["emissor", "issuer"]) ??
+                              "Emissor nao informado"}
+                          </p>
+                          <p className="mt-1 font-mono text-[10px] text-slate-600">
+                            {dateLabel(profileRecordDate(document))}
+                          </p>
+                        </div>
+                        {url ? (
+                          <a
+                            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2 text-xs font-black text-cyan-100"
+                            href={url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            Abrir
+                          </a>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-600">
+                            Sem arquivo
+                          </span>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+                {!view.documents.length ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center md:col-span-2">
+                    <FileText className="mx-auto h-10 w-10 text-slate-700" />
+                    <p className="mt-3 text-sm text-slate-500">
+                      Nenhum laudo ou documento localizado.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </SectionCard>
+
       <div className="grid gap-5 2xl:grid-cols-[1.15fr_0.85fr]">
         <SectionCard title="Treinos recentes">
           <div className="mt-4 grid gap-3">
@@ -950,6 +1755,16 @@ export default function K9ProfilePage() {
           </p>
         </div>
       </section>
+
+      <HealthEventHub
+        dogs={[{ dogId, dogName: name }]}
+        initialDogId={dogId}
+        initialSection={healthHubSection}
+        key={`${dogId}:${healthHubSection}`}
+        onClose={() => setHealthHubOpen(false)}
+        onSaved={setSaveMessage}
+        open={healthHubOpen}
+      />
     </div>
   );
 }

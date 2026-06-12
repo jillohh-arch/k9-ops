@@ -470,11 +470,14 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
   const [weightRecordsState, setWeightRecordsState] =
     useState<SourceState>(emptySource);
   const [documentsState, setDocumentsState] = useState<SourceState>(emptySource);
+  const [rootDocumentsState, setRootDocumentsState] =
+    useState<SourceState>(emptySource);
 
   useEffect(() => {
     const unsubscribes = [
       subscribeCollection("dogs", setDogsState),
       subscribeCollection("health_logs", setRootHealthLogsState),
+      subscribeCollection("documentos", setRootDocumentsState),
     ];
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, []);
@@ -530,7 +533,10 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
       ...rootHealthLogsState.records,
     ].filter((record) => !isDeleted(record));
     const weights = weightRecordsState.records.filter((record) => !isDeleted(record));
-    const documentsRaw = documentsState.records.filter((record) => !isDeleted(record));
+    const documentsRaw = [
+      ...documentsState.records,
+      ...rootDocumentsState.records,
+    ].filter((record) => !isDeleted(record));
     const eventsByDog = new Map<string, RawRecord[]>();
     const weightsByDog = new Map<string, RawRecord[]>();
     const documentsByDog = new Map<string, RawRecord[]>();
@@ -773,6 +779,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
       healthEventsState.error,
       weightRecordsState.error,
       documentsState.error,
+      rootDocumentsState.error,
     ].filter((item): item is string => Boolean(item));
 
     return {
@@ -785,7 +792,8 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
         rootHealthLogsState.loading ||
         healthEventsState.loading ||
         weightRecordsState.loading ||
-        documentsState.loading,
+        documentsState.loading ||
+        rootDocumentsState.loading,
       metrics: {
         critical: dogs.filter((dog) =>
           dog.issues.some((issue) => issue.severity === "critical"),
@@ -814,6 +822,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
     dogsState,
     healthEventsState,
     periodDays,
+    rootDocumentsState,
     rootHealthLogsState,
     weightRecordsState,
   ]);

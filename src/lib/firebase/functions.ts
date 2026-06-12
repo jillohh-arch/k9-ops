@@ -62,6 +62,21 @@ export const callAdminArchiveK9 = httpsCallable<
   Record<string, unknown>
 >(functions, "adminArchiveK9");
 
+export const callAdminCreateHealthEvent = httpsCallable<
+  { dogId: string; payload: Record<string, unknown> },
+  { dogId?: string; id?: string; type?: string }
+>(functions, "adminCreateHealthEvent");
+
+export const callAdminCreateK9WeightRecord = httpsCallable<
+  { dogId: string; payload: Record<string, unknown> },
+  { dogId?: string; id?: string; weightKg?: number }
+>(functions, "adminCreateK9WeightRecord");
+
+export const callAdminCreateK9HealthDocument = httpsCallable<
+  { dogId: string; payload: Record<string, unknown> },
+  { dogId?: string; id?: string; url?: string }
+>(functions, "adminCreateK9HealthDocument");
+
 export const callAdminArchiveHuman = httpsCallable<
   { ra: string; reason: string },
   Record<string, unknown>

@@ -34,7 +34,7 @@ type AccessControlContextValue = {
 };
 
 const fallbackProfile =
-  getDefaultAccessProfile("condutor") ?? defaultAccessProfiles[0];
+  getDefaultAccessProfile("operador_k9") ?? defaultAccessProfiles[0];
 
 const AccessControlContext = createContext<AccessControlContextValue | null>(
   null,
@@ -71,7 +71,7 @@ function resolveProfileId(profile: AuthProfile | null) {
     return "instrutor_k9";
   }
 
-  return "condutor";
+  return "operador_k9";
 }
 
 export function AccessControlProvider({ children }: { children: ReactNode }) {

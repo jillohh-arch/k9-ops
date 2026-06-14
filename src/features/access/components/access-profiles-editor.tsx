@@ -191,7 +191,7 @@ export function ProfileIdentityForm({
               onChange={(event) =>
                 onChange({ ...draft, id: event.target.value })
               }
-              placeholder="condutor_k9"
+              placeholder="operador_k9"
               value={draft.id}
             />
           </label>
@@ -286,7 +286,7 @@ export function ProfileIdentityForm({
                 role_keys: commaListToArray(event.target.value),
               })
             }
-            placeholder="condutor, instrutor_k9..."
+            placeholder="operador_k9, instrutor_k9..."
             value={arrayToCommaList(draft.role_keys)}
           />
           <span className="mt-2 block text-[11px] leading-5 text-slate-500">

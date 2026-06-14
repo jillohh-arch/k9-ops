@@ -29,12 +29,12 @@ export function ProfileIcon({ profile }: { profile: AccessProfile }) {
   const Icon =
     profile.id === "administrador"
       ? Crown
-      : profile.id === "condutor"
+      : profile.id === "operador_k9"
         ? User
         : profile.id === "instrutor_k9"
           ? PawPrint
-          : profile.id === "almoxarifado"
-            ? Boxes
+          : profile.id === "gestor"
+            ? ShieldCheck
             : ShieldCheck;
 
   return (

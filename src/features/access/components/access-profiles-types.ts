@@ -83,21 +83,23 @@ export const accessTabs: Array<{
 ];
 
 export const roleKeyLabels: Record<string, string> = {
+  adestrador: "Adestrador",
+  adestrador_k9: "Adestrador K9",
   admin: "Administrador",
   administrador: "Administrador",
-  admin_master: "Legado admin",
-  almoxarifado: "Almoxarifado",
-  condutor: "Condutor",
-  estoque: "Estoque",
-  gestor: "Gestão",
-  handler: "Condutor mobile",
+  comando: "Comando",
+  comando_canil: "Comando Canil",
+  coordenador: "Coordenador",
+  guarda_k9: "Guarda K9",
+  gestor: "Gestor",
+  gestor_canil: "Gestor do Canil",
   inspetor: "Inspetor",
   instrutor: "Instrutor",
   instrutor_k9: "Instrutor K9",
-  inventory_manager: "Gestor de estoque",
-  mobile_user: "Acesso mobile",
+  operador: "Operador",
+  operador_k9: "Operador K9",
   subinspetor: "Subinspetor",
-  subinspetor_inspetor: "Gestão inspetoria",
+  ti: "TI",
 };
 
 export const toneClasses: Record<string, string> = {

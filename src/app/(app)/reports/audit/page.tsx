@@ -1,5 +1,5 @@
-import { ReportDetailPage } from "@/features/reports/components/report-pages";
+import { AuditReport } from "@/features/reports/components/audit-report";
 
 export default function AuditReportPage() {
-  return <ReportDetailPage reportId="audit" />;
+  return <AuditReport />;
 }

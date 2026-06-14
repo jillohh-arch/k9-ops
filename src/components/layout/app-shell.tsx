@@ -3,10 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import {
   Bell,
+  BellRing,
   Boxes,
+  ChevronRight,
   ClipboardList,
   FileBarChart,
   FileText,
@@ -20,10 +22,18 @@ import {
   Users,
   X,
 } from "lucide-react";
+import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+} from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAuth } from "@/features/auth/providers/auth-provider";
+import { db } from "@/lib/firebase/client";
 import {
   DashboardPeriodProvider,
   dashboardPeriodOptions,
@@ -327,6 +337,172 @@ function OperatorAvatar({ src }: { src: string | null }) {
   );
 }
 
+// ─── Notification Bell ─────────────────────────────────────────────────────────
+
+type NotificationItem = {
+  _id: string;
+  title?: string;
+  body?: string;
+  message?: string;
+  type?: string;
+  read?: boolean;
+  action_required?: boolean;
+  created_at?: { toDate: () => Date } | Date;
+  createdAt?: { toDate: () => Date } | Date;
+};
+
+function formatTime(date: Date) {
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `${minutes}m atrás`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h atrás`;
+  return date.toLocaleDateString("pt-BR");
+}
+
+function NotificationBell({ ra }: { ra: string | null | undefined }) {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!ra) {
+      setLoading(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, "notifications", ra, "items"),
+      where("archived_at", "==", null),
+      orderBy("created_at", "desc"),
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map((doc) => ({
+        _id: doc.id,
+        ...doc.data(),
+      })) as NotificationItem[];
+      setNotifications(items);
+      setLoading(false);
+    }, () => {
+      setLoading(false);
+    });
+
+    return unsub;
+  }, [ra]);
+
+  const unreadCount = notifications.filter(
+    (n) => !n.read && n.action_required,
+  ).length;
+
+  const recentNotifications = notifications.slice(0, 5);
+
+  return (
+    <div className="relative">
+      <button
+        className={cn(
+          "relative rounded-2xl border p-3 transition",
+          unreadCount > 0
+            ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+            : "border-white/10 bg-white/[0.045] text-slate-300 hover:border-cyan-300/30",
+        )}
+        onClick={() => setOpen(!open)}
+        type="button"
+      >
+        {unreadCount > 0 ? (
+          <BellRing className="h-5 w-5" />
+        ) : (
+          <Bell className="h-5 w-5" />
+        )}
+        {unreadCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400 text-[10px] font-bold text-slate-950 shadow-[0_0_12px_rgba(77,208,225,0.9)]">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-14 z-50 w-80 overflow-hidden rounded-2xl border border-cyan-200/20 bg-[#0b1628] shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+            <div className="flex items-center justify-between border-b border-white/10 p-4">
+              <h3 className="text-sm font-bold text-white">Notificações</h3>
+              <span className="text-xs text-slate-400">
+                {loading ? "..." : `${notifications.length} total`}
+              </span>
+            </div>
+            <div className="max-h-96 overflow-y-auto">
+              {loading ? (
+                <div className="p-4 text-center text-xs text-slate-500">
+                  Carregando...
+                </div>
+              ) : recentNotifications.length === 0 ? (
+                <div className="p-6 text-center">
+                  <Bell className="mx-auto h-8 w-8 text-slate-600" />
+                  <p className="mt-2 text-sm text-slate-500">
+                    Nenhuma notificação
+                  </p>
+                </div>
+              ) : (
+                recentNotifications.map((notif) => {
+                  const rawDate = notif.created_at || notif.createdAt;
+                  const date = rawDate
+                    ? typeof rawDate === "object" && "toDate" in rawDate
+                      ? (rawDate as { toDate: () => Date }).toDate()
+                      : (rawDate as Date)
+                    : new Date();
+                  const title = notif.title || notif.type || "Notificação";
+                  const body = notif.body || notif.message || "";
+
+                  return (
+                    <div
+                      key={notif._id}
+                      className={cn(
+                        "flex items-start gap-3 border-b border-white/5 p-4 transition hover:bg-white/[0.03]",
+                        !notif.read && "bg-cyan-300/[0.03]",
+                      )}
+                    >
+                      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10">
+                        <Bell className="h-4 w-4 text-cyan-300" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-white">{title}</p>
+                        {body && (
+                          <p className="mt-0.5 text-xs text-slate-400 line-clamp-2">
+                            {body}
+                          </p>
+                        )}
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatTime(date)}
+                        </p>
+                      </div>
+                      {!notif.read && (
+                        <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(77,208,225,0.8)]" />
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <Link
+              className="flex items-center justify-center gap-2 border-t border-white/10 p-3 text-xs font-semibold text-cyan-300 transition hover:bg-white/[0.03]"
+              href={paths.notifications}
+              onClick={() => setOpen(false)}
+            >
+              Ver todas
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function AppShellFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -467,10 +643,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <p className="text-xs text-slate-500">Gestão Operacional</p>
               </div>
 
-              <button className="relative rounded-2xl border border-white/10 bg-white/[0.045] p-3 text-slate-300 transition hover:border-cyan-300/30 hover:text-cyan-100">
-                <Bell className="h-5 w-5" />
-                <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(77,208,225,0.9)]" />
-              </button>
+              <NotificationBell ra={profile?.ra} />
 
               <div className="hidden h-12 w-px bg-white/10 md:block" />
 

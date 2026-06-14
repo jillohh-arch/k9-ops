@@ -4,6 +4,7 @@ import Image from "next/image";
 import {
   Activity,
   AlertCircle,
+  BarChart3,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -12,9 +13,12 @@ import {
   HeartPulse,
   ListChecks,
   Scale,
+  Shield,
   ShieldCheck,
   Stethoscope,
   Syringe,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 import {
   collection,
@@ -640,6 +644,45 @@ function toneClasses(tone: string) {
   return tones[tone] ?? tones.cyan;
 }
 
+// ─── Profile Detection ─────────────────────────────────────────────────────────
+
+type UserProfile = "operador" | "instrutor" | "gestor" | "admin";
+
+function detectUserProfile(profile: {
+  isK9Instructor?: boolean;
+  roles?: string[];
+  claims?: Record<string, unknown>;
+}): UserProfile {
+  const roles = profile.roles ?? [];
+  const claims = profile.claims ?? {};
+  const isInstructor = profile.isK9Instructor === true || roles.includes("instrutor_k9") || claims.instrutor_k9 === true;
+  const isAdmin = roles.includes("admin") || roles.includes("administrador") || claims.admin === true;
+  const isGestor = roles.some((r) => ["gestor", "comando", "subinspetor", "inspetor", "coordenador"].includes(r));
+
+  if (isAdmin) return "admin";
+  if (isGestor) return "gestor";
+  if (isInstructor) return "instrutor";
+  return "operador";
+}
+
+function ProfileBadge({ profile }: { profile: UserProfile }) {
+  const config = {
+    operador: { label: "Operador K9", tone: "blue" as const, icon: Users },
+    instrutor: { label: "Instrutor K9", tone: "cyan" as const, icon: GraduationCap },
+    gestor: { label: "Gestor / Comando", tone: "amber" as const, icon: BarChart3 },
+    admin: { label: "Administrador", tone: "violet" as const, icon: Shield },
+  }[profile];
+
+  const Icon = config.icon;
+
+  return (
+    <div className={cn("inline-flex items-center gap-2 rounded-xl border px-3 py-1.5", toneClasses(config.tone))}>
+      <Icon className="h-4 w-4" />
+      <span className="text-xs font-semibold">{config.label}</span>
+    </div>
+  );
+}
+
 function DashboardGlyph({
   glyph,
   tone = "cyan",
@@ -668,6 +711,11 @@ export default function DashboardPage() {
   const { profile } = useAuth();
   const { periodDays, periodLabel } = useDashboardPeriod();
   const warName = profile?.displayName?.trim() || "Operador";
+  const userProfile = detectUserProfile({
+    isK9Instructor: profile?.isK9Instructor,
+    roles: profile?.roles,
+    claims: profile?.claims,
+  });
   const [occurrences, setOccurrences] = useState<DashboardCollectionState>(
     () => emptyDashboardCollection(),
   );
@@ -1345,15 +1393,22 @@ export default function DashboardPage() {
   return (
     <div className="space-y-5">
       <section>
-        <h1 className="text-3xl font-black tracking-tight text-white">
-          Bom dia, {warName}
-        </h1>
-        <p className="mt-2 text-sm text-slate-400">
-          Resumo administrativo da unidade K9 -{" "}
-          <span className="text-cyan-300" suppressHydrationWarning>
-            {dashboardDateLabel()}.
-          </span>
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight text-white">
+              Bom dia, {warName}
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Resumo administrativo da unidade K9 -{" "}
+              <span className="text-cyan-300" suppressHydrationWarning>
+                {dashboardDateLabel()}.
+              </span>
+            </p>
+          </div>
+          <div className="hidden lg:block">
+            <ProfileBadge profile={userProfile} />
+          </div>
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
@@ -2062,6 +2117,75 @@ export default function DashboardPage() {
           ) : null}
         </article>
       </section>
+
+      {/* Produtividade para Gestores e Admins */}
+      {(userProfile === "gestor" || userProfile === "admin") && (
+        <section>
+          <article className="overflow-hidden rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
+            <div className="flex items-center gap-3 border-b border-white/8 p-5">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
+                <TrendingUp className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-bold text-white">
+                  Painel de Gestão
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-400">
+                  Visão executiva para comandantes e gestores
+                </p>
+              </div>
+              <Badge tone="green" className="ml-auto">
+                Gestor
+              </Badge>
+            </div>
+            <div className="grid gap-4 p-5 md:grid-cols-3">
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.05] p-4">
+                <div className="flex items-center gap-2 text-emerald-300">
+                  <ShieldCheck className="h-5 w-5" />
+                  <p className="text-sm font-semibold">Índice de Conformidade</p>
+                </div>
+                <p className="mt-3 font-mono text-3xl font-black text-white">
+                  {readinessPercent}%
+                </p>
+                <p className="mt-1 text-xs text-slate-400">prontidão operacional</p>
+              </div>
+              <div className="rounded-2xl border border-blue-400/20 bg-blue-400/[0.05] p-4">
+                <div className="flex items-center gap-2 text-blue-300">
+                  <BarChart3 className="h-5 w-5" />
+                  <p className="text-sm font-semibold">Taxa de Finalização</p>
+                </div>
+                <p className="mt-3 font-mono text-3xl font-black text-white">
+                  {occurrenceMetrics.total > 0
+                    ? Math.round((occurrenceMetrics.finalized / occurrenceMetrics.total) * 100)
+                    : 0}%
+                </p>
+                <p className="mt-1 text-xs text-slate-400">ocorrências concluídas</p>
+              </div>
+              <div className="rounded-2xl border border-violet-400/20 bg-violet-400/[0.05] p-4">
+                <div className="flex items-center gap-2 text-violet-300">
+                  <Shield className="h-5 w-5" />
+                  <p className="text-sm font-semibold">Integridade</p>
+                </div>
+                <p className="mt-3 font-mono text-3xl font-black text-white">
+                  {new Intl.NumberFormat("pt-BR", {
+                    maximumFractionDigits: 0,
+                  }).format(integrityMetrics.coverage)}%
+                </p>
+                <p className="mt-1 text-xs text-slate-400">documentos selados</p>
+              </div>
+            </div>
+            <div className="border-t border-white/8 px-5 py-4">
+              <p className="text-xs text-slate-500">
+                Acesse relatórios completos em{" "}
+                <a href="/reports" className="text-cyan-300 hover:underline">
+                  Relatórios
+                </a>{" "}
+                para análises detalhadas.
+              </p>
+            </div>
+          </article>
+        </section>
+      )}
 
     </div>
   );

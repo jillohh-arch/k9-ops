@@ -19,6 +19,7 @@ export const paths = {
   inventory: "/inventory",
   reports: "/reports",
   access: "/access",
+  shifts: "/shifts",
   me: "/me",
   notifications: "/notifications",
   admin: "/admin",

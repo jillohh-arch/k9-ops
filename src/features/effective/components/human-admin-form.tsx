@@ -6,6 +6,7 @@ import {
   Archive,
   ArrowLeft,
   BadgeCheck,
+  Building2,
   Camera,
   Check,
   CircleAlert,
@@ -35,6 +36,7 @@ import {
   saveHuman,
   type HumanFormValues,
 } from "@/features/effective/data/human-admin-service";
+import { useShiftGroups } from "@/features/effective/hooks/use-shift-groups";
 import {
   defaultAccessProfiles,
   type AccessProfile,
@@ -183,6 +185,7 @@ export function HumanAdminForm({
   const router = useRouter();
   const { can } = useAccessControl();
   const { profiles: accessProfiles } = useAccessProfiles();
+  const { groups: shiftGroups } = useShiftGroups();
   const fileInput = useRef<HTMLInputElement>(null);
   const [values, setValues] = useState<HumanFormValues>(emptyHumanFormValues);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -604,6 +607,24 @@ export function HumanAdminForm({
                       </option>
                     ),
                   )}
+                </select>
+              </Field>
+              <Field label="Plantão">
+                <select
+                  className={`${inputClass} appearance-none`}
+                  onChange={(event) => {
+                    setField("shiftGroupId", event.target.value);
+                  }}
+                  value={values.shiftGroupId}
+                >
+                  <option className="bg-[#0b1628]" value="">
+                    Selecione o plantão...
+                  </option>
+                  {shiftGroups.map((group) => (
+                    <option className="bg-[#0b1628]" key={group.id} value={group.id}>
+                      {group.name} ({String(group.expectedStartHour).padStart(2, "0")}:00 - {String(group.expectedEndHour).padStart(2, "0")}:00)
+                    </option>
+                  ))}
                 </select>
               </Field>
             </div>

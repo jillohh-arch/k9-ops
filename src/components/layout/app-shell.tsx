@@ -10,6 +10,7 @@ import {
   Boxes,
   ChevronRight,
   ClipboardList,
+  Clock,
   FileBarChart,
   FileText,
   HeartPulse,
@@ -109,6 +110,7 @@ const navItems = [
     moduleId: "reports",
   },
   { href: paths.access, icon: KeyRound, label: "Acessos", moduleId: "access" },
+  { href: paths.shifts, icon: Clock, label: "Plantões", moduleId: "shifts" },
 ] satisfies NavItem[];
 
 function getDisplayName(profileName: string | null | undefined) {
@@ -164,6 +166,7 @@ const routeAccessRules: RouteAccessRule[] = [
   { prefix: paths.inventory, modules: ["inventory"] },
   { prefix: paths.reports, modules: ["reports"] },
   { prefix: paths.access, modules: ["access"] },
+  { prefix: paths.shifts, modules: ["shifts"] },
   { prefix: paths.me, modules: ["me"] },
   { prefix: paths.dashboard, modules: ["dashboard"] },
 ];

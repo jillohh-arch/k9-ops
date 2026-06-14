@@ -33,6 +33,7 @@ export type HumanFormValues = {
   ra: string;
   rank: string;
   role: string;
+  shiftGroupId: string;
   shiftLabel: string;
   specialties: string[];
   status: string;
@@ -93,6 +94,7 @@ export const emptyHumanFormValues: HumanFormValues = {
   ra: "",
   rank: "",
   role: "",
+  shiftGroupId: "",
   shiftLabel: "",
   specialties: [],
   status: "Ativo",
@@ -152,6 +154,7 @@ export async function loadHumanForEdit(ra: string) {
     ra,
     rank: text(data, "rank", "posto", "graduacao"),
     role: text(data, "cargo", "role", "função"),
+    shiftGroupId: text(data, "shift_group_id", "shiftGroupId") || "",
     shiftLabel: text(data, "shift_label", "shiftLabel"),
     specialties: stringArray(data.specialties),
     status: text(data, "status") || "Ativo",

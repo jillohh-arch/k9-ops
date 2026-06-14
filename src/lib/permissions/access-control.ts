@@ -22,6 +22,7 @@ export type AccessModuleId =
   | "occurrences"
   | "reports"
   | "settings"
+  | "shifts"
   | "training"
   | "training_matrix"
   | "vehicles";

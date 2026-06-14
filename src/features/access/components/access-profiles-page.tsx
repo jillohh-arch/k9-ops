@@ -21,6 +21,7 @@ import {
   Lock,
   PawPrint,
   Plus,
+  RefreshCw,
   Save,
   Search,
   Settings,
@@ -44,6 +45,7 @@ import {
   assignUserAccessProfile,
   duplicateAccessProfile,
   saveAccessProfile,
+  seedDefaultAccessProfiles,
   type AccessUser,
 } from "@/features/access/data/access-profile-service";
 import { useAccessProfiles } from "@/features/access/hooks/use-access-profiles";
@@ -701,6 +703,7 @@ export function AccessProfilesPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const selectedProfile = useMemo(
@@ -780,6 +783,20 @@ export function AccessProfilesPage() {
     }
   };
 
+  const handleSyncProfiles = async () => {
+    setSyncing(true);
+    try {
+      const result = await seedDefaultAccessProfiles(authProfile?.ra ?? null);
+      console.log("Perfis sincronizados:", result);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error("Erro ao sincronizar:", err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const isEditing = draftProfile !== null;
   const tokens = displayProfile ? getToneTokens(displayProfile.tone) : getToneTokens("cyan");
 
@@ -792,6 +809,27 @@ export function AccessProfilesPage() {
           <p className="mt-1 text-sm text-slate-400">
             Gerencie quem pode acessar o quê no sistema K9 Ops
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {syncing && (
+            <span className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-semibold text-cyan-200">
+              Sincronizando...
+            </span>
+          )}
+          {saveSuccess && (
+            <span className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-semibold text-emerald-200">
+              Sincronizado com sucesso!
+            </span>
+          )}
+          <button
+            className="flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-400/20 disabled:opacity-50"
+            disabled={syncing}
+            onClick={handleSyncProfiles}
+            type="button"
+          >
+            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            Sincronizar Perfis
+          </button>
         </div>
       </div>
 

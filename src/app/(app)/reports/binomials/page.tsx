@@ -1,5 +1,5 @@
-import { ReportDetailPage } from "@/features/reports/components/report-pages";
+import { BinomialsReport } from "@/features/reports/components/binomials-report";
 
 export default function BinomialsReportPage() {
-  return <ReportDetailPage reportId="binomials" />;
+  return <BinomialsReport />;
 }

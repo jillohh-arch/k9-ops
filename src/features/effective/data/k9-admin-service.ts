@@ -12,10 +12,10 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 import type { AuthProfile } from "@/features/auth/providers/auth-provider";
 import {
-  canonicalK9Modalities,
-  canonicalModality,
-  canonicalModalityLabel,
-  canonicalizeModalities,
+  canônicalK9Modalities,
+  canônicalModality,
+  canônicalModalityLabel,
+  canônicalizeModalities,
   isCanonicalK9Modality,
 } from "@/features/effective/lib/k9-modalities";
 import { db, storage } from "@/lib/firebase/client";
@@ -105,7 +105,7 @@ async function uploadProfilePhoto(dogId: string, file: File) {
 }
 
 function specialtyModality(data: DocumentData, id: string) {
-  return canonicalModality(text(data, "type", "modality", "name") || id);
+  return canônicalModality(text(data, "type", "modality", "name") || id);
 }
 
 function hasDetectionProgress(lines: Array<{ data(): DocumentData }>) {
@@ -166,21 +166,21 @@ export async function loadK9FormOptions(): Promise<K9FormOptions> {
     .map((item) => ({
       label:
         text(item.data(), "name", "label", "title") ||
-        canonicalModalityLabel(item.id),
-      value: canonicalModality(
+        canônicalModalityLabel(item.id),
+      value: canônicalModality(
         text(item.data(), "modality") || item.id,
       ),
     }))
     .filter((item) => isCanonicalK9Modality(item.value));
   const modalityMap = new Map<string, { label: string; value: string }>(
-    canonicalK9Modalities.map((item) => [
+    canônicalK9Modalities.map((item) => [
       item.value,
       { label: item.label, value: item.value },
     ]),
   );
   for (const modality of programModalities) {
     modalityMap.set(modality.value, {
-      label: canonicalModalityLabel(modality.value),
+      label: canônicalModalityLabel(modality.value),
       value: modality.value,
     });
   }
@@ -211,7 +211,7 @@ export async function loadK9ForEdit(dogId: string) {
   const birthValue = text(data, "dateOfBirth", "date_of_birth");
   const parsedBirth = birthValue ? new Date(birthValue) : null;
   const specialtyValues = new Set(
-    canonicalizeModalities(
+    canônicalizeModalities(
       Array.isArray(data.specialties)
         ? data.specialties.filter(
             (item): item is string => typeof item === "string",
@@ -228,7 +228,7 @@ export async function loadK9ForEdit(dogId: string) {
     }
   }
   const protectedSpecialtiesSet = new Set(
-    canonicalizeModalities(
+    canônicalizeModalities(
       trainingSnapshot.docs
         .filter(
           (item) =>
@@ -242,7 +242,7 @@ export async function loadK9ForEdit(dogId: string) {
     ),
   );
   if (hasDetectionProgress(detectionLinesSnapshot.docs)) {
-    protectedSpecialtiesSet.add("deteccao");
+    protectedSpecialtiesSet.add("detecção");
   }
   const protectedSpecialties = Array.from(protectedSpecialtiesSet);
   for (const modality of protectedSpecialties) {
@@ -252,7 +252,7 @@ export async function loadK9ForEdit(dogId: string) {
     (a, b) =>
       recordDate(b.data()).getTime() - recordDate(a.data()).getTime(),
   )[0];
-  const canonicalWeight = latestWeightRecord
+  const canônicalWeight = latestWeightRecord
     ? numberText(
         latestWeightRecord.data(),
         "weight_kg",
@@ -269,7 +269,7 @@ export async function loadK9ForEdit(dogId: string) {
         parsedBirth && !Number.isNaN(parsedBirth.getTime())
           ? parsedBirth.toISOString().slice(0, 10)
           : "",
-      breed: text(data, "breed", "raca"),
+      breed: text(data, "breed", "raça"),
       color: text(data, "cor", "color"),
       conductorRa: text(
         data,
@@ -282,9 +282,9 @@ export async function loadK9ForEdit(dogId: string) {
       idealWeightMin: numberText(data, "idealWeightMin", "ideal_weight_min"),
       microchip: text(data, "microchip"),
       name: text(data, "name", "nome"),
-      notes: text(data, "observacoes", "notes"),
-      operationalStatus: text(data, "status", "situacao") || "Ativo",
-      physicalCondition: text(data, "condicaoCorporal", "physicalCondition"),
+      notes: text(data, "observações", "notes"),
+      operationalStatus: text(data, "status", "situação") || "Ativo",
+      physicalCondition: text(data, "condiçãoCorporal", "physicalCondition"),
       profileImageUrl: text(
         data,
         "profileImageUrl",
@@ -293,14 +293,14 @@ export async function loadK9ForEdit(dogId: string) {
       ),
       registrationNumber: text(
         data,
-        "matricula",
+        "matrícula",
         "registrationNumber",
         "registration_number",
       ),
       sex: text(data, "sex", "sexo") || "M",
       size: text(data, "porte", "size"),
       specialties: Array.from(specialtyValues).filter(isCanonicalK9Modality),
-      weight: canonicalWeight || numberText(data, "weight", "peso"),
+      weight: canônicalWeight || numberText(data, "weight", "peso"),
     } satisfies K9FormValues,
   };
 }
@@ -330,7 +330,7 @@ export async function saveK9({
     profile: {
       ...values,
       profileImageUrl: photoUrl || null,
-      specialties: canonicalizeModalities(values.specialties),
+      specialties: canônicalizeModalities(values.specialties),
     },
   });
   return result.data.id ?? resolvedDogId;

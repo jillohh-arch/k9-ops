@@ -12,7 +12,7 @@ import {
 } from "firebase/firestore";
 
 import type { AuthProfile } from "@/features/auth/providers/auth-provider";
-import { canonicalModality } from "@/features/effective/lib/k9-modalities";
+import { canônicalModality } from "@/features/effective/lib/k9-modalities";
 import { db } from "@/lib/firebase/client";
 
 export type CurriculumAuditAction =
@@ -100,7 +100,7 @@ function appendAudit(data: DocumentData, entry: DocumentData) {
 }
 
 function programPayload(input: ProgramInput) {
-  const modality = canonicalModality(input.modality || input.name);
+  const modality = canônicalModality(input.modality || input.name);
   return {
     active: input.active,
     description: input.description.trim(),
@@ -149,13 +149,13 @@ export async function createTrainingProgram(
   input: ProgramInput,
   profile: AuthProfile | null,
 ) {
-  const modality = canonicalModality(input.modality || input.name);
+  const modality = canônicalModality(input.modality || input.name);
   const id = slug(modality || input.name);
   if (!id) throw new Error("Informe uma modalidade valida.");
   const ref = doc(db, "training_programs", id);
   const snapshot = await getDoc(ref);
   if (snapshot.exists()) {
-    throw new Error("Ja existe um curriculo com esse identificador.");
+    throw new Error("Já existe um currículo com esse identificador.");
   }
 
   const entry = auditEntry("create_program", profile);
@@ -178,7 +178,7 @@ export async function updateTrainingProgram(
 
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(ref);
-    if (!snapshot.exists()) throw new Error("Curriculo nao encontrado.");
+    if (!snapshot.exists()) throw new Error("Currículo não encontrado.");
     transaction.update(ref, {
       ...programPayload(input),
       audit_trail: appendAudit(snapshot.data(), entry),
@@ -211,7 +211,7 @@ export async function updateTrainingModule(
 
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(ref);
-    if (!snapshot.exists()) throw new Error("Modulo nao encontrado.");
+    if (!snapshot.exists()) throw new Error("Módulo não encontrado.");
     transaction.update(ref, {
       ...modulePayload(input),
       audit_trail: appendAudit(snapshot.data(), entry),
@@ -261,7 +261,7 @@ export async function updateTrainingMilestone(
 
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(ref);
-    if (!snapshot.exists()) throw new Error("Marco nao encontrado.");
+    if (!snapshot.exists()) throw new Error("Marco não encontrado.");
     transaction.update(ref, {
       ...milestonePayload(input),
       audit_trail: appendAudit(snapshot.data(), entry),

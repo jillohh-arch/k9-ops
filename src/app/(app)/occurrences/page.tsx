@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ChevronRight,
   ClipboardList,
+  Clock,
   FileSignature,
   FileWarning,
   MapPin,
@@ -12,9 +13,11 @@ import {
   RadioTower,
   ShieldCheck,
   Siren,
+  Truck,
   Users,
   type LucideIcon,
 } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -215,54 +218,91 @@ function OccurrenceMiniCard({ occurrence }: { occurrence: OperationOccurrence })
     .join(" + ");
 
   return (
-    <article className="rounded-2xl border border-cyan-200/12 bg-white/[0.035] p-4 transition hover:border-cyan-200/25 hover:bg-white/[0.055]">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-lg font-black text-cyan-300">
-              {occurrence.code}
+    <Link className="block group" href={`/occurrences/${occurrence.id}`}>
+      <article className="rounded-2xl border border-cyan-200/12 bg-white/[0.035] p-4 transition-all duration-200 hover:border-cyan-300/35 hover:bg-white/[0.06] hover:shadow-[0_0_28px_rgba(34,211,238,0.1)]">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-lg font-black text-cyan-300">
+                {occurrence.code}
+              </span>
+              <span className="text-sm font-black text-white">
+                {occurrence.nature}
+              </span>
+            </div>
+
+            {/* K9 + Condutor row */}
+            {occurrence.dogName || occurrence.handlerName ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {occurrence.dogName ? (
+                  <span className="flex items-center gap-1 text-xs text-amber-300">
+                    <PawPrint className="h-3 w-3" />
+                    {occurrence.dogName}
+                  </span>
+                ) : null}
+                {occurrence.dogName && occurrence.handlerName ? (
+                  <span className="text-xs text-slate-600">+</span>
+                ) : null}
+                {occurrence.handlerName ? (
+                  <span className="flex items-center gap-1 text-xs text-emerald-300">
+                    <Users className="h-3 w-3" />
+                    {occurrence.handlerName}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Location */}
+            {occurrence.location && occurrence.location !== "Local não informado" ? (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+                <MapPin className="h-3 w-3 shrink-0" />
+                <span className="truncate">{occurrence.location}</span>
+              </p>
+            ) : null}
+
+            {/* Viatura */}
+            {occurrence.vehicleLabel ? (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-violet-300">
+                <Truck className="h-3 w-3" />
+                {occurrence.vehicleLabel}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-col items-end gap-2">
+            <span
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
+                toneClasses[occurrence.tone],
+              )}
+            >
+              {occurrence.isCritical ? (
+                <Siren className="h-5 w-5" />
+              ) : (
+                <ClipboardList className="h-5 w-5" />
+              )}
             </span>
-            <span className="text-sm font-black text-white">
-              {occurrence.nature}
+            <span className="font-mono text-xs text-slate-300">
+              {formatTime(occurrence.date)}
             </span>
           </div>
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
-            <MapPin className="h-3.5 w-3.5" />
-            {occurrence.location}
-          </p>
-          <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
-            <Users className="h-3.5 w-3.5" />
-            {team || "Equipe nao informada"}
-          </p>
         </div>
-        <span
-          className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
-            toneClasses[occurrence.tone],
-          )}
-        >
-          {occurrence.isCritical ? (
-            <Siren className="h-5 w-5" />
-          ) : (
-            <ClipboardList className="h-5 w-5" />
-          )}
-        </span>
-      </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-2">
-          <Badge className={cn("border text-[10px]", toneClasses[occurrence.priorityTone])}>
-            {occurrence.priorityLabel}
-          </Badge>
-          <Badge className="border-cyan-300/20 bg-cyan-300/8 text-[10px] text-cyan-100">
-            {formatStatus(occurrence.status)}
-          </Badge>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            {occurrence.priorityLabel ? (
+              <Badge className={cn("border text-[10px]", toneClasses[occurrence.priorityTone])}>
+                {occurrence.priorityLabel}
+              </Badge>
+            ) : null}
+            <Badge className="border-cyan-300/20 bg-cyan-300/8 text-[10px] text-cyan-100">
+              {formatStatus(occurrence.status)}
+            </Badge>
+          </div>
+          <ChevronRight className="h-4 w-4 text-slate-500 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-cyan-300" />
         </div>
-        <span className="font-mono text-xs text-slate-300">
-          {formatTime(occurrence.date)}
-        </span>
-      </div>
-    </article>
+      </article>
+    </Link>
   );
 }
 
@@ -346,7 +386,7 @@ function DistributionPanel({
             </div>
           ))
         ) : (
-          <EmptyState label="Sem ocorrencias no periodo selecionado." />
+          <EmptyState label="Sem ocorrências no período selecionado." />
         )}
       </div>
     </div>
@@ -354,6 +394,11 @@ function DistributionPanel({
 }
 
 function RecentRecord({ item }: { item: OperationTimelineItem }) {
+  const isOccurrence = item.id.startsWith("occurrence-");
+  const isShift = item.id.startsWith("shift-");
+  const Icon = isOccurrence ? RadioTower : isShift ? Clock : PawPrint;
+  const occurrenceId = isOccurrence ? item.id.replace("occurrence-", "") : null;
+
   return (
     <li className="relative grid grid-cols-[2.25rem_1fr_auto] items-start gap-3 pb-4 last:pb-0">
       <span
@@ -362,10 +407,21 @@ function RecentRecord({ item }: { item: OperationTimelineItem }) {
           toneClasses[item.tone],
         )}
       >
-        <PawPrint className="h-4 w-4" />
+        <Icon className="h-4 w-4" />
       </span>
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-white">{item.label}</p>
+        {occurrenceId ? (
+          <Link
+            className="block truncate text-sm font-semibold text-cyan-200 transition hover:text-cyan-100"
+            href={`/occurrences/${occurrenceId}`}
+          >
+            {item.label}
+          </Link>
+        ) : (
+          <p className="truncate text-sm font-semibold text-white">
+            {isShift ? `Turno ativo · ${formatShortDate(item.at)}` : item.label}
+          </p>
+        )}
         <p className="mt-1 text-xs text-slate-400">{item.source}</p>
       </div>
       <div className="text-right">
@@ -439,25 +495,25 @@ export default function OccurrencesPage() {
   const kpis = [
     {
       icon: ClipboardList,
-      label: "Ocorrencias em andamento",
+      label: "Ocorrências em andamento",
       tone: "cyan" as const,
       value: data.summary.openOccurrences,
     },
     {
       icon: AlertTriangle,
-      label: "Ocorrencias criticas",
+      label: "Ocorrências críticas",
       tone: "red" as const,
       value: data.summary.criticalOccurrences,
     },
     {
       icon: Users,
-      label: "Binomios em operacao",
+      label: "Binômios em operação",
       tone: "amber" as const,
       value: data.summary.activeBinomials,
     },
     {
       icon: Package,
-      label: "Apreensoes hoje",
+      label: "Apreensões hoje",
       tone: "violet" as const,
       value: data.summary.apprehensionsToday,
     },
@@ -470,15 +526,15 @@ export default function OccurrencesPage() {
           Central Operacional
         </h1>
         <p className="mt-2 text-sm text-slate-400">
-          Visao consultiva das ocorrencias e movimentacoes operacionais da
-          unidade. Periodo atual:{" "}
+          Visão consultiva das ocorrências e movimentações operacionais da
+          unidade. Período atual:{" "}
           <span className="font-semibold text-cyan-200">{periodLabel}</span>.
         </p>
       </header>
 
       {data.errors.length > 0 ? (
         <section className="rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm text-amber-100">
-          <p className="font-black">Algumas fontes nao carregaram:</p>
+          <p className="font-black">Algumas fontes não carregaram:</p>
           <ul className="mt-2 space-y-1 font-mono text-xs">
             {data.errors.map((error) => (
               <li key={error}>{error}</li>
@@ -496,7 +552,7 @@ export default function OccurrencesPage() {
       <section className="grid gap-5 xl:grid-cols-[1.02fr_0.98fr]">
         <Panel
           action={data.occurrences.length > 4 ? "Ver todas" : undefined}
-          title="Ocorrencias em andamento"
+          title="Ocorrências em andamento"
         >
           <div className="grid gap-3 lg:grid-cols-2">
             {data.occurrences.length > 0 ? (
@@ -505,7 +561,7 @@ export default function OccurrencesPage() {
               ))
             ) : (
               <div className="lg:col-span-2">
-                <EmptyState label="Nenhuma ocorrencia em andamento no momento." />
+                <EmptyState label="Nenhuma ocorrência em andamento no momento." />
               </div>
             )}
           </div>
@@ -513,7 +569,7 @@ export default function OccurrencesPage() {
 
         <Panel
           action={data.attention.length > 3 ? "Ver todas" : undefined}
-          title="Atencao imediata"
+          title="Atenção imediata"
         >
           <div className="space-y-3">
             {data.attention.length > 0 ? (
@@ -521,7 +577,7 @@ export default function OccurrencesPage() {
                 <AttentionCard item={item} key={item.id} />
               ))
             ) : (
-              <EmptyState label="Nenhuma atencao imediata agora." />
+              <EmptyState label="Nenhuma atenção imediata agora." />
             )}
           </div>
         </Panel>
@@ -529,8 +585,8 @@ export default function OccurrencesPage() {
 
       <section className="grid gap-5 xl:grid-cols-[0.9fr_0.85fr_0.95fr]">
         <Panel
-          subtitle="Naturezas registradas no periodo selecionado."
-          title="Distribuicao por tipo de ocorrencia"
+          subtitle="Naturezas registradas no período selecionado."
+          title="Distribuição por tipo de ocorrência"
         >
           <DistributionPanel
             total={data.distribution.total}
@@ -538,7 +594,7 @@ export default function OccurrencesPage() {
           />
         </Panel>
 
-        <Panel title="Ultimos registros recebidos">
+        <Panel title="Últimos registros recebidos">
           {data.recentRecords.length > 0 ? (
             <ol className="space-y-0">
               {data.recentRecords.map((item) => (
@@ -570,9 +626,9 @@ export default function OccurrencesPage() {
               value={data.integrity.awaitingSignatures}
             />
             <IntegrityCard
-              detail="Requer atencao"
+              detail="Requer atenção"
               icon={FileWarning}
-              label="Correcoes abertas"
+              label="Correções abertas"
               tone="red"
               value={data.integrity.correctionsOpen}
             />
@@ -582,7 +638,7 @@ export default function OccurrencesPage() {
 
       <Panel
         action={`${data.managerQueue.length} itens`}
-        title="Fila de atencao do gestor"
+        title="Fila de atenção do gestor"
       >
         <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
           {data.managerQueue.length > 0 ? (

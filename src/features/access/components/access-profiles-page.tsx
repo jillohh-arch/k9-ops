@@ -62,7 +62,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type AccessTab = "overview" | "permissions" | "users";
-type ModuleAccessLevel = "none" | "consulta" | "operacional" | "gestao" | "total";
+type ModuleAccessLevel = "none" | "consulta" | "operacional" | "gestão" | "total";
 
 type ModuleView = {
   icon: LucideIcon;
@@ -75,7 +75,7 @@ const inputClass =
 const textareaClass =
   "min-h-20 w-full rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35 focus:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-55";
 
-const levelOptions = ["maximo", "gestao", "operacional", "tecnico", "logistica", "restrito", "leitura"];
+const levelOptions = ["máximo", "gestão", "operacional", "técnico", "logística", "restrito", "leitura"];
 const toneOptions = ["violet", "cyan", "amber", "blue", "orange", "green", "purple", "slate"];
 
 const accessTabs: Array<{
@@ -89,14 +89,14 @@ const accessTabs: Array<{
     label: "Central",
   },
   {
-    description: "modulos e niveis",
+    description: "módulos e níveis",
     id: "permissions",
     label: "Editar perfil",
   },
   {
-    description: "vincular usuarios",
+    description: "vincular usuários",
     id: "users",
-    label: "Atribuicao",
+    label: "Atribuição",
   },
 ];
 
@@ -107,7 +107,7 @@ const roleKeyLabels: Record<string, string> = {
   almoxarifado: "Almoxarifado",
   condutor: "Condutor",
   estoque: "Estoque",
-  gestor: "Gestao",
+  gestor: "Gestão",
   handler: "Condutor mobile",
   inspetor: "Inspetor",
   instrutor: "Instrutor",
@@ -115,7 +115,7 @@ const roleKeyLabels: Record<string, string> = {
   inventory_manager: "Gestor de estoque",
   mobile_user: "Acesso mobile",
   subinspetor: "Subinspetor",
-  subinspetor_inspetor: "Gestao inspetoria",
+  subinspetor_inspetor: "Gestão inspetoria",
 };
 
 const toneClasses: Record<string, string> = {
@@ -131,7 +131,7 @@ const toneClasses: Record<string, string> = {
 
 const levelToneClasses: Record<ModuleAccessLevel, string> = {
   consulta: "border-cyan-300/35 bg-cyan-300/10 text-cyan-200",
-  gestao: "border-blue-300/35 bg-blue-300/10 text-blue-200",
+  gestão: "border-blue-300/35 bg-blue-300/10 text-blue-200",
   none: "border-slate-400/20 bg-slate-400/10 text-slate-400",
   operacional: "border-emerald-300/35 bg-emerald-300/10 text-emerald-200",
   total: "border-violet-300/35 bg-violet-300/10 text-violet-200",
@@ -139,7 +139,7 @@ const levelToneClasses: Record<ModuleAccessLevel, string> = {
 
 const accessLevelLabels: Record<ModuleAccessLevel, string> = {
   consulta: "Consulta",
-  gestao: "Gestao",
+  gestão: "Gestão",
   none: "Sem acesso",
   operacional: "Operacional",
   total: "Total",
@@ -147,7 +147,7 @@ const accessLevelLabels: Record<ModuleAccessLevel, string> = {
 
 const levelActions: Record<ModuleAccessLevel, AccessAction[]> = {
   consulta: ["view"],
-  gestao: ["view", "create", "edit", "export", "approve", "audit"],
+  gestão: ["view", "create", "edit", "export", "approve", "audit"],
   none: [],
   operacional: ["view", "create", "edit", "approve"],
   total: accessActions.map((action) => action.id),
@@ -261,7 +261,7 @@ function moduleLevel(profile: AccessProfile, moduleId: AccessModuleId): ModuleAc
       (action) => permissions[action as AccessAction] === true,
     )
   ) {
-    return "gestao";
+    return "gestão";
   }
   if (
     ["view", "create", "edit"].every(
@@ -518,7 +518,7 @@ function ProfileCard({
                   {profile.name}
                 </h3>
                 <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">
-                  {profile.description || "Sem descricao cadastrada."}
+                  {profile.description || "Sem descrição cadastrada."}
                 </p>
               </div>
               <LevelBadge level={profile.level} />
@@ -526,14 +526,14 @@ function ProfileCard({
 
             <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-sm">
               <span>
-                <span className="block text-xs text-slate-500">Usuarios</span>
+                <span className="block text-xs text-slate-500">Usuários</span>
                 <span className="font-mono text-lg font-black text-white">
                   {formatNumber(userCount)}
                 </span>
               </span>
               <span>
                 <span className="block text-xs text-slate-500">
-                  Modulos liberados
+                  Módulos liberados
                 </span>
                 <span className="font-mono text-lg font-black text-white">
                   {countModulesWithAccess(profile)}/{accessModules.length}
@@ -603,17 +603,17 @@ function SecuritySummary({
             },
             {
               icon: AlertCircle,
-              label: "Usuarios sem perfil",
+              label: "Usuários sem perfil",
               value: withoutProfile,
             },
             {
               icon: ShieldAlert,
-              label: "Permissoes criticas ativas",
+              label: "Permissões críticas ativas",
               value: critical,
             },
             {
               icon: CalendarDays,
-              label: "Ultima alteracao",
+              label: "Última alteraçao",
               value: lastMessage ? "agora" : "--",
             },
           ].map((item) => {
@@ -637,18 +637,18 @@ function SecuritySummary({
       </SectionCard>
 
       <SectionCard
-        action={<span className="text-xs font-semibold text-cyan-200">sessao</span>}
+        action={<span className="text-xs font-semibold text-cyan-200">sessão</span>}
         title="Revisoes recentes"
       >
         <div className="space-y-3">
           {lastMessage ? (
             <div className="rounded-2xl border border-cyan-300/18 bg-cyan-300/[0.06] p-4">
-              <p className="font-black text-white">Alteracao aplicada</p>
+              <p className="font-black text-white">Alteraçao aplicada</p>
               <p className="mt-1 text-sm text-slate-400">{lastMessage}</p>
             </div>
           ) : (
             <div className="rounded-2xl border border-white/10 bg-black/18 p-4">
-              <p className="font-black text-white">Sem alteracoes nesta sessao</p>
+              <p className="font-black text-white">Sem alterações nesta sessão</p>
               <p className="mt-1 text-sm text-slate-400">
                 A trilha historica completa fica em Auditoria.
               </p>
@@ -684,7 +684,7 @@ function ProfileHero({
               <LevelBadge level={profile.level} />
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-              {profile.description || "Sem descricao cadastrada."}
+              {profile.description || "Sem descrição cadastrada."}
             </p>
           </div>
         </div>
@@ -694,19 +694,19 @@ function ProfileHero({
             <p className="mt-2 font-mono text-2xl font-black text-white">
               {formatNumber(usersForProfile(users, profile.id).length)}
             </p>
-            <p className="text-xs text-slate-500">usuarios vinculados</p>
+            <p className="text-xs text-slate-500">usuários vinculados</p>
           </div>
           <div className="border-white/10 sm:border-l sm:pl-6">
             <Boxes className="h-6 w-6 text-violet-200" />
             <p className="mt-2 font-mono text-2xl font-black text-white">
               {countModulesWithAccess(profile)}/{accessModules.length}
             </p>
-            <p className="text-xs text-slate-500">modulos liberados</p>
+            <p className="text-xs text-slate-500">módulos liberados</p>
           </div>
           <div className="border-white/10 sm:border-l sm:pl-6">
             <TargetIcon />
             <p className="mt-2 text-lg font-black text-white">
-              {profile.scope === "own_records" ? "Proprio usuario" : "Global"}
+              {profile.scope === "own_records" ? "Proprio usuário" : "Global"}
             </p>
             <p className="text-xs text-slate-500">escopo de dados</p>
           </div>
@@ -728,9 +728,9 @@ function ProfileSummary({ profile }: { profile: AccessProfile }) {
     >
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/18">
         {[
-          ["Nivel de acesso predominante", profile.level],
-          ["Escopo", profile.scope === "own_records" ? "Proprio usuario" : "Global"],
-          ["Claims tecnicas", profile.role_keys.length ? profile.role_keys.map(roleKeyLabel).join(", ") : "sem claim"],
+          ["Nível de acesso predominante", profile.level],
+          ["Escopo", profile.scope === "own_records" ? "Proprio usuário" : "Global"],
+          ["Claims técnicas", profile.role_keys.length ? profile.role_keys.map(roleKeyLabel).join(", ") : "sem claim"],
           ["Status", profile.status === "active" ? "Ativo" : "Inativo"],
         ].map(([label, value]) => (
           <div
@@ -781,7 +781,7 @@ function ProfileIdentityForm({
         </label>
         <label className="block">
           <span className="mb-2 block text-xs font-semibold text-slate-300">
-            Descricao
+            Descrição
           </span>
           <textarea
             className={cn(textareaClass, "min-h-11 py-2")}
@@ -850,13 +850,13 @@ function ProfileIdentityForm({
               Global
             </option>
             <option className="bg-[#0b1628]" value="own_records">
-              Proprio usuario
+              Proprio usuário
             </option>
           </select>
         </label>
         <label className="block">
           <span className="mb-2 block text-xs font-semibold text-slate-300">
-            Claims / roles tecnicas
+            Claims / roles técnicas
           </span>
           <input
             className={inputClass}
@@ -890,7 +890,7 @@ function ScopeSelector({
     },
     {
       icon: User,
-      label: "Proprio usuario",
+      label: "Proprio usuário",
       value: "own_records",
     },
   ];
@@ -1052,8 +1052,8 @@ function PermissionsEditor({
           </span>
         }
         icon={<LayoutGrid className="h-5 w-5" />}
-        subtitle="Escolha o nivel de acesso por modulo, sem a matriz gigante."
-        title="Modulos e Niveis de Acesso"
+        subtitle="Escolha o nível de acesso por módulo, sem a matriz gigante."
+        title="Módulos e Níveis de Acesso"
       >
         <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {visibleModuleIds.map((moduleId) => (
@@ -1070,8 +1070,8 @@ function PermissionsEditor({
       <SectionCard
         className="border-amber-300/20"
         icon={<Lock className="h-5 w-5" />}
-        subtitle="Permissoes criticas que exigem atencao redobrada."
-        title="Acoes Sensiveis"
+        subtitle="Permissões críticas que exigem atenção redobrada."
+        title="Ações Sensiveis"
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SensitiveToggle
@@ -1083,19 +1083,19 @@ function PermissionsEditor({
           <SensitiveToggle
             active={hasPermission(draft, "training", "approve")}
             icon={Check}
-            label="Pode aprovar evolucao K9"
+            label="Pode aprovar evolução K9"
             onToggle={() => onChange(togglePermission(draft, "training", "approve"))}
           />
           <SensitiveToggle
             active={hasPermission(draft, "access", "edit")}
             icon={UserCog}
-            label="Pode alterar permissoes"
+            label="Pode alterar permissões"
             onToggle={() => onChange(togglePermission(draft, "access", "edit"))}
           />
           <SensitiveToggle
             active={hasPermission(draft, "reports", "export")}
             icon={Download}
-            label="Pode exportar relatorios"
+            label="Pode exportar relatórios"
             onToggle={() => onChange(togglePermission(draft, "reports", "export"))}
           />
           <SensitiveToggle
@@ -1161,7 +1161,7 @@ function AssignmentBoard({
           }}
         >
           <Check className="mr-2 h-4 w-4" />
-          Aplicar atribuicao
+          Aplicar atribuição
         </Button>
         <Button onClick={() => setSelectedRas([])} variant="secondary">
           <X className="mr-2 h-4 w-4" />
@@ -1172,8 +1172,8 @@ function AssignmentBoard({
       <div className="grid gap-5 2xl:grid-cols-[0.8fr_1.1fr_0.8fr]">
         <SectionCard
           icon={<User className="h-5 w-5" />}
-          title="Usuarios"
-          subtitle="Selecione usuarios para atribuir o perfil."
+          title="Usuários"
+          subtitle="Selecione usuários para atribuir o perfil."
         >
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <label className="relative block">
@@ -1181,7 +1181,7 @@ function AssignmentBoard({
               <input
                 className={cn(inputClass, "pl-9")}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar usuarios..."
+                placeholder="Buscar usuários..."
                 value={search}
               />
             </label>
@@ -1239,7 +1239,7 @@ function AssignmentBoard({
           <SectionCard
             icon={<ShieldCheck className="h-5 w-5" />}
             title="Perfil Selecionado"
-            subtitle="Perfil que sera atribuido aos usuarios selecionados."
+            subtitle="Perfil que sera atribuido aos usuários selecionados."
           >
             <select
               className={`${inputClass} mb-4 appearance-none`}
@@ -1263,7 +1263,7 @@ function AssignmentBoard({
                     <LevelBadge level={targetProfile.level} />
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-400">
-                    {targetProfile.description || "Sem descricao."}
+                    {targetProfile.description || "Sem descrição."}
                   </p>
                 </div>
               </div>
@@ -1272,16 +1272,16 @@ function AssignmentBoard({
                   <span className="block text-xs text-slate-500">Escopo</span>
                   <span className="font-semibold text-white">
                     {targetProfile.scope === "own_records"
-                      ? "Proprio usuario"
+                      ? "Proprio usuário"
                       : "Global"}
                   </span>
                 </span>
                 <span>
                   <span className="block text-xs text-slate-500">
-                    Modulos liberados
+                    Módulos liberados
                   </span>
                   <span className="font-semibold text-white">
-                    {countModulesWithAccess(targetProfile)} modulos
+                    {countModulesWithAccess(targetProfile)} módulos
                   </span>
                 </span>
               </div>
@@ -1298,24 +1298,24 @@ function AssignmentBoard({
             </div>
           </SectionCard>
 
-          <SectionCard title="Resumo da Atribuicao">
+          <SectionCard title="Resumo da Atribuição">
             <div className="grid gap-3 rounded-2xl border border-white/10 bg-black/18 p-4 md:grid-cols-4">
               <span>
                 <span className="block text-xs text-slate-500">Perfil</span>
                 <span className="font-black text-white">{targetProfile.name}</span>
               </span>
               <span>
-                <span className="block text-xs text-slate-500">Usuarios</span>
+                <span className="block text-xs text-slate-500">Usuários</span>
                 <span className="font-mono text-lg font-black text-white">
                   {selectedUsers.length}
                 </span>
               </span>
               <span>
-                <span className="block text-xs text-slate-500">Vigencia</span>
+                <span className="block text-xs text-slate-500">Vigência</span>
                 <span className="font-semibold text-white">imediata</span>
               </span>
               <span>
-                <span className="block text-xs text-slate-500">Permissoes</span>
+                <span className="block text-xs text-slate-500">Permissões</span>
                 <span className="font-mono text-lg font-black text-white">
                   {countActivePermissions(targetProfile)}
                 </span>
@@ -1327,8 +1327,8 @@ function AssignmentBoard({
         <aside className="space-y-5">
           <SectionCard
             icon={<Users className="h-5 w-5" />}
-            title="Usuarios vinculados"
-            subtitle="Usuarios que ja possuem este perfil."
+            title="Usuários vinculados"
+            subtitle="Usuários que já possuem este perfil."
           >
             <div className="space-y-3">
               {linkedUsers.length ? (
@@ -1350,7 +1350,7 @@ function AssignmentBoard({
                 ))
               ) : (
                 <p className="rounded-2xl border border-dashed border-cyan-200/15 bg-black/16 p-4 text-sm text-slate-400">
-                  Nenhum usuario vinculado.
+                  Nenhum usuário vinculado.
                 </p>
               )}
             </div>
@@ -1358,16 +1358,16 @@ function AssignmentBoard({
 
           <SectionCard
             icon={<ShieldCheck className="h-5 w-5" />}
-            title="Registro da Alteracao"
-            subtitle="A Function grava a trilha da atribuicao."
+            title="Registro da Alteraçao"
+            subtitle="A Function grava a trilha da atribuição."
           >
             <div className="space-y-4 text-sm text-slate-400">
               <p>
-                A alteracao sera aplicada por callable admin e refletida em
+                A alteraçao sera aplicada por callable admin e refletida em
                 users/RA e custom claims.
               </p>
               <div className="rounded-2xl border border-amber-300/16 bg-amber-300/[0.06] p-4 text-amber-100">
-                O usuario precisa renovar o token. Para teste limpo, faca
+                O usuário precisa renovar o token. Para teste limpo, faca
                 logout/login apos receber o novo perfil.
               </div>
             </div>
@@ -1482,7 +1482,7 @@ export function AccessProfilesPage() {
       return;
     }
     if (!draft.id.trim()) {
-      setMessage("Informe um identificador tecnico valido.");
+      setMessage("Informe um identificador técnico válido.");
       return;
     }
 
@@ -1531,7 +1531,7 @@ export function AccessProfilesPage() {
         await assignUserAccessProfile(user, profile, authProfile?.ra);
       }
       setMessage(
-        `${selectedUsers.length} usuario(s) agora usam o perfil ${profile.name}.`,
+        `${selectedUsers.length} usuário(s) agora usam o perfil ${profile.name}.`,
       );
     } catch (error) {
       setMessage(
@@ -1554,21 +1554,21 @@ export function AccessProfilesPage() {
         <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">
-              Gestao de acessos
+              Gestão de acessos
             </p>
             <h1 className="mt-2 text-3xl font-black text-white md:text-4xl">
               Central de Acessos
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              Gerencie perfis, escopos e permissoes operacionais do K9 Ops.
-              Roles tecnicas continuam sincronizadas pelas Functions.
+              Gerencie perfis, escopos e permissões operacionais do K9 Ops.
+              Roles técnicas continuam sincronizadas pelas Functions.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             {activeTab === "permissions" ? (
               <Button disabled={!dirty || saving} onClick={handleSave}>
                 <Save className="mr-2 h-4 w-4" />
-                {saving ? "Salvando..." : "Salvar alteracoes"}
+                {saving ? "Salvando..." : "Salvar alterações"}
               </Button>
             ) : null}
             <Button onClick={startNewProfile} variant="secondary">
@@ -1615,23 +1615,23 @@ export function AccessProfilesPage() {
               value={formatNumber(visibleProfiles.length)}
             />
             <MetricCard
-              detail="usuarios com perfil definido"
+              detail="usuários com perfil definido"
               icon={UserCheck}
-              label="Usuarios vinculados"
+              label="Usuários vinculados"
               tone="blue"
               value={formatNumber(linkedUsers)}
             />
             <MetricCard
               detail={`em ${visibleProfiles.length} perfis`}
               icon={ShieldAlert}
-              label="Permissoes sensiveis"
+              label="Permissões sensíveis"
               tone="amber"
               value={formatNumber(criticalPermissionCount(visibleProfiles))}
             />
             <MetricCard
-              detail={`${withoutProfile} usuario(s) sem perfil`}
+              detail={`${withoutProfile} usuário(s) sem perfil`}
               icon={ClipboardList}
-              label="Pendencias de revisao"
+              label="Pendências de revisão"
               tone="violet"
               value={formatNumber(reviewPendencies)}
             />
@@ -1646,7 +1646,7 @@ export function AccessProfilesPage() {
                 </Button>
               }
               title="Perfis e Escopos"
-              subtitle="Visao geral dos perfis cadastrados e seus niveis de acesso."
+              subtitle="Visão geral dos perfis cadastrados e seus níveis de acesso."
             >
               {visibleProfiles.length ? (
                 <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
@@ -1691,7 +1691,7 @@ export function AccessProfilesPage() {
             ) : null}
             <Button disabled={!dirty || saving} onClick={handleSave}>
               <Save className="mr-2 h-4 w-4" />
-              {isCreating ? "Salvar perfil" : "Salvar alteracoes"}
+              {isCreating ? "Salvar perfil" : "Salvar alterações"}
             </Button>
           </div>
 
@@ -1722,7 +1722,7 @@ export function AccessProfilesPage() {
       {archivedProfiles.length ? (
         <p className="text-xs text-slate-600">
           {archivedProfiles.length} perfil(is) legado(s) continuam arquivados
-          para auditoria e nao aparecem na operacao.
+          para auditoria e não aparecem na operação.
         </p>
       ) : null}
 

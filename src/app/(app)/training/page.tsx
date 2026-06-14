@@ -20,7 +20,7 @@ import type { LucideIcon } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { canonicalModalityLabel } from "@/features/effective/lib/k9-modalities";
+import { canônicalModalityLabel } from "@/features/effective/lib/k9-modalities";
 import {
   useTrainingCurriculums,
   type CurriculumModule,
@@ -62,19 +62,19 @@ const baseModalities: ModalityView[] = [
   },
   {
     icon: Crosshair,
-    label: "Deteccao",
+    label: "Detecção",
     tone: "emerald",
     value: "deteccao",
   },
   {
     icon: ShieldCheck,
-    label: "Guarda & Protecao",
+    label: "Guarda & Proteção",
     tone: "amber",
     value: "guarda_protecao",
   },
   {
     icon: Dog,
-    label: "Obediencia",
+    label: "Obediência",
     tone: "violet",
     value: "obediencia",
   },
@@ -227,7 +227,7 @@ function emptyCell(modality: ModalityView): TrainingMatrixCell {
     sessionCount: 0,
     source: "none",
     status: "not_started",
-    statusLabel: "Nao iniciado",
+    statusLabel: "Não iniciado",
     tone: "slate",
   };
 }
@@ -257,7 +257,7 @@ function readinessFor(
     return {
       cell,
       dog,
-      missing: ["Curriculo sem modulo atual"],
+      missing: ["Currículo sem módulo atual"],
       module: currentModule,
       program,
       score: cell.source === "none" && sessions.length === 0 ? 0 : 35,
@@ -277,13 +277,13 @@ function readinessFor(
       : null;
   if (milestoneScore != null) {
     parts.push(milestoneScore);
-    if (milestoneScore < 100) missing.push("Marcos obrigatorios");
+    if (milestoneScore < 100) missing.push("Marcos obrigatórios");
   }
 
   const sessionScore = scorePart(sessions.length, currentModule.criteria.minSessions);
   if (sessionScore != null) {
     parts.push(sessionScore);
-    if (sessionScore < 100) missing.push("Sessoes completas");
+    if (sessionScore < 100) missing.push("Sessões completas");
   }
 
   if (currentModule.criteria.minSuccessRate != null) {
@@ -293,7 +293,7 @@ function readinessFor(
         : currentModule.criteria.minSuccessRate;
     const rate = successRate(sessions);
     parts.push(Math.min(100, (rate / Math.max(1, target)) * 100));
-    if (rate < target) missing.push("Sucesso minimo");
+    if (rate < target) missing.push("Sucesso mínimo");
   }
 
   const distanceScore = scorePart(
@@ -302,7 +302,7 @@ function readinessFor(
   );
   if (distanceScore != null) {
     parts.push(distanceScore);
-    if (distanceScore < 100) missing.push("Distancia minima");
+    if (distanceScore < 100) missing.push("Distância mínima");
   }
 
   if (currentModule.criteria.requiredEvents.length) {
@@ -318,7 +318,7 @@ function readinessFor(
 
   if (cell.pendingPromotions > 0) {
     parts.push(100);
-    missing.push("Validacao do Instrutor K9");
+    missing.push("Validação do Instrutor K9");
   }
 
   const score = parts.length
@@ -466,7 +466,7 @@ function ModalityReadinessRow({
         <p className="font-mono text-2xl font-black text-white">
           {formatPercent(score)}
         </p>
-        <p className="mt-1 text-xs text-emerald-300">criterios reais</p>
+        <p className="mt-1 text-xs text-emerald-300">critérios reais</p>
       </div>
     </div>
   );
@@ -537,7 +537,7 @@ function MatrixRow({
           <span>
             <span className="block font-black text-white">{module.title}</span>
             <span className="text-xs text-slate-500">
-              {module.description || `Modulo ${module.order}`}
+              {module.description || `Módulo ${module.order}`}
             </span>
           </span>
         </div>
@@ -563,11 +563,11 @@ function MatrixRow({
       </td>
       <td className="rounded-r-2xl border-y border-r border-white/10 bg-white/[0.035] px-3 py-3">
         {isCompleted ? (
-          <Badge tone="green">concluido</Badge>
+          <Badge tone="green">concluído</Badge>
         ) : isCurrent ? (
           <Badge tone="yellow">em andamento</Badge>
         ) : (
-          <Badge tone="slate">nao iniciado</Badge>
+          <Badge tone="slate">não iniciado</Badge>
         )}
       </td>
     </tr>
@@ -583,7 +583,7 @@ function UpcomingEvolution({ item }: { item: ReadinessItem }) {
       <span>
         <span className="block font-black text-white">{item.dog.dogName}</span>
         <span className="mt-1 block text-xs text-slate-400">
-          {item.program?.label ?? canonicalModalityLabel(item.cell.modality)} ·{" "}
+          {item.program?.label ?? canônicalModalityLabel(item.cell.modality)} ·{" "}
           {item.module?.title ?? item.cell.statusLabel}
         </span>
         {item.missing.length ? (
@@ -675,13 +675,13 @@ export default function TrainingPage() {
 
     const critical = {
       distance: readinessItems.filter((item) =>
-        item.missing.includes("Distancia minima"),
+        item.missing.includes("Distância mínima"),
       ).length,
       milestones: readinessItems.filter((item) =>
-        item.missing.includes("Marcos obrigatorios"),
+        item.missing.includes("Marcos obrigatórios"),
       ).length,
       sessions: readinessItems.filter((item) =>
-        item.missing.includes("Sessoes completas"),
+        item.missing.includes("Sessões completas"),
       ).length,
       validations: training.pendingPromotions.length,
     };
@@ -724,22 +724,33 @@ export default function TrainingPage() {
               Treinamentos
             </p>
             <h1 className="mt-2 text-3xl font-black text-white md:text-4xl">
-              Treinamentos · Metricas e Evolucao
+              Treinamentos · Métricas e Evolução
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              Acompanhamento gerencial da evolucao por modalidade, criterios
-              curriculares, prontidao e pendencias de Instrutor K9.
+              Acompanhamento gerencial da evolução por modalidade, critérios
+              curriculares, prontidão e pendências de Instrutor K9.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
-              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100 transition hover:border-cyan-200/40"
-              href={paths.trainingCurriculums}
+              className="relative rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
+              href={paths.trainingPromotions}
             >
-              curriculos / criterios
+              solicitações de evolução
+              {training.metrics.pendingPromotions > 0 ? (
+                <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-cyan-300 px-1 text-[10px] font-black text-slate-950">
+                  {training.metrics.pendingPromotions}
+                </span>
+              ) : null}
             </Link>
             <Link
-              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100 transition hover:border-cyan-200/40"
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
+              href={paths.trainingCurriculums}
+            >
+              currículos / critérios
+            </Link>
+            <Link
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
               href={paths.trainingMatrix}
             >
               matriz completa
@@ -773,23 +784,23 @@ export default function TrainingPage() {
           value={formatNumber(model.activePrograms.length)}
         />
         <MetricCard
-          detail="com prontidao acima de 75%"
+          detail="com prontidão acima de 75%"
           icon={Award}
           label="K9 aptos a evoluir"
           tone="emerald"
           value={formatNumber(model.closeToEvolve.length)}
         />
         <MetricCard
-          detail="modulos sem criterios ou marcos"
+          detail="módulos sem critérios ou marcos"
           icon={AlertTriangle}
-          label="Pendencias curriculares"
+          label="Pendências curriculares"
           tone="amber"
           value={formatNumber(model.missingCriteria.length)}
         />
         <MetricCard
           detail="promotion_requests pendentes"
           icon={UserCheck}
-          label="Avaliacoes aguardando Instrutor"
+          label="Avaliações aguardando Instrutor"
           tone="violet"
           value={formatNumber(training.metrics.pendingPromotions)}
         />
@@ -797,9 +808,9 @@ export default function TrainingPage() {
 
       <section className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
         <Panel
-          action={<Badge tone="cyan">nivel de prontidao</Badge>}
-          subtitle="Media calculada com progresso canonico, sessoes e criterios do curriculo."
-          title="Prontidao por modalidade"
+          action={<Badge tone="cyan">nível de prontidão</Badge>}
+          subtitle="Media calculada com progresso canonico, sessões e critérios do currículo."
+          title="Prontidão por modalidade"
         >
           <div className="space-y-3">
             {model.readinessByModality.map((item) => (
@@ -813,35 +824,35 @@ export default function TrainingPage() {
         </Panel>
 
         <Panel
-          subtitle="Criterios curriculares que exigem atencao imediata."
-          title="Pendencias criticas"
+          subtitle="Critérios curriculares que exigem atenção imediata."
+          title="Pendências críticas"
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <CriticalCard
-              detail="abaixo da distancia minima"
+              detail="abaixo da distância mínima"
               icon={Footprints}
-              label="Trilha minima"
+              label="Trilha mínima"
               tone="red"
               value={model.critical.distance}
             />
             <CriticalCard
-              detail="marcos obrigatorios pendentes"
+              detail="marcos obrigatórios pendentes"
               icon={Target}
-              label="Marcos obrigatorios"
+              label="Marcos obrigatórios"
               tone="amber"
               value={model.critical.milestones}
             />
             <CriticalCard
-              detail="nao atingiram o minimo"
+              detail="não atingiram o mínimo"
               icon={CalendarDays}
-              label="Sessoes completas"
+              label="Sessões completas"
               tone="blue"
               value={model.critical.sessions}
             />
             <CriticalCard
-              detail="aguardando avaliacao final"
+              detail="aguardando avaliação final"
               icon={GraduationCap}
-              label="Validacao do Instrutor K9"
+              label="Validação do Instrutor K9"
               tone="violet"
               value={model.critical.validations}
             />
@@ -853,14 +864,14 @@ export default function TrainingPage() {
         <Panel
           action={
             <Link
-              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-cyan-100 transition hover:border-cyan-200/40"
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
               href={paths.trainingMatrix}
             >
               ver matriz completa
             </Link>
           }
-          subtitle="Visao por modulo/fase com criterios minimos para evolucao."
-          title="Matriz de evolucao - Busca & Captura"
+          subtitle="Visão por módulo/fase com critérios mínimos para evolução."
+          title="Matriz de evolução - Busca & Captura"
         >
           {model.buscaProgram?.modules.length ? (
             <>
@@ -868,11 +879,11 @@ export default function TrainingPage() {
                 <table className="w-full min-w-[980px] border-separate border-spacing-y-2">
                   <thead className="text-left text-xs uppercase tracking-[0.14em] text-slate-500">
                     <tr>
-                      <th className="px-3 py-2">Modulo / fase</th>
-                      <th className="px-3 py-2">Marcos concluidos</th>
-                      <th className="px-3 py-2">Sessoes completas</th>
+                      <th className="px-3 py-2">Módulo / fase</th>
+                      <th className="px-3 py-2">Marcos concluídos</th>
+                      <th className="px-3 py-2">Sessões completas</th>
                       <th className="px-3 py-2">Sucesso medio</th>
-                      <th className="px-3 py-2">Distancia minima</th>
+                      <th className="px-3 py-2">Distância mínima</th>
                       <th className="px-3 py-2">Eventos esperados</th>
                       <th className="px-3 py-2">Status</th>
                     </tr>
@@ -898,7 +909,7 @@ export default function TrainingPage() {
                       {model.buscaFocus.dog.dogName}
                     </p>
                     <p className="mt-1 text-sm text-slate-400">
-                      {model.buscaFocus.module?.title ?? "Modulo atual"} ·{" "}
+                      {model.buscaFocus.module?.title ?? "Módulo atual"} ·{" "}
                       {model.buscaFocus.cell.statusLabel}
                     </p>
                   </div>
@@ -912,14 +923,14 @@ export default function TrainingPage() {
               ) : null}
             </>
           ) : (
-            <EmptyState label="Curriculo de Busca & Captura ainda nao possui modulos cadastrados." />
+            <EmptyState label="Currículo de Busca & Captura ainda não possui módulos cadastrados." />
           )}
         </Panel>
 
         <Panel
           action={<Badge tone="cyan">{model.upcoming.length} exibidos</Badge>}
-          subtitle="K9 mais proximos de evoluir conforme matriz vigente."
-          title="Proximas evolucoes"
+          subtitle="K9 mais próximos de evoluir conforme matriz vigente."
+          title="Próximas evoluções"
         >
           {model.upcoming.length ? (
             <div className="space-y-3">
@@ -931,11 +942,11 @@ export default function TrainingPage() {
               ))}
             </div>
           ) : (
-            <EmptyState label="Nenhuma evolucao proxima calculada com os dados atuais." />
+            <EmptyState label="Nenhuma evolução próxima calculada com os dados atuais." />
           )}
           <p className="mt-4 text-xs leading-5 text-slate-500">
-            Criterios baseados em curriculos, progresso canonico, sessoes e
-            solicitacoes pendentes. A aprovacao continua sendo do Instrutor K9.
+            Critérios baseados em currículos, progresso canonico, sessões e
+            solicitações pendentes. A aprovação continua sendo do Instrutor K9.
           </p>
         </Panel>
       </section>

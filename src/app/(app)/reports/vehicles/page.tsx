@@ -1,5 +1,5 @@
-import { ReportDetailPage } from "@/features/reports/components/report-pages";
+import { VehiclesReport } from "@/features/reports/components/vehicles-report";
 
 export default function VehiclesReportPage() {
-  return <ReportDetailPage reportId="vehicles" />;
+  return <VehiclesReport />;
 }

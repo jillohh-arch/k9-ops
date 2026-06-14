@@ -3,6 +3,7 @@
 import {
   collection,
   doc,
+  limit,
   onSnapshot,
   query,
   type DocumentData,
@@ -168,27 +169,40 @@ export function useHumanProfileData(ra: string) {
     () => query(collection(db, "users", ra, "documents")),
     [ra],
   );
-  const dogsQuery = useMemo(() => query(collection(db, "dogs")), []);
-  const trainingsQuery = useMemo(() => query(collection(db, "trainings")), []);
+  // QW-5: Add limit(500) to all root-level collections that have no filter.
+  // These collections can grow indefinitely and would otherwise cause
+  // unbounded reads. 500 is a safe quick-win cap; filtered queries (by ra)
+  // do not need a limit here.
+  const dogsQuery = useMemo(
+    () => query(collection(db, "dogs"), limit(500)),
+    [],
+  );
+  const trainingsQuery = useMemo(
+    () => query(collection(db, "trainings"), limit(500)),
+    [],
+  );
   const occurrencesQuery = useMemo(
-    () => query(collection(db, "occurrences")),
+    () => query(collection(db, "occurrences"), limit(500)),
     [],
   );
   const shiftsQuery = useMemo(
-    () => query(collection(db, "active_shifts")),
+    () => query(collection(db, "active_shifts"), limit(500)),
     [],
   );
   const shiftLogsQuery = useMemo(
-    () => query(collection(db, "shift_logs")),
+    () => query(collection(db, "shift_logs"), limit(500)),
     [],
   );
   const promotionsQuery = useMemo(
-    () => query(collection(db, "promotion_requests")),
+    () => query(collection(db, "promotion_requests"), limit(500)),
     [],
   );
-  const auditQuery = useMemo(() => query(collection(db, "auditLogs")), []);
+  const auditQuery = useMemo(
+    () => query(collection(db, "auditLogs"), limit(500)),
+    [],
+  );
   const movementsQuery = useMemo(
-    () => query(collection(db, "effective_movements")),
+    () => query(collection(db, "effective_movements"), limit(500)),
     [],
   );
 
@@ -314,9 +328,13 @@ export function useHumanProfileData(ra: string) {
 }
 
 export function useHumanAdministrativeRecords() {
-  const usersQuery = useMemo(() => query(collection(db, "users")), []);
+  // QW-5: limit(500) prevents unbounded reads on growing collections.
+  const usersQuery = useMemo(
+    () => query(collection(db, "users"), limit(500)),
+    [],
+  );
   const movementsQuery = useMemo(
-    () => query(collection(db, "effective_movements")),
+    () => query(collection(db, "effective_movements"), limit(500)),
     [],
   );
   const users = useRecords(usersQuery, "users");

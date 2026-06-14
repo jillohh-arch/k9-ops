@@ -37,19 +37,19 @@ const meTabs: Array<{
   label: string;
 }> = [
   {
-    description: "cao vinculado e contexto atual",
+    description: "cão vinculado e contexto atual",
     id: "k9",
     label: "K9 vinculado",
   },
   {
-    description: "sessoes e registros recentes",
+    description: "sessões e registros recentes",
     id: "trainings",
     label: "Treinos",
   },
   {
-    description: "participacoes operacionais",
+    description: "participações operacionais",
     id: "occurrences",
-    label: "Ocorrencias",
+    label: "Ocorrências",
   },
   {
     description: "arquivos, conta e seguranca",
@@ -89,7 +89,7 @@ export default function MePage() {
   if (!ra) {
     return (
       <DataState
-        error="Nao foi possivel identificar seu RA no token de login."
+        error="Não foi possível identificar seu RA no token de login."
         loading={false}
         noun="seu perfil"
       />
@@ -99,7 +99,7 @@ export default function MePage() {
   if (data.loading || data.error || !data.user) {
     return (
       <DataState
-        error={data.error ?? (!data.loading ? "Perfil nao localizado." : null)}
+        error={data.error ?? (!data.loading ? "Perfil não localizado." : null)}
         loading={data.loading}
         noun="seu perfil"
       />
@@ -129,7 +129,7 @@ export default function MePage() {
           </p>
           <h1 className="mt-1 text-3xl font-black text-white">Meu Perfil</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Dados funcionais, K9 vinculado, treinos e ocorrencias relacionados
+            Dados funcionais, K9 vinculado, treinos e ocorrências relacionados
             ao seu RA.
           </p>
         </div>
@@ -167,8 +167,8 @@ export default function MePage() {
           <div className="grid gap-4 lg:grid-cols-2">
             {[
               ["Nome completo", fullName],
-              ["Funcao", humanText(user, "cargo", "role", "accessLevel")],
-              ["Lotacao", humanText(user, "unit", "unidade", "lotacao")],
+              ["Função", humanText(user, "cargo", "role", "accessLevel")],
+              ["Lotação", humanText(user, "unit", "unidade", "lotação")],
               ["Equipe", humanText(user, "team", "equipe")],
               ["Perfil de acesso", humanText(user, "accessProfile")],
               ["Telefone", humanText(user, "telefone", "phone")],
@@ -207,9 +207,9 @@ export default function MePage() {
           value={String(data.trainings.length)}
         />
         <SummaryCard
-          detail="participacoes e conducoes"
+          detail="participações e conducoes"
           icon={ShieldCheck}
-          label="Ocorrencias"
+          label="Ocorrências"
           tone="violet"
           value={String(data.occurrences.length)}
         />
@@ -266,12 +266,12 @@ export default function MePage() {
                   {humanText(linkedDog, "name", "nome") ?? linkedDog._id}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  {humanText(linkedDog, "breed", "raca") ??
-                    "Raca nao informada"}
+                  {humanText(linkedDog, "breed", "raça") ??
+                    "Raça não informada"}
                 </p>
                 <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-bold text-emerald-200">
                   <HeartPulse className="h-3.5 w-3.5" />
-                  Prontuario disponivel
+                  Prontuário disponível
                 </p>
               </div>
             </Link>
@@ -299,7 +299,7 @@ export default function MePage() {
               <CalendarDays className="h-5 w-5 text-cyan-300" />
               <div>
                 <p className="text-sm font-bold text-white">
-                  Ultima atualizacao
+                  Última atualização
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   {formatDate(humanRecordDate(user))}
@@ -362,7 +362,7 @@ export default function MePage() {
 
       {activeTab === "occurrences" ? (
         <section className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Ocorrencias recentes">
+        <Panel title="Ocorrências recentes">
           <div className="mt-4 space-y-3">
             {recentOccurrences.length ? (
               recentOccurrences.map((record) => (
@@ -372,7 +372,7 @@ export default function MePage() {
                 >
                   <p className="font-bold text-white">
                     {humanText(record, "type_name", "natureza", "status") ??
-                      "Ocorrencia"}
+                      "Ocorrência"}
                   </p>
                   <p className="mt-1 font-mono text-xs text-slate-500">
                     {formatDate(humanRecordDate(record))}
@@ -381,7 +381,7 @@ export default function MePage() {
               ))
             ) : (
               <p className="text-sm text-slate-500">
-                Nenhuma ocorrencia recente vinculada.
+                Nenhuma ocorrência recente vinculada.
               </p>
             )}
           </div>
@@ -392,8 +392,8 @@ export default function MePage() {
             <span className="font-mono font-black text-cyan-100">
               {data.occurrences.length}
             </span>{" "}
-            ocorrencias vinculadas ao seu RA por participacao, conducao ou
-            referencia documental.
+            ocorrências vinculadas ao seu RA por participação, condução ou
+            referência documental.
           </div>
         </Panel>
       </section>
@@ -442,7 +442,7 @@ export default function MePage() {
                 <CalendarDays className="h-5 w-5 text-cyan-300" />
                 <div>
                   <p className="text-sm font-bold text-white">
-                    Ultima atualizacao
+                    Última atualização
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {formatDate(humanRecordDate(user))}
@@ -455,7 +455,7 @@ export default function MePage() {
       ) : null}
 
       <div className="rounded-3xl border border-cyan-300/10 bg-cyan-300/[0.045] px-5 py-4 text-sm text-slate-400">
-        Dados administrativos sensiveis continuam sob controle dos gestores em{" "}
+        Dados administrativos sensíveis continuam sob controle dos gestores em{" "}
         <Link className="font-bold text-cyan-200" href={paths.humans}>
           Efetivo Humano
         </Link>

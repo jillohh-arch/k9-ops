@@ -36,10 +36,10 @@ const vehicleFormTabs: Array<{
   id: VehicleFormTab;
   label: string;
 }> = [
-  { id: "identity", label: "Identificacao" },
+  { id: "identity", label: "Identificação" },
   { id: "operation", label: "Operacional" },
-  { id: "documents", label: "Documentacao" },
-  { id: "technical", label: "Dados tecnicos" },
+  { id: "documents", label: "Documentação" },
+  { id: "technical", label: "Dados técnicos" },
 ];
 
 function Field({
@@ -99,8 +99,8 @@ function validate(values: VehicleFormValues) {
   if (!values.name.trim()) errors.name = "Informe o nome operacional.";
   if (!values.plate.trim()) errors.plate = "Informe a placa.";
   if (!values.model.trim()) errors.model = "Informe o modelo.";
-  if (!values.unit.trim()) errors.unit = "Informe a lotacao/base.";
-  if (!values.crewSize.trim()) errors.crewSize = "Informe a capacidade da guarnicao.";
+  if (!values.unit.trim()) errors.unit = "Informe a lotação/base.";
+  if (!values.crewSize.trim()) errors.crewSize = "Informe a capacidade da guarnição.";
   return errors;
 }
 
@@ -134,7 +134,7 @@ export function VehicleAdminForm({
       .then((loaded) => {
         if (!alive) return;
         if (loaded) setValues(loaded);
-        else setError("Viatura nao localizada.");
+        else setError("Viatura não localizada.");
       })
       .catch((err) => alive && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => alive && setLoading(false));
@@ -163,14 +163,14 @@ export function VehicleAdminForm({
     if (!canSaveVehicle) {
       setError(
         mode === "create"
-          ? "Seu perfil nao permite cadastrar viaturas."
-          : "Seu perfil nao permite editar viaturas.",
+          ? "Seu perfil não permite cadastrar viaturas."
+          : "Seu perfil não permite editar viaturas.",
       );
       return;
     }
     const nextErrors = validate(values);
     if (Object.keys(nextErrors).length) {
-      setError("Preencha os campos obrigatorios da viatura.");
+      setError("Preencha os campos obrigatórios da viatura.");
       return;
     }
     setSaving(true);
@@ -187,7 +187,7 @@ export function VehicleAdminForm({
 
   async function confirmArchive() {
     if (!canArchiveVehicle) {
-      setError("Seu perfil nao permite arquivar viaturas.");
+      setError("Seu perfil não permite arquivar viaturas.");
       setArchiveOpen(false);
       return;
     }
@@ -230,7 +230,7 @@ export function VehicleAdminForm({
           </p>
         </div>
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-black text-[#041018] disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200 disabled:opacity-50"
           disabled={saving || !canSaveVehicle}
           type="submit"
         >
@@ -268,7 +268,7 @@ export function VehicleAdminForm({
           <Section
             active={activeFormTab === "identity"}
             icon={Car}
-            title="1. Identificacao"
+            title="1. Identificação"
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <Field error={errors.prefix} label="Prefixo" required>
@@ -337,7 +337,7 @@ export function VehicleAdminForm({
                   onChange={(event) => setField("status", event.target.value)}
                   value={values.status}
                 >
-                  {["Ativa", "Em manutencao", "Reserva", "Baixada"].map((item) => (
+                  {["Ativa", "Em manutenção", "Reserva", "Baixada"].map((item) => (
                     <option className="bg-[#0b1628]" key={item}>
                       {item}
                     </option>
@@ -350,10 +350,10 @@ export function VehicleAdminForm({
           <Section
             active={activeFormTab === "operation"}
             icon={CheckCircle2}
-            title="2. Vinculacao operacional"
+            title="2. Vinculação operacional"
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Field error={errors.unit} label="Lotacao / Unidade" required>
+              <Field error={errors.unit} label="Lotação / Unidade" required>
                 <input
                   className={inputClass}
                   onChange={(event) => setField("unit", event.target.value)}
@@ -368,7 +368,7 @@ export function VehicleAdminForm({
                   value={values.base}
                 />
               </Field>
-              <Field error={errors.crewSize} label="Tamanho da guarnicao" required>
+              <Field error={errors.crewSize} label="Tamanho da guarnição" required>
                 <input
                   className={inputClass}
                   inputMode="numeric"
@@ -387,7 +387,7 @@ export function VehicleAdminForm({
             <textarea
               className="mt-4 min-h-24 w-full resize-y rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
               onChange={(event) => setField("notes", event.target.value)}
-              placeholder="Observacoes operacionais, restricoes, disponibilidade..."
+              placeholder="Observações operacionais, restrições, disponibilidade..."
               value={values.notes}
             />
           </Section>
@@ -396,7 +396,7 @@ export function VehicleAdminForm({
             <Section
               active={activeFormTab === "documents"}
               icon={FileText}
-              title="3. Documentacao"
+              title="3. Documentação"
             >
               <div className="grid gap-4 md:grid-cols-2">
                 {[
@@ -423,7 +423,7 @@ export function VehicleAdminForm({
             <Section
               active={activeFormTab === "technical"}
               icon={Wrench}
-              title="4. Dados tecnicos"
+              title="4. Dados técnicos"
             >
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Cor">
@@ -435,13 +435,13 @@ export function VehicleAdminForm({
                 <Field label="Quilometragem">
                   <input className={inputClass} inputMode="numeric" onChange={(event) => setField("mileageKm", event.target.value.replace(/[^\d,.]/g, ""))} value={values.mileageKm} />
                 </Field>
-                <Field label="Proxima revisao">
+                <Field label="Próxima revisão">
                   <input className={inputClass} onChange={(event) => setField("nextReviewAt", event.target.value)} type="date" value={values.nextReviewAt} />
                 </Field>
-                <Field label="Km da proxima revisao">
+                <Field label="Km da próxima revisão">
                   <input className={inputClass} inputMode="numeric" onChange={(event) => setField("nextReviewKm", event.target.value.replace(/[^\d,.]/g, ""))} value={values.nextReviewKm} />
                 </Field>
-                <Field label="Status de manutencao">
+                <Field label="Status de manutenção">
                   <input className={inputClass} onChange={(event) => setField("maintenanceStatus", event.target.value)} value={values.maintenanceStatus} />
                 </Field>
               </div>
@@ -483,7 +483,7 @@ export function VehicleAdminForm({
                 ["Nome", `${values.name || "Viatura"} ${values.prefix || ""}`.trim()],
                 ["Placa", values.plate || "--"],
                 ["Modelo", values.model || "--"],
-                ["Lotacao", values.unit || "--"],
+                ["Lotação", values.unit || "--"],
                 ["Status", values.status || "--"],
               ].map(([label, value]) => (
                 <div className="flex justify-between gap-4" key={label}>
@@ -496,7 +496,7 @@ export function VehicleAdminForm({
           <section className="rounded-3xl border border-white/8 bg-[#0b1628]/72 p-5">
             <h2 className="text-sm font-black text-white">Checklist</h2>
             <div className="mt-4 space-y-2">
-              {["Identificacao", "Dados tecnicos", "Vinculacao", "Documentacao"].map((item, index) => (
+              {["Identificação", "Dados técnicos", "Vinculação", "Documentação"].map((item, index) => (
                 <div className="flex items-center justify-between text-xs" key={item}>
                   <span className="text-slate-400">{item}</span>
                   <span className={cn(checklist[index] ? "text-emerald-300" : "text-slate-600")}>
@@ -508,7 +508,7 @@ export function VehicleAdminForm({
           </section>
           {mode === "edit" && canArchiveVehicle ? (
             <button
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-300/25 px-4 py-3 text-sm font-bold text-red-200"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-200 hover:bg-red-400/[0.18]"
               onClick={() => setArchiveOpen(true)}
               type="button"
             >
@@ -523,20 +523,20 @@ export function VehicleAdminForm({
           <div className="w-full max-w-md rounded-3xl border border-red-300/20 bg-[#091525] p-6">
             <h2 className="text-xl font-black text-white">Arquivar viatura</h2>
             <p className="mt-2 text-sm text-slate-400">
-              A viatura sai da lista operacional, mas o historico permanece.
+              A viatura sai da lista operacional, mas o histórico permanece.
             </p>
             <textarea
               className="mt-5 min-h-24 w-full rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-white outline-none"
               onChange={(event) => setArchiveReason(event.target.value)}
-              placeholder="Motivo obrigatorio"
+              placeholder="Motivo obrigatório"
               value={archiveReason}
             />
             <div className="mt-5 flex gap-3">
-              <button className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300" onClick={() => setArchiveOpen(false)} type="button">
+              <button className="flex-1 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]" onClick={() => setArchiveOpen(false)} type="button">
                 Cancelar
               </button>
               <button
-                className="flex-1 rounded-xl bg-red-400 px-4 py-3 text-sm font-black text-[#170607] disabled:opacity-50"
+                className="flex-1 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-200 hover:bg-red-400/[0.18] disabled:opacity-50"
                 disabled={archiveReason.trim().length < 5 || archiving}
                 onClick={confirmArchive}
                 type="button"

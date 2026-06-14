@@ -48,10 +48,10 @@ function statusTone(status: string | null, active: boolean) {
 }
 
 function eventTitle(record: VehicleRecord) {
-  if (record._source === "active_shifts") return "Guarnicao em turno";
+  if (record._source === "active_shifts") return "Guarnição em turno";
   if (record._source === "shift_logs") return "Registro de turno";
   if (record._source === "occurrences") {
-    return vehicleText(record, "type_name", "nature", "nature_name") ?? "Ocorrencia";
+    return vehicleText(record, "type_name", "nature", "nature_name") ?? "Ocorrência";
   }
   return vehicleText(record, "title", "type") ?? "Evento da viatura";
 }
@@ -65,7 +65,7 @@ export default function VehicleProfilePage() {
   if (data.loading || data.error || !data.vehicle) {
     return (
       <DataState
-        error={data.error ?? (!data.loading ? "Viatura nao localizada." : null)}
+        error={data.error ?? (!data.loading ? "Viatura não localizada." : null)}
         loading={data.loading}
         noun="o perfil da viatura"
       />
@@ -99,7 +99,7 @@ export default function VehicleProfilePage() {
             Perfil da Viatura
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Ficha operacional, administrativa e historico da frota.
+            Ficha operacional, administrativa e histórico da frota.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -115,7 +115,7 @@ export default function VehicleProfilePage() {
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300"
             href={`/vehicles/${encodeURIComponent(vehicleId)}/history`}
           >
-            <History className="h-4 w-4" /> Ver historico
+            <History className="h-4 w-4" /> Ver histórico
           </Link>
         </div>
       </div>
@@ -144,10 +144,10 @@ export default function VehicleProfilePage() {
                   ["Placa", vehicleText(vehicle, "plate") ?? "--"],
                   ["Ano", vehicleText(vehicle, "year") ?? "--"],
                   ["Combustivel", vehicleText(vehicle, "fuel") ?? "--"],
-                  ["Lotacao", vehicleText(vehicle, "unit") ?? "--"],
+                  ["Lotação", vehicleText(vehicle, "unit") ?? "--"],
                   ["Base", vehicleText(vehicle, "base") ?? "--"],
                   ["Quilometragem", mileage == null ? "--" : `${mileage.toLocaleString("pt-BR")} km`],
-                  ["Guarnicao", `${crewSize} vaga(s)`],
+                  ["Guarnição", `${crewSize} vaga(s)`],
                 ].map(([itemLabel, value]) => (
                   <div key={itemLabel}>
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
@@ -162,22 +162,22 @@ export default function VehicleProfilePage() {
             </div>
           </div>
           <aside className="space-y-3 rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-            <h2 className="text-sm font-black text-white">Resumo da situacao</h2>
+            <h2 className="text-sm font-black text-white">Resumo da situação</h2>
             {[
               {
                 icon: ShieldCheck,
-                label: active ? "Em operacao" : "Fora de operacao",
+                label: active ? "Em operação" : "Fora de operação",
                 detail: active ? "Viatura apta para uso conforme cadastro." : "Cadastro arquivado ou inativo.",
               },
               {
                 icon: FileText,
-                label: vehicleText(vehicle, "document_valid_until") ? "Documentacao informada" : "Documentacao pendente",
-                detail: vehicleText(vehicle, "document_valid_until") ?? "Validade nao cadastrada.",
+                label: vehicleText(vehicle, "document_valid_until") ? "Documentação informada" : "Documentação pendente",
+                detail: vehicleText(vehicle, "document_valid_until") ?? "Validade não cadastrada.",
               },
               {
                 icon: Wrench,
-                label: vehicleText(vehicle, "maintenance_status") ?? "Manutencao nao informada",
-                detail: nextReview ? `Proxima revisao em ${formatDate(nextReview)}` : "Sem proxima revisao cadastrada.",
+                label: vehicleText(vehicle, "maintenance_status") ?? "Manutenção não informada",
+                detail: nextReview ? `Próxima revisão em ${formatDate(nextReview)}` : "Sem próxima revisão cadastrada.",
               },
             ].map((item) => (
               <div className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.035] p-3" key={item.label}>
@@ -196,28 +196,28 @@ export default function VehicleProfilePage() {
         <SummaryCard
           detail="condutores vinculados agora"
           icon={Users}
-          label="Guarnicao ativa"
+          label="Guarnição ativa"
           tone="cyan"
           value={String(data.activeShifts.length)}
         />
         <SummaryCard
-          detail="ocorrencias com vehicle_id"
+          detail="ocorrências com vehicle_id"
           icon={ShieldCheck}
-          label="Ocorrencias"
+          label="Ocorrências"
           tone="blue"
           value={String(data.occurrences.length)}
         />
         <SummaryCard
           detail="eventos administrativos"
           icon={Wrench}
-          label="Manutencoes/eventos"
+          label="Manutenções/eventos"
           tone="amber"
           value={String(data.events.length)}
         />
         <SummaryCard
-          detail={nextReview ? `em ${formatDate(nextReview)}` : "nao cadastrada"}
+          detail={nextReview ? `em ${formatDate(nextReview)}` : "não cadastrada"}
           icon={CalendarDays}
-          label="Proxima revisao"
+          label="Próxima revisão"
           tone="green"
           value={nextReview ? "OK" : "--"}
         />
@@ -245,7 +245,7 @@ export default function VehicleProfilePage() {
         </section>
 
         <section className="rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5">
-          <h2 className="text-sm font-black text-white">Situacao operacional</h2>
+          <h2 className="text-sm font-black text-white">Situação operacional</h2>
           <div className="mt-4 space-y-3">
             {data.activeShifts.length ? (
               data.activeShifts.map((shift) => (
@@ -260,13 +260,13 @@ export default function VehicleProfilePage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-500">Sem guarnicao ativa vinculada.</p>
+              <p className="text-sm text-slate-500">Sem guarnição ativa vinculada.</p>
             )}
           </div>
         </section>
 
         <section className="rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5">
-          <h2 className="text-sm font-black text-white">Manutencao e revisao</h2>
+          <h2 className="text-sm font-black text-white">Manutenção e revisão</h2>
           <div className="mt-5 flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.025] p-4">
             <Gauge className="h-6 w-6 text-cyan-300" />
             <div>
@@ -278,23 +278,23 @@ export default function VehicleProfilePage() {
           </div>
           <div className="mt-4 flex items-center gap-3 text-sm text-slate-400">
             <CalendarDays className="h-4 w-4 text-cyan-300/70" />
-            Revisao: {formatDate(nextReview)}
+            Revisão: {formatDate(nextReview)}
           </div>
           <div className="mt-3 flex items-center gap-3 text-sm text-slate-400">
             <MapPin className="h-4 w-4 text-cyan-300/70" />
-            {vehicleText(vehicle, "base", "unit") ?? "Base nao informada"}
+            {vehicleText(vehicle, "base", "unit") ?? "Base não informada"}
           </div>
         </section>
       </section>
 
       <section className="rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-sm font-black text-white">Historico recente</h2>
+          <h2 className="text-sm font-black text-white">Histórico recente</h2>
           <Link
             className="text-xs font-bold text-cyan-300"
             href={`/vehicles/${encodeURIComponent(vehicleId)}/history`}
           >
-            Ver historico completo
+            Ver histórico completo
           </Link>
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -311,7 +311,7 @@ export default function VehicleProfilePage() {
               </div>
             ))
           ) : (
-            <p className="text-sm text-slate-500">Nenhum historico localizado.</p>
+            <p className="text-sm text-slate-500">Nenhum histórico localizado.</p>
           )}
         </div>
       </section>

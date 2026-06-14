@@ -16,9 +16,9 @@ import {
 } from "react";
 
 import {
-  canonicalK9Modalities,
-  canonicalModality,
-  canonicalModalityLabel,
+  canônicalK9Modalities,
+  canônicalModality,
+  canônicalModalityLabel,
 } from "@/features/effective/lib/k9-modalities";
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAuth } from "@/features/auth/providers/auth-provider";
@@ -366,7 +366,7 @@ function recordDate(record: RawRecord) {
 }
 
 function statusOf(record: Record<string, unknown>) {
-  return normalized(record.status ?? record.situacao ?? record.state);
+  return normalized(record.status ?? record.situação ?? record.state);
 }
 
 function visible(records: RawRecord[]) {
@@ -413,12 +413,12 @@ function formatCurrentModule(value: unknown) {
   const parsed = text(value);
   if (!parsed) return null;
   const number = Number(parsed);
-  return Number.isFinite(number) ? `Modulo ${number}` : parsed;
+  return Number.isFinite(number) ? `Módulo ${number}` : parsed;
 }
 
 function normalizeProgress(record: RawRecord): TrainingProgressSummary | null {
   const dogId = text(record.dogId, record.dog_id, record._dogId);
-  const modality = canonicalModality(
+  const modality = canônicalModality(
     text(record.modality, record.modality_id, record.type, record._id) ??
       record._id,
   );
@@ -484,7 +484,7 @@ function normalizeSession(record: RawRecord): TrainingSessionSummary | null {
     ),
     events: eventNames(record.events ?? track?.events),
     id: record._id,
-    modality: rawModality ? canonicalModality(rawModality) : "treino_geral",
+    modality: rawModality ? canônicalModality(rawModality) : "treino_geral",
     phase: text(record.phase, record.training_phase, record.trainingPhase) ??
       (record.module_id || record.moduleId ? "formation" : "maintenance"),
     result: text(record.result, record.outcome, record.status),
@@ -517,7 +517,7 @@ function normalizePromotion(record: RawRecord): TrainingPromotionSummary | null 
     marksCount: arrayOrObjectCount(
       record.marks_snapshot ?? record.marksSnapshot,
     ),
-    modality: rawModality ? canonicalModality(rawModality) : "treino_geral",
+    modality: rawModality ? canônicalModality(rawModality) : "treino_geral",
     moduleId: text(record.module_id, record.moduleId, record.current_module),
     requestedAt: recordDate(record),
     requestedBy: text(
@@ -565,7 +565,7 @@ function cellStatusLabel(
   pendingPromotions: number,
 ) {
   const normalizedStatus = normalized(status);
-  if (pendingPromotions > 0) return "Aguardando avaliacao";
+  if (pendingPromotions > 0) return "Aguardando avaliação";
   if (normalizedStatus === "operational" || normalizedStatus === "operacional") {
     return "Operacional";
   }
@@ -573,9 +573,9 @@ function cellStatusLabel(
     normalizedStatus === "in_formation" ||
     normalizedStatus === "em_formacao"
   ) {
-    return currentModule ?? "Em formacao";
+    return currentModule ?? "Em formação";
   }
-  return "Nao iniciado";
+  return "Não iniciado";
 }
 
 function isOperational(status: string) {
@@ -732,13 +732,13 @@ export function useTrainingData(): TrainingData {
     const programs = visible(sources.programs.records)
       .map((record): TrainingProgramSummary => {
         const rawModality = text(record.modality, record.modality_id, record._id);
-        const modality = rawModality ? canonicalModality(rawModality) : record._id;
+        const modality = rawModality ? canônicalModality(rawModality) : record._id;
         return {
           active: booleanValue(record.active, true),
           id: record._id,
           label:
             text(record.name, record.label, record.title) ??
-            canonicalModalityLabel(modality),
+            canônicalModalityLabel(modality),
           modality,
           moduleCount: modulesByProgram[record._id] ?? 0,
           version: text(record.version, record.program_version),
@@ -795,12 +795,12 @@ export function useTrainingData(): TrainingData {
           (promotion) => promotion.dogId === dogId,
         );
 
-        const cells = canonicalK9Modalities.map((modality) => {
+        const cells = canônicalK9Modalities.map((modality) => {
           const progressItem = progressByDogModality.get(
             `${dogId}:${modality.value}`,
           );
           const specialty = dog?.specialties.find(
-            (item) => canonicalModality(item.type) === modality.value,
+            (item) => canônicalModality(item.type) === modality.value,
           );
           const modalitySessions = dogSessions.filter(
             (session) => session.modality === modality.value,

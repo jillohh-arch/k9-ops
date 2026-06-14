@@ -17,7 +17,6 @@ import {
   Menu,
   RadioTower,
   Search,
-  UserRound,
   Users,
   X,
 } from "lucide-react";
@@ -54,7 +53,6 @@ const navItems = [
     label: "Dashboard",
     moduleId: "dashboard",
   },
-  { href: paths.me, icon: UserRound, label: "Meu Perfil", moduleId: "me" },
   {
     activePrefixes: [
       paths.effective,
@@ -75,6 +73,7 @@ const navItems = [
     moduleId: "occurrences",
   },
   {
+    activePrefixes: [paths.training, paths.trainingPromotions],
     href: paths.training,
     icon: ClipboardList,
     label: "Treinamentos",
@@ -83,10 +82,10 @@ const navItems = [
   {
     href: paths.trainingMatrix,
     icon: FileBarChart,
-    label: "Prontidao K9",
+    label: "Prontidão K9",
     moduleId: "training_matrix",
   },
-  { href: paths.health, icon: HeartPulse, label: "Saude", moduleId: "health" },
+  { href: paths.health, icon: HeartPulse, label: "Saúde", moduleId: "health" },
   {
     href: paths.inventory,
     icon: Boxes,
@@ -96,7 +95,7 @@ const navItems = [
   {
     href: paths.reports,
     icon: FileText,
-    label: "Relatorios",
+    label: "Relatórios",
     moduleId: "reports",
   },
   { href: paths.access, icon: KeyRound, label: "Acessos", moduleId: "access" },
@@ -190,10 +189,10 @@ function AccessDenied({ onGoHome }: { onGoHome: () => void }) {
           <KeyRound className="h-8 w-8" />
         </span>
         <h1 className="mt-5 text-2xl font-black text-white">
-          Acesso nao liberado
+          Acesso não liberado
         </h1>
         <p className="mt-3 text-sm leading-6 text-slate-400">
-          Seu perfil atual nao possui permissao para visualizar este modulo.
+          Seu perfil atual não possui permissão para visualizar este módulo.
           Solicite ajuste de acesso a um gestor autorizado.
         </p>
         <Button className="mt-6" onClick={onGoHome}>
@@ -235,7 +234,7 @@ function SidebarContent({
         <span>
           <span className="block text-lg font-black text-white">K9 Ops</span>
           <span className="block text-xs text-slate-400">
-            Gestao Operacional K9
+            Gestão Operacional K9
           </span>
         </span>
       </Link>
@@ -313,6 +312,7 @@ function OperatorAvatar({ src }: { src: string | null }) {
   const fallbackSrc = "/brand/logo-app.png";
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const resolvedSrc = src && src !== failedSrc ? src : fallbackSrc;
+  const isExternal = resolvedSrc.startsWith("http");
 
   return (
     <Image
@@ -322,6 +322,7 @@ function OperatorAvatar({ src }: { src: string | null }) {
       onError={() => setFailedSrc(resolvedSrc)}
       src={resolvedSrc}
       sizes="48px"
+      unoptimized={isExternal}
     />
   );
 }
@@ -433,10 +434,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
             <label className="relative hidden h-12 items-center rounded-2xl border border-white/10 bg-white/[0.045] transition focus-within:border-cyan-300/35 lg:flex">
               <span className="pointer-events-none absolute left-4 top-2 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                Periodo
+                Período
               </span>
               <select
-                aria-label="Periodo global do dashboard"
+                aria-label="Período global do dashboard"
                 className="h-full w-full cursor-pointer appearance-none bg-transparent px-4 pb-1 pt-4 text-sm font-semibold text-slate-200 outline-none"
                 onChange={(event) =>
                   setPeriodDays(
@@ -463,7 +464,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             <div className="flex items-center justify-between gap-4 lg:justify-end">
               <div className="lg:hidden">
                 <p className="text-sm font-black text-white">K9 Ops</p>
-                <p className="text-xs text-slate-500">Gestao Operacional</p>
+                <p className="text-xs text-slate-500">Gestão Operacional</p>
               </div>
 
               <button className="relative rounded-2xl border border-white/10 bg-white/[0.045] p-3 text-slate-300 transition hover:border-cyan-300/30 hover:text-cyan-100">
@@ -473,7 +474,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
               <div className="hidden h-12 w-px bg-white/10 md:block" />
 
-              <div className="flex items-center gap-3">
+              <Link
+                className="flex items-center gap-3 rounded-2xl border border-transparent p-1.5 transition hover:border-cyan-300/25 hover:bg-cyan-300/8"
+                href={paths.me}
+              >
                 <div className="hidden text-right sm:block">
                   <p className="text-sm font-bold text-white">{displayName}</p>
                   <p className="font-mono text-xs text-slate-500">
@@ -483,7 +487,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <div className="relative h-12 w-12 overflow-hidden rounded-full border border-cyan-300/20 bg-cyan-300/10">
                   <OperatorAvatar src={avatarSrc} />
                 </div>
-              </div>
+              </Link>
             </div>
           </div>
         </header>

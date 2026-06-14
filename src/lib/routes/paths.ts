@@ -12,6 +12,7 @@ export const paths = {
   vehicles: "/vehicles",
   occurrences: "/occurrences",
   training: "/training",
+  trainingPromotions: "/training/promotions",
   trainingCurriculums: "/training/curriculums",
   trainingMatrix: "/training-matrix",
   health: "/health",

@@ -99,7 +99,7 @@ function formatWeight(value: number | null) {
 }
 
 function formatRange(range: HealthDogSummary["idealRange"]) {
-  if (!range) return "nao cadastrada";
+  if (!range) return "não cadastrada";
   return `${weightFormatter.format(range.min)}-${weightFormatter.format(range.max)} kg`;
 }
 
@@ -320,7 +320,7 @@ function HealthRing({
         />
         <RingLegend
           count={warning}
-          label="Em observacao"
+          label="Em observação"
           percent={warningPercent}
           tone="amber"
         />
@@ -332,7 +332,7 @@ function HealthRing({
         />
         <RingLegend
           count={critical}
-          label="Critico"
+          label="Crítico"
           percent={criticalPercent}
           tone="red"
         />
@@ -340,7 +340,7 @@ function HealthRing({
 
       <div className="rounded-3xl border border-cyan-200/10 bg-white/[0.035] p-5 text-center">
         <ShieldCheck className="mx-auto h-10 w-10 text-cyan-200" />
-        <p className="mt-4 text-sm text-slate-400">Indice de saude</p>
+        <p className="mt-4 text-sm text-slate-400">Índice de saúde</p>
         <p className="mt-2 font-mono text-4xl font-black text-white">
           {healthyPercent}%
         </p>
@@ -348,8 +348,8 @@ function HealthRing({
           {healthyPercent >= 80
             ? "Muito bom"
             : healthyPercent >= 50
-              ? "Em atencao"
-              : "Critico"}
+              ? "Em atenção"
+              : "Crítico"}
         </p>
       </div>
     </div>
@@ -473,15 +473,15 @@ function AttentionCard({ dog }: { dog: HealthDogSummary }) {
             {dog.dogName}
           </p>
           <p className="mt-1 text-sm font-semibold text-slate-300">
-            {primary?.label ?? "Sem pendencia"}
+            {primary?.label ?? "Sem pendência"}
           </p>
         </div>
       </div>
       <p className="mt-4 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">
-        {primary?.detail ?? "Prontuario sem prioridade calculada."}
+        {primary?.detail ?? "Prontuário sem prioridade calculada."}
       </p>
       <Badge className="mt-3" tone={tone === "red" ? "red" : tone === "amber" ? "yellow" : "cyan"}>
-        {tone === "red" ? "Critico" : tone === "amber" ? "Atencao" : "Cadastro"}
+        {tone === "red" ? "Crítico" : tone === "amber" ? "Atenção" : "Cadastro"}
       </Badge>
     </Link>
   );
@@ -520,7 +520,7 @@ function DataGapRow({ dog }: { dog: HealthDogSummary }) {
         </div>
       </div>
       <Link
-        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100 transition hover:border-cyan-200/50 hover:bg-cyan-300/15"
+        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-300/[0.12]"
         href={`${paths.k9}/${encodeURIComponent(dog.dogId)}/edit`}
       >
         Ajustar cadastro
@@ -532,13 +532,13 @@ function DataGapRow({ dog }: { dog: HealthDogSummary }) {
 
 function healthStatus(dog: HealthDogSummary) {
   if (hasIssue(dog, "critical")) {
-    return { label: "Critico", tone: "red" as const };
+    return { label: "Crítico", tone: "red" as const };
   }
   if (hasIssue(dog, "missing")) {
     return { label: "Incompleto", tone: "yellow" as const };
   }
   if (hasIssue(dog, "warning")) {
-    return { label: "Atencao", tone: "yellow" as const };
+    return { label: "Atenção", tone: "yellow" as const };
   }
   if (dog.ready) {
     return { label: "Pronto", tone: "green" as const };
@@ -610,14 +610,14 @@ function ReadinessRow({
               <Badge tone={status.tone}>{status.label}</Badge>
             </div>
             <p className="mt-1 line-clamp-1 text-xs text-slate-500">
-              {dog.issues[0]?.label ?? "Sem pendencias calculadas"}
+              {dog.issues[0]?.label ?? "Sem pendências calculadas"}
             </p>
           </div>
         </div>
 
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-            Vacinacao
+            Vacinação
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge tone={vaccine.tone}>{vaccine.label}</Badge>
@@ -665,7 +665,7 @@ function ReadinessRow({
 
         <div className="flex flex-wrap gap-2 xl:justify-end">
           <Link
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-black text-slate-200 transition hover:border-cyan-200/30 hover:text-cyan-100"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-300/[0.12]"
             href={`${paths.k9}/${encodeURIComponent(dog.dogId)}`}
           >
             Abrir
@@ -673,7 +673,7 @@ function ReadinessRow({
           </Link>
           {canEdit ? (
             <Link
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100 transition hover:border-cyan-200/45 hover:bg-cyan-300/15"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-300/[0.12]"
               href={`${paths.k9}/${encodeURIComponent(dog.dogId)}/edit`}
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -822,8 +822,8 @@ export default function HealthPage() {
   }> = [
     { id: "all", label: "Todos" },
     { id: "ready", label: "Prontos" },
-    { id: "attention", label: "Atencao" },
-    { id: "critical", label: "Criticos" },
+    { id: "attention", label: "Atenção" },
+    { id: "critical", label: "Críticos" },
     { id: "incomplete", label: "Dados incompletos" },
   ];
 
@@ -836,17 +836,17 @@ export default function HealthPage() {
           </span>
           <div>
             <h1 className="text-3xl font-black text-white md:text-4xl">
-              Saude do Efetivo K9
+              Saúde do Efetivo K9
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              Visao geral da saude, bem-estar e prontidao veterinaria.
+              Visão geral da saúde, bem-estar e prontidão veterinária.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap gap-2">
             <Badge tone={data.metrics.critical > 0 ? "red" : "green"}>
-              {loading ? "..." : `${formatNumber(data.metrics.critical)} criticos`}
+              {loading ? "..." : `${formatNumber(data.metrics.critical)} críticos`}
             </Badge>
             <Badge tone="cyan">
               {loading
@@ -856,7 +856,7 @@ export default function HealthPage() {
           </div>
           {canWriteHealth ? (
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-[#031018] shadow-[0_0_26px_rgba(34,211,238,0.16)] transition hover:bg-cyan-200"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] transition hover:bg-cyan-200"
               onClick={() => {
                 setSaveMessage(null);
                 setHealthHubOpen(true);
@@ -902,15 +902,15 @@ export default function HealthPage() {
           detail={`${percent(data.metrics.ready, data.metrics.total)}% do efetivo`}
           footer="vacina vigente + peso canonico na faixa"
           icon={ShieldCheck}
-          label="Prontos por evidencia"
+          label="Prontos por evidência"
           tone="emerald"
           value={loading ? "..." : `${formatNumber(data.metrics.ready)} / ${formatNumber(data.metrics.total)}`}
         />
         <MetricCard
-          detail="Nos proximos 30 dias"
+          detail="Nos próximos 30 dias"
           footer={`${formatNumber(data.metrics.vaccinesOverdue)} vencida(s)`}
           icon={Syringe}
-          label="Vacinas proximas do vencimento"
+          label="Vacinas próximas do vencimento"
           tone="amber"
           value={loading ? "..." : formatNumber(data.metrics.vaccinesDueSoon)}
         />
@@ -918,7 +918,7 @@ export default function HealthPage() {
           detail="Fora do intervalo ideal"
           footer={`${formatNumber(missingRange)} sem faixa ideal | ${formatNumber(missingWeight)} sem peso`}
           icon={Scale}
-          label="Peso em atencao"
+          label="Peso em atenção"
           tone="blue"
           value={loading ? "..." : formatNumber(data.metrics.weightAttention)}
         />
@@ -926,7 +926,7 @@ export default function HealthPage() {
           detail="Falta dado essencial"
           footer={`${formatNumber(missingVaccine)} sem vacina | ${formatNumber(data.metrics.examsDue)} exame(s) a revisar`}
           icon={Activity}
-          label="Lacunas de prontidao"
+          label="Lacunas de prontidão"
           tone={data.metrics.incomplete > 0 ? "amber" : "cyan"}
           value={loading ? "..." : formatNumber(data.metrics.incomplete)}
         />
@@ -935,8 +935,8 @@ export default function HealthPage() {
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <Panel
           action={<Badge tone={dataGaps.length ? "yellow" : "green"}>{formatNumber(dataGaps.length)} K9</Badge>}
-          subtitle="Pontos que impedem uma leitura confiavel de prontidao."
-          title="Lacunas de prontidao"
+          subtitle="Pontos que impedem uma leitura confiável de prontidão."
+          title="Lacunas de prontidão"
         >
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-cyan-200/10 bg-white/[0.035] p-4">
@@ -947,7 +947,7 @@ export default function HealthPage() {
                 {formatNumber(missingRange)}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                minimo e maximo no cadastro K9
+                mínimo e máximo no cadastro K9
               </p>
             </div>
             <div className="rounded-2xl border border-cyan-200/10 bg-white/[0.035] p-4">
@@ -969,19 +969,19 @@ export default function HealthPage() {
                 {formatNumber(missingVaccine)}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                nenhuma vacinacao localizada
+                nenhuma vacinação localizada
               </p>
             </div>
           </div>
           <p className="mt-4 text-xs leading-5 text-slate-500">
-            O painel nao presume aptidao clinica: ele mostra se ha evidencia
-            minima cadastrada para defender a prontidao do K9.
+            O painel não presume aptidão clínica: ele mostra se há evidência
+            mínima cadastrada para defender a prontidão do K9.
           </p>
         </Panel>
 
         <Panel
           action={<Badge tone="cyan">{dataGaps.slice(0, 3).length} exibidos</Badge>}
-          subtitle="Atalhos para completar cadastro e parametros."
+          subtitle="Atalhos para completar cadastro e parâmetros."
           title="Corrigir primeiro"
         >
           {loading ? (
@@ -1001,7 +1001,7 @@ export default function HealthPage() {
       <div className="grid gap-5 2xl:grid-cols-[1.35fr_0.8fr]">
         <Panel
           subtitle="Panorama atual do efetivo K9."
-          title="Situacao geral da saude"
+          title="Situação geral da saúde"
         >
           <HealthRing
             critical={buckets.critical}
@@ -1011,15 +1011,15 @@ export default function HealthPage() {
             warning={buckets.warning}
           />
           <p className="mt-4 text-xs text-slate-500">
-            Dados consolidados do periodo selecionado. O indice considera
-            pendencias criticas, alertas e lacunas de cadastro.
+            Dados consolidados do período selecionado. O indice considera
+            pendências críticas, alertas e lacunas de cadastro.
           </p>
         </Panel>
 
         <div className="grid gap-5">
           <Panel
             action={<Badge tone="slate">{data.upcoming.length} itens</Badge>}
-            title="Proximos vencimentos"
+            title="Próximos vencimentos"
           >
             {loading ? (
               <EmptyState label="Carregando vencimentos..." />
@@ -1039,7 +1039,7 @@ export default function HealthPage() {
 
           <Panel
             action={<Badge tone="slate">{data.recentEvents.length} eventos</Badge>}
-            title="Ultimos registros de saude"
+            title="Últimos registros de saúde"
           >
             {loading ? (
               <EmptyState label="Carregando registros..." />
@@ -1050,7 +1050,7 @@ export default function HealthPage() {
                 ))}
               </div>
             ) : (
-              <EmptyState label="Nenhum evento de saude encontrado." />
+              <EmptyState label="Nenhum evento de saúde encontrado." />
             )}
           </Panel>
         </div>
@@ -1058,7 +1058,7 @@ export default function HealthPage() {
 
       <Panel
         action={<Badge tone="cyan">{data.attention.slice(0, 4).length} exibidos</Badge>}
-        title="O que exige atencao"
+        title="O que exige atenção"
       >
         {loading ? (
           <EmptyState label="Carregando prioridades..." />
@@ -1069,7 +1069,7 @@ export default function HealthPage() {
             ))}
           </div>
         ) : (
-          <EmptyState label="Nenhuma prioridade clinica calculada." />
+          <EmptyState label="Nenhuma prioridade clínica calculada." />
         )}
       </Panel>
 
@@ -1077,7 +1077,7 @@ export default function HealthPage() {
         <CategoryCard
           detail={`${formatNumber(vaccineOk)} em dia | ${formatNumber(data.metrics.vaccinesOverdue)} vencida(s)`}
           icon={Syringe}
-          label="Vacinacao"
+          label="Vacinação"
           percent={percent(vaccineOk, data.metrics.total)}
           tone="cyan"
         />
@@ -1089,16 +1089,16 @@ export default function HealthPage() {
           tone="violet"
         />
         <CategoryCard
-          detail={`${formatNumber(weightOk)} na faixa | ${formatNumber(data.metrics.weightAttention)} em atencao`}
+          detail={`${formatNumber(weightOk)} na faixa | ${formatNumber(data.metrics.weightAttention)} em atenção`}
           icon={Scale}
           label="Peso"
           percent={percent(weightOk, data.metrics.total)}
           tone="blue"
         />
         <CategoryCard
-          detail={`${formatNumber(medicationEvents)} registro(s) no periodo`}
+          detail={`${formatNumber(medicationEvents)} registro(s) no período`}
           icon={Pill}
-          label="Medicacao"
+          label="Medicação"
           percent={percent(medicationEvents, Math.max(1, data.recentEvents.length))}
           tone="amber"
         />
@@ -1113,8 +1113,8 @@ export default function HealthPage() {
 
       <Panel
         action={<Badge tone="cyan">{filteredDogs.length} exibidos</Badge>}
-        subtitle="Busca, filtros e evidencias essenciais de cada prontuario."
-        title="Prontidao K9"
+        subtitle="Busca, filtros e evidências essenciais de cada prontuário."
+        title="Prontidão K9"
       >
         <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/8 bg-[#0b1628]/72 p-3 xl:flex-row xl:items-center">
           <label className="relative min-w-0 flex-1 xl:max-w-[420px]">

@@ -23,7 +23,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/providers/auth-provider";
-import { canonicalK9Modalities } from "@/features/effective/lib/k9-modalities";
+import { canônicalK9Modalities } from "@/features/effective/lib/k9-modalities";
 import {
   createTrainingMilestone,
   createTrainingModule,
@@ -47,8 +47,8 @@ import { paths } from "@/lib/routes/paths";
 import { cn } from "@/lib/utils";
 
 const modalityOptions = [
-  ...canonicalK9Modalities,
-  { label: "Obediencia", value: "obediencia" },
+  ...canônicalK9Modalities,
+  { label: "Obediência", value: "obediencia" },
 ];
 
 const inputClass =
@@ -257,7 +257,7 @@ function ProgramTabs({
             <span>
               <span className="block font-black text-white">{program.label}</span>
               <span className="mt-1 block text-xs text-slate-500">
-                {program.modules.length} modulos · {program.version}
+                {program.modules.length} módulos · {program.version}
               </span>
             </span>
           </button>
@@ -289,7 +289,7 @@ function CriteriaFields({
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 md:grid-cols-4">
-        <Field label="Min. sessoes">
+        <Field label="Min. sessões">
           <input
             className={inputClass}
             disabled={disabled}
@@ -310,7 +310,7 @@ function CriteriaFields({
             value={form.criteria.minSuccessRate}
           />
         </Field>
-        <Field label="Distancia min. (m)">
+        <Field label="Distância min. (m)">
           <input
             className={inputClass}
             disabled={disabled}
@@ -335,7 +335,7 @@ function CriteriaFields({
           />
         </Field>
       </div>
-      <Field label="Eventos obrigatorios">
+      <Field label="Eventos obrigatórios">
         <input
           className={inputClass}
           disabled={disabled}
@@ -365,7 +365,7 @@ function CriteriaFields({
           }
           type="checkbox"
         />
-        Aprovacao de Instrutor K9 obrigatoria
+        Aprovação de Instrutor K9 obrigatória
       </label>
     </div>
   );
@@ -397,7 +397,7 @@ function ModuleForm({
             value={form.order}
           />
         </Field>
-        <Field label="Titulo" required>
+        <Field label="Título" required>
           <input
             className={inputClass}
             disabled={!canEdit}
@@ -408,7 +408,7 @@ function ModuleForm({
           />
         </Field>
       </div>
-      <Field label="Descricao">
+      <Field label="Descrição">
         <textarea
           className={textareaClass}
           disabled={!canEdit}
@@ -473,7 +473,7 @@ function NewModuleForm({
 
   return (
     <div className="rounded-2xl border border-dashed border-cyan-200/18 bg-cyan-300/[0.035] p-4">
-      <p className="mb-3 text-sm font-black text-white">Novo modulo</p>
+      <p className="mb-3 text-sm font-black text-white">Novo módulo</p>
       <div className="grid gap-3 md:grid-cols-[0.25fr_1fr]">
         <Field label="Ordem">
           <input
@@ -485,7 +485,7 @@ function NewModuleForm({
             value={form.order}
           />
         </Field>
-        <Field label="Titulo" required>
+        <Field label="Título" required>
           <input
             className={inputClass}
             disabled={!canEdit}
@@ -511,7 +511,7 @@ function NewModuleForm({
           ) : (
             <Plus className="mr-2 h-4 w-4" />
           )}
-          Adicionar modulo
+          Adicionar módulo
         </Button>
       </div>
     </div>
@@ -575,7 +575,7 @@ function MilestoneEditor({
         onChange={(event) =>
           setForm((current) => ({ ...current, description: event.target.value }))
         }
-        placeholder="Descricao tecnica do marco..."
+        placeholder="Descrição técnica do marco..."
         value={form.description}
       />
       <div className="mt-3 flex justify-end">
@@ -718,7 +718,7 @@ function ProgramSettings({
         </div>
         <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-black/18 p-4">
           <span>
-            <span className="block text-xs text-slate-500">Total modulos</span>
+            <span className="block text-xs text-slate-500">Total módulos</span>
             <span className="font-mono text-2xl font-black text-white">
               {formatNumber(program.modules.length)}
             </span>
@@ -755,7 +755,7 @@ function ProgramSettings({
             value={form.version}
           />
         </Field>
-        <Field label="Descricao">
+        <Field label="Descrição">
           <textarea
             className={textareaClass}
             disabled={!canEdit}
@@ -778,7 +778,7 @@ function ProgramSettings({
             }
             type="checkbox"
           />
-          Curriculo ativo
+          Currículo ativo
         </label>
         <Button
           className="w-full"
@@ -790,7 +790,7 @@ function ProgramSettings({
           ) : (
             <Check className="mr-2 h-4 w-4" />
           )}
-          Salvar curriculo
+          Salvar currículo
         </Button>
       </div>
     </Panel>
@@ -812,7 +812,7 @@ function NewProgramForm({
     <Panel
       action={<Badge tone="cyan">novo</Badge>}
       subtitle="Cria training_programs/{modality}; requer Instrutor K9."
-      title="Novo curriculo"
+      title="Novo currículo"
     >
       <div className="grid gap-4">
         <div className="grid gap-4 md:grid-cols-[1fr_0.6fr_0.3fr]">
@@ -823,7 +823,7 @@ function NewProgramForm({
               onChange={(event) =>
                 setForm((current) => ({ ...current, name: event.target.value }))
               }
-              placeholder="Ex.: Obediencia"
+              placeholder="Ex.: Obediência"
               value={form.name}
             />
           </Field>
@@ -872,7 +872,7 @@ function NewProgramForm({
           ) : (
             <Plus className="mr-2 h-4 w-4" />
           )}
-          Criar curriculo
+          Criar currículo
         </Button>
       </div>
     </Panel>
@@ -938,7 +938,7 @@ export default function TrainingCurriculumsPage() {
     setMessage(null);
     try {
       await action();
-      setMessage("Alteracao salva com trilha de auditoria.");
+      setMessage("Alteraçao salva com trilha de auditoria.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao salvar.");
     } finally {
@@ -955,15 +955,15 @@ export default function TrainingCurriculumsPage() {
               Treinamentos
             </p>
             <h1 className="mt-2 text-3xl font-black text-white md:text-4xl">
-              Curriculos / Criterios
+              Currículos / Critérios
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              Cadastro de modulos, marcos obrigatorios e metricas minimas para
-              evolucao. As alteracoes continuam auditadas no Firestore.
+              Cadastro de módulos, marcos obrigatórios e métricas mínimas para
+              evolução. As alterações continuam auditadas no Firestore.
             </p>
           </div>
           <Link
-            className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100 transition hover:border-cyan-200/40"
+            className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
             href={paths.training}
           >
             voltar aos treinamentos
@@ -993,8 +993,8 @@ export default function TrainingCurriculumsPage() {
 
       {!canEdit ? (
         <div className="rounded-[1.25rem] border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-sm text-amber-100">
-          Edicao disponivel apenas para Instrutor K9. A leitura permanece
-          aberta conforme permissoes do perfil.
+          Edição disponível apenas para Instrutor K9. A leitura permanece
+          aberta conforme permissões do perfil.
         </div>
       ) : null}
 
@@ -1017,10 +1017,10 @@ export default function TrainingCurriculumsPage() {
                 variant="secondary"
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Novo modulo
+                Novo módulo
               </Button>
             }
-            subtitle="Selecione um modulo para revisar as metas que liberam evolucao."
+            subtitle="Selecione um módulo para revisar as metas que liberam evolução."
             title={`Estrutura curricular - ${selectedProgram.label}`}
           >
             <div className="space-y-3">
@@ -1056,13 +1056,13 @@ export default function TrainingCurriculumsPage() {
                           </Badge>
                         </span>
                         <span className="mt-1 block text-sm text-slate-400">
-                          {module.description || "Sem descricao cadastrada."}
+                          {module.description || "Sem descrição cadastrada."}
                         </span>
                       </span>
                       <span className="flex items-center gap-2 text-slate-400">
                         <span className="hidden rounded-xl border border-white/10 bg-black/18 px-3 py-2 text-xs md:inline-flex">
                           {module.requiredMilestoneCount} marcos ·{" "}
-                          {module.criteria.minSessions} sessoes ·{" "}
+                          {module.criteria.minSessions} sessões ·{" "}
                           {formatSuccess(module.criteria.minSuccessRate)} sucesso
                         </span>
                         <ChevronDown
@@ -1079,25 +1079,25 @@ export default function TrainingCurriculumsPage() {
                           <CriteriaTile
                             detail="ordem definida"
                             icon={<Target className="h-5 w-5" />}
-                            label="marcos obrigatorios"
+                            label="marcos obrigatórios"
                             value={formatNumber(module.requiredMilestoneCount)}
                           />
                           <CriteriaTile
-                            detail="sessoes completas"
+                            detail="sessões completas"
                             icon={<CalendarDays className="h-5 w-5" />}
-                            label="minimo"
+                            label="mínimo"
                             value={formatNumber(module.criteria.minSessions)}
                           />
                           <CriteriaTile
-                            detail="taxa minima de sucesso"
+                            detail="taxa mínima de sucesso"
                             icon={<BookOpenCheck className="h-5 w-5" />}
                             label="sucesso"
                             value={formatSuccess(module.criteria.minSuccessRate)}
                           />
                           <CriteriaTile
-                            detail="distancia minima trabalhada"
+                            detail="distância mínima trabalhada"
                             icon={<Ruler className="h-5 w-5" />}
-                            label="distancia"
+                            label="distância"
                             value={formatDistance(module.criteria.minDistanceM)}
                           />
                           <CriteriaTile
@@ -1109,12 +1109,12 @@ export default function TrainingCurriculumsPage() {
                             }
                           />
                           <CriteriaTile
-                            detail="validacao final"
+                            detail="validação final"
                             icon={<UserCheck className="h-5 w-5" />}
                             label="Instrutor K9"
                             value={
                               module.criteria.instructorApprovalRequired
-                                ? "obrigatoria"
+                                ? "obrigatória"
                                 : "dispensada"
                             }
                           />
@@ -1162,8 +1162,8 @@ export default function TrainingCurriculumsPage() {
                   {selectedModule?.milestoneCount ?? 0} marcos
                 </Badge>
               }
-              subtitle="A ordem dos marcos define a sequencia obrigatoria de evolucao."
-              title="Marcos obrigatorios"
+              subtitle="A ordem dos marcos define a sequencia obrigatória de evolução."
+              title="Marcos obrigatórios"
             >
               {selectedModule ? (
                 <div className="space-y-3">
@@ -1204,7 +1204,7 @@ export default function TrainingCurriculumsPage() {
                   />
                 </div>
               ) : (
-                <EmptyState label="Selecione ou crie um modulo para cadastrar marcos." />
+                <EmptyState label="Selecione ou crie um módulo para cadastrar marcos." />
               )}
             </Panel>
 
@@ -1234,9 +1234,9 @@ export default function TrainingCurriculumsPage() {
       )}
 
       <Panel
-        action={<Badge tone="slate">{formatNumber(totals.metrics)} metricas</Badge>}
+        action={<Badge tone="slate">{formatNumber(totals.metrics)} métricas</Badge>}
         subtitle="Resumo de integridade do cadastro curricular atual."
-        title="Cobertura do curriculo"
+        title="Cobertura do currículo"
       >
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-black/18 p-4">
@@ -1244,7 +1244,7 @@ export default function TrainingCurriculumsPage() {
             <p className="mt-3 font-mono text-3xl font-black text-white">
               {formatNumber(totals.modules)}
             </p>
-            <p className="text-sm text-slate-400">modulos cadastrados</p>
+            <p className="text-sm text-slate-400">módulos cadastrados</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/18 p-4">
             <Target className="h-5 w-5 text-cyan-200" />
@@ -1258,7 +1258,7 @@ export default function TrainingCurriculumsPage() {
             <p className="mt-3 font-mono text-3xl font-black text-white">
               {formatNumber(data.metrics.activePrograms)}
             </p>
-            <p className="text-sm text-slate-400">curriculos ativos</p>
+            <p className="text-sm text-slate-400">currículos ativos</p>
           </div>
         </div>
       </Panel>

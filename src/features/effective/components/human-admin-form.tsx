@@ -52,10 +52,10 @@ const humanFormTabs: Array<{
   id: HumanFormTab;
   label: string;
 }> = [
-  { id: "identity", label: "Identificacao" },
+  { id: "identity", label: "Identificação" },
   { id: "functional", label: "Funcional" },
   { id: "access", label: "Acesso" },
-  { id: "notes", label: "Observacoes" },
+  { id: "notes", label: "Observações" },
 ];
 
 const officialProfileOrder = [
@@ -109,11 +109,11 @@ function profileAccessModes(profile: Pick<AccessProfile, "id" | "role_keys">) {
 function validate(values: HumanFormValues) {
   const errors: FormErrors = {};
   if (!/^\d{4,12}$/.test(values.ra)) {
-    errors.ra = "Informe um RA numerico valido.";
+    errors.ra = "Informe um RA numerico válido.";
   }
   if (!values.fullName.trim()) errors.fullName = "Informe o nome completo.";
   if (!values.callsign.trim()) errors.callsign = "Informe o nome de guerra.";
-  if (!values.unit.trim()) errors.unit = "Informe a lotacao.";
+  if (!values.unit.trim()) errors.unit = "Informe a lotação.";
   if (!values.accessProfileId.trim()) {
     errors.accessProfileId = "Selecione o perfil de acesso.";
   }
@@ -221,7 +221,7 @@ export function HumanAdminForm({
       .then((loaded) => {
         if (!active) return;
         if (!loaded) {
-          setErrors({ form: "Agente nao localizado." });
+          setErrors({ form: "Agente não localizado." });
           return;
         }
         setValues(loaded);
@@ -316,8 +316,8 @@ export function HumanAdminForm({
       setErrors({
         form:
           mode === "create"
-            ? "Seu perfil nao permite cadastrar agentes."
-            : "Seu perfil nao permite editar agentes.",
+            ? "Seu perfil não permite cadastrar agentes."
+            : "Seu perfil não permite editar agentes.",
       });
       return;
     }
@@ -344,7 +344,7 @@ export function HumanAdminForm({
 
   async function confirmArchive() {
     if (!canArchiveHuman) {
-      setErrors({ form: "Seu perfil nao permite arquivar agentes." });
+      setErrors({ form: "Seu perfil não permite arquivar agentes." });
       setArchiveOpen(false);
       return;
     }
@@ -382,11 +382,11 @@ export function HumanAdminForm({
             {mode === "create" ? "Cadastrar agente" : "Editar agente"}
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Dados funcionais, acesso e qualificacoes do efetivo.
+            Dados funcionais, acesso e qualificações do efetivo.
           </p>
         </div>
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300"
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
           onClick={() => router.push(paths.humans)}
           type="button"
         >
@@ -424,7 +424,7 @@ export function HumanAdminForm({
           <Section
             active={activeFormTab === "identity"}
             icon={UserRound}
-            title="1. Identificacao"
+            title="1. Identificação"
           >
             <div className="grid gap-5 md:grid-cols-[160px_1fr]">
               <div>
@@ -478,7 +478,7 @@ export function HumanAdminForm({
                     value={values.callsign}
                   />
                 </Field>
-                <Field error={errors.ra} label="RA / Matricula" required>
+                <Field error={errors.ra} label="RA / Matrícula" required>
                   <input
                     className={cn(inputClass, mode === "edit" && "opacity-60")}
                     disabled={mode === "edit"}
@@ -530,21 +530,21 @@ export function HumanAdminForm({
                   value={values.accessProfile || "Selecione em Acesso"}
                 />
               </Field>
-              <Field label="Cargo / funcao administrativa">
+              <Field label="Cargo / função administrativa">
                 <input
                   className={inputClass}
                   onChange={(event) => setField("role", event.target.value)}
                   value={values.role}
                 />
               </Field>
-              <Field label="Posto / Graduacao">
+              <Field label="Posto / Graduação">
                 <input
                   className={inputClass}
                   onChange={(event) => setField("rank", event.target.value)}
                   value={values.rank}
                 />
               </Field>
-              <Field error={errors.unit} label="Lotacao" required>
+              <Field error={errors.unit} label="Lotação" required>
                 <input
                   className={inputClass}
                   onChange={(event) => setField("unit", event.target.value)}
@@ -640,7 +640,7 @@ export function HumanAdminForm({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-black text-white">
-                      {selectedAccessProfile?.name ?? "Perfil nao selecionado"}
+                      {selectedAccessProfile?.name ?? "Perfil não selecionado"}
                     </p>
                     <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
                       {selectedAccessProfile?.description ??
@@ -669,10 +669,10 @@ export function HumanAdminForm({
             </div>
             <div className="mt-6 border-t border-white/8 pt-5">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-cyan-200">
-                Capacitacoes complementares
+                Capacitações complementares
               </h3>
               <p className="mt-1 text-xs text-slate-500">
-                Cursos e habilidades funcionais. Nao definem permissao de
+                Cursos e habilidades funcionais. Não definem permissão de
                 sistema.
               </p>
             </div>
@@ -711,12 +711,12 @@ export function HumanAdminForm({
           <Section
             active={activeFormTab === "notes"}
             icon={BadgeCheck}
-            title="4. Observacoes"
+            title="4. Observações"
           >
             <textarea
               className="min-h-28 w-full resize-y rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
               onChange={(event) => setField("notes", event.target.value)}
-              placeholder="Informacoes funcionais, restricoes ou observacoes."
+              placeholder="Informações funcionais, restrições ou observações."
               value={values.notes}
             />
           </Section>
@@ -756,11 +756,11 @@ export function HumanAdminForm({
                   <span className="text-slate-400">
                     {
                       [
-                        "Identificacao",
-                        "Situacao funcional",
+                        "Identificação",
+                        "Situação funcional",
                         "Perfil de acesso",
-                        "Lotacao e funcao",
-                        "Capacitacoes",
+                        "Lotação e função",
+                        "Capacitações",
                       ][index]
                     }
                   </span>
@@ -776,7 +776,7 @@ export function HumanAdminForm({
           <section className="rounded-3xl border border-white/8 bg-[#0b1628]/72 p-5 text-xs text-slate-500">
             <KeyRound className="mb-3 h-5 w-5 text-cyan-300" />
             O login usa o RA. Em novos cadastros, uma senha provisoria segura e
-            exibida uma unica vez apos salvar.
+            exibida uma única vez apos salvar.
           </section>
         </aside>
       </div>
@@ -785,7 +785,7 @@ export function HumanAdminForm({
         <div>
           {mode === "edit" && canArchiveHuman ? (
             <button
-              className="inline-flex items-center gap-2 rounded-xl border border-red-300/20 px-4 py-2.5 text-sm font-bold text-red-200"
+              className="inline-flex items-center gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-200 hover:bg-red-400/[0.18]"
               onClick={() => setArchiveOpen(true)}
               type="button"
             >
@@ -794,7 +794,7 @@ export function HumanAdminForm({
           ) : null}
         </div>
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-black text-[#041018] disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200 disabled:opacity-50"
           disabled={saving || !canSaveHuman}
           type="submit"
         >
@@ -815,14 +815,14 @@ export function HumanAdminForm({
               Cadastro criado
             </h2>
             <p className="mt-2 text-sm text-slate-400">
-              Entregue esta senha provisoria ao agente. Ela nao sera exibida
+              Entregue esta senha provisória ao agente. Ela não será exibida
               novamente.
             </p>
             <div className="mt-5 rounded-xl border border-cyan-300/20 bg-black/25 p-4 font-mono text-lg font-black text-cyan-200">
               {temporaryPassword}
             </div>
             <button
-              className="mt-5 w-full rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-[#041018]"
+              className="mt-5 w-full rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200"
               onClick={() =>
                 router.push(`/humans/${encodeURIComponent(values.ra)}`)
               }
@@ -839,24 +839,24 @@ export function HumanAdminForm({
           <div className="w-full max-w-md rounded-3xl border border-red-300/20 bg-[#091525] p-6">
             <h2 className="text-xl font-black text-white">Arquivar agente</h2>
             <p className="mt-2 text-sm text-slate-400">
-              O login sera desativado. O historico permanecera preservado.
+              O login sera desativado. O histórico permanecera preservado.
             </p>
             <textarea
               className="mt-5 min-h-24 w-full rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-white outline-none"
               onChange={(event) => setArchiveReason(event.target.value)}
-              placeholder="Motivo obrigatorio"
+              placeholder="Motivo obrigatório"
               value={archiveReason}
             />
             <div className="mt-5 flex gap-3">
               <button
-                className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300"
+                className="flex-1 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                 onClick={() => setArchiveOpen(false)}
                 type="button"
               >
                 Cancelar
               </button>
               <button
-                className="flex-1 rounded-xl bg-red-400 px-4 py-3 text-sm font-black text-[#170607] disabled:opacity-50"
+                className="flex-1 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-200 hover:bg-red-400/[0.18] disabled:opacity-50"
                 disabled={archiveReason.trim().length < 5 || archiving}
                 onClick={confirmArchive}
                 type="button"

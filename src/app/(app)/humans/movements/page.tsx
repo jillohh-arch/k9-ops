@@ -98,15 +98,15 @@ export default function HumanMovementsPage() {
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <EffectiveHeader
           description="Afastamentos, licencas, transferencias e retornos do efetivo humano."
-          title="Movimentacoes do efetivo"
+          title="Movimentações do efetivo"
         />
         {canEditHuman ? (
           <button
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-[#041018]"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200"
             onClick={() => setDialog(true)}
             type="button"
           >
-            <Plus className="h-4 w-4" /> Nova movimentacao
+            <Plus className="h-4 w-4" /> Nova movimentação
           </button>
         ) : null}
       </div>
@@ -134,7 +134,7 @@ export default function HumanMovementsPage() {
           value={String(pending)}
         />
         <SummaryCard
-          detail="movimentacoes finalizadas"
+          detail="movimentações finalizadas"
           icon={CalendarCheck}
           label="Concluidas"
           tone="green"
@@ -168,7 +168,7 @@ export default function HumanMovementsPage() {
       <DataState
         error={data.error}
         loading={data.loading}
-        noun="as movimentacoes"
+        noun="as movimentações"
       />
 
       {!data.loading && !data.error ? (
@@ -199,7 +199,7 @@ export default function HumanMovementsPage() {
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
-                      Movimentacao
+                      Movimentação
                     </p>
                     <p className="mt-2 text-sm font-bold text-white">
                       {humanText(record, "movement_type") ?? "--"}
@@ -207,7 +207,7 @@ export default function HumanMovementsPage() {
                     <p className="mt-2 text-xs text-slate-500">
                       {humanText(record, "start_at") ?? "--"}
                       {" → "}
-                      {humanText(record, "expected_end_at") ?? "sem previsao"}
+                      {humanText(record, "expected_end_at") ?? "sem previsão"}
                     </p>
                   </div>
                   <div>
@@ -219,14 +219,14 @@ export default function HumanMovementsPage() {
                     </p>
                     <p className="mt-2 text-xs text-slate-500">
                       Impacto:{" "}
-                      {humanText(record, "operational_impact") ?? "nao informado"}
+                      {humanText(record, "operational_impact") ?? "não informado"}
                     </p>
                   </div>
                   {canEditHuman ? (
                     <button
                       className="self-center rounded-xl border border-red-300/15 p-3 text-red-200/70"
                       onClick={() => void archive(record._id)}
-                      title="Arquivar movimentacao"
+                      title="Arquivar movimentação"
                       type="button"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -238,7 +238,7 @@ export default function HumanMovementsPage() {
           </section>
         ) : (
           <div className="rounded-3xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">
-            Nenhuma movimentacao registrada.
+            Nenhuma movimentação registrada.
           </div>
         )
       ) : null}

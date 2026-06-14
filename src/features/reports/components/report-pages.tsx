@@ -20,13 +20,17 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   useDashboardPeriod,
 } from "@/features/dashboard/providers/dashboard-period-provider";
+import {
+  ExportButton,
+  ExportToolbar,
+} from "@/features/reports/components/export-toolbar";
 import {
   useReportsData,
   type ReportListItem,
@@ -39,6 +43,7 @@ import {
   type ReportId,
   type ReportTone,
 } from "@/features/reports/lib/report-catalog";
+import { getExportableData } from "@/features/reports/lib/get-exportable-data";
 import { cn } from "@/lib/utils";
 
 const toneClasses: Record<ReportTone, string> = {
@@ -99,25 +104,25 @@ const reportHubTabs: Array<{
   label: string;
 }> = [
   {
-    description: "ocorrencias, apreensoes e produtividade",
+    description: "ocorrências, apreensões e produtividade",
     id: "operational",
     ids: ["occurrences", "apprehensions", "productivity"],
     label: "Operacional",
   },
   {
-    description: "K9, humanos, viaturas e binomios",
+    description: "K9, humanos, viaturas e binômios",
     id: "effective",
     ids: ["effective", "vehicles", "binomials"],
     label: "Efetivo",
   },
   {
-    description: "prontuario e prontidao veterinaria",
+    description: "prontuário e prontidão veterinária",
     id: "health",
     ids: ["health"],
-    label: "Saude",
+    label: "Saúde",
   },
   {
-    description: "formacao, manutencao e prontidao",
+    description: "formação, manutenção e prontidão",
     id: "training",
     ids: ["training"],
     label: "Treinos",
@@ -129,7 +134,7 @@ const reportHubTabs: Array<{
     label: "Estoque",
   },
   {
-    description: "integridade e trilhas auditaveis",
+    description: "integridade e trilhas auditáveis",
     id: "audit",
     ids: ["audit"],
     label: "Auditoria",
@@ -307,33 +312,6 @@ function ReportCard({
   );
 }
 
-function ExportFormats() {
-  const formats = [
-    { label: "PDF", detail: "Documento portatil", tone: "red" as const },
-    { label: "Excel", detail: "Planilha editavel", tone: "emerald" as const },
-    { label: "CSV", detail: "Valores separados", tone: "blue" as const },
-  ];
-
-  return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      {formats.map((format) => (
-        <button
-          className={cn(
-            "rounded-2xl border bg-white/[0.035] p-4 text-left transition hover:bg-white/[0.06]",
-            toneClasses[format.tone],
-          )}
-          key={format.label}
-          type="button"
-        >
-          <FileText className="mb-4 h-7 w-7" />
-          <p className="font-black text-white">{format.label}</p>
-          <p className="mt-1 text-xs text-slate-400">{format.detail}</p>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function ListItem({ item }: { item: ReportListItem }) {
   return (
     <article className="flex items-center gap-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
@@ -370,7 +348,7 @@ function StatBars({ items }: { items: StatItem[] }) {
   if (items.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-cyan-200/15 bg-black/14 p-8 text-center text-sm text-slate-400">
-        Sem dados no periodo selecionado.
+        Sem dados no período selecionado.
       </div>
     );
   }
@@ -431,7 +409,7 @@ function FilterBar({
 }) {
   return (
     <div className="grid gap-3 rounded-[1.35rem] border border-cyan-200/10 bg-slate-950/65 p-4 lg:grid-cols-[1.2fr_1fr_1fr_1fr_auto]">
-      {["Periodo", "Tipo", "Status", "Responsavel"].map((item, index) => (
+      {["Período", "Tipo", "Status", "Responsável"].map((item, index) => (
         <button
           className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.035] px-4 py-3 text-left"
           key={item}
@@ -453,7 +431,7 @@ function FilterBar({
         onClick={onGenerate}
         type="button"
       >
-        Gerar relatorio
+        Gerar relatório
       </Button>
     </div>
   );
@@ -477,14 +455,14 @@ function buildReportView(
       return {
         attention: data.occurrences.attention,
         chartItems: data.occurrences.distribution,
-        chartTitle: "Distribuicao por tipo de ocorrencia",
-        listTitle: "Ocorrencias que exigem atencao",
+        chartTitle: "Distribuição por tipo de ocorrência",
+        listTitle: "Ocorrências que exigem atenção",
         metrics: [
           {
-            detail: "no periodo",
-            label: "Ocorrencias totais",
+            detail: "no período",
+            label: "Ocorrências totais",
             tone: "cyan",
-            trend: "+ periodo atual",
+            trend: "+ período atual",
             value: formatCount(data.occurrences.total),
           },
           {
@@ -495,7 +473,7 @@ function buildReportView(
           },
           {
             detail: "prioridade critica",
-            label: "Criticas",
+            label: "Críticas",
             tone: "red",
             value: formatCount(data.occurrences.critical),
           },
@@ -518,7 +496,7 @@ function buildReportView(
             value: data.occurrences.signaturesPending,
           },
           {
-            label: "Em atencao",
+            label: "Em atenção",
             tone: "red",
             value: data.occurrences.attention.length,
           },
@@ -530,8 +508,8 @@ function buildReportView(
       return {
         attention: data.inventory.criticalItems,
         chartItems: data.inventory.categories,
-        chartTitle: "Distribuicao por categoria",
-        listTitle: "Itens criticos",
+        chartTitle: "Distribuição por categoria",
+        listTitle: "Itens críticos",
         metrics: [
           {
             detail: "valor estimado",
@@ -546,20 +524,20 @@ function buildReportView(
             value: formatCount(data.inventory.items),
           },
           {
-            detail: "abaixo do minimo",
-            label: "Itens criticos",
+            detail: "abaixo do mínimo",
+            label: "Itens críticos",
             tone: "red",
             value: formatCount(data.inventory.belowMinimum),
           },
           {
-            detail: "proximos 30 dias",
+            detail: "próximos 30 dias",
             label: "Vencendo",
             tone: "amber",
             value: formatCount(data.inventory.expiring),
           },
         ],
         secondary: [
-          { label: "Movimentacoes", tone: "cyan", value: data.inventory.movements },
+          { label: "Movimentações", tone: "cyan", value: data.inventory.movements },
           { label: "Reposicoes", tone: "violet", value: data.inventory.replenishments },
           { label: "Vencidos", tone: "red", value: data.inventory.expired },
         ],
@@ -570,8 +548,8 @@ function buildReportView(
       return {
         attention: data.effective.movements,
         chartItems: data.effective.status,
-        chartTitle: "Composicao do efetivo por status",
-        listTitle: "Movimentacoes recentes",
+        chartTitle: "Composição do efetivo por status",
+        listTitle: "Movimentações recentes",
         metrics: [
           {
             detail: "ativos",
@@ -587,7 +565,7 @@ function buildReportView(
           },
           {
             detail: "ativos",
-            label: "Binomios ativos",
+            label: "Binômios ativos",
             tone: "emerald",
             value: formatCount(data.effective.binomials),
           },
@@ -606,8 +584,8 @@ function buildReportView(
       return {
         attention: data.apprehensions.recent,
         chartItems: data.apprehensions.categories,
-        chartTitle: "Distribuicao por tipo de droga/material",
-        listTitle: "Apreensoes recentes",
+        chartTitle: "Distribuição por tipo de droga/material",
+        listTitle: "Apreensões recentes",
         metrics: [
           {
             detail: "total apreendido",
@@ -616,7 +594,7 @@ function buildReportView(
             value: formatKg(data.apprehensions.totalGrams),
           },
           {
-            detail: "com apreensao",
+            detail: "com apreensão",
             label: "Registros",
             tone: "violet",
             value: formatCount(data.apprehensions.count),
@@ -653,19 +631,19 @@ function buildReportView(
           },
           {
             detail: "ativas",
-            label: "Em operacao",
+            label: "Em operação",
             tone: "emerald",
             value: formatCount(data.vehicles.inOperation),
           },
           {
-            detail: "manutencao",
-            label: "Em manutencao",
+            detail: "manutenção",
+            label: "Em manutenção",
             tone: "amber",
             value: formatCount(data.vehicles.inMaintenance),
           },
           {
             detail: "30 dias",
-            label: "Documentacao",
+            label: "Documentação",
             tone: "red",
             value: formatCount(data.vehicles.docsExpiring),
           },
@@ -682,7 +660,7 @@ function buildReportView(
             value: data.vehicles.inOperation,
           },
         ],
-        secondaryTitle: "Utilizacao da frota",
+        secondaryTitle: "Utilização da frota",
         totalForDonut: data.vehicles.total,
       };
     case "health":
@@ -696,24 +674,24 @@ function buildReportView(
             value: data.health.readyPercent,
           },
           {
-            label: "Pendencias",
+            label: "Pendências",
             percent: 100 - data.health.readyPercent,
             tone: "amber",
             value: data.health.pending,
           },
         ],
-        chartTitle: "Prontidao veterinaria do efetivo",
-        listTitle: "K9 que exigem atencao clinica",
+        chartTitle: "Prontidão veterinária do efetivo",
+        listTitle: "K9 que exigem atenção clínica",
         metrics: [
           {
-            detail: "no periodo",
+            detail: "no período",
             label: "Atendimentos",
             tone: "violet",
             value: formatCount(data.health.events),
           },
           {
-            detail: "requerem atencao",
-            label: "Pendencias",
+            detail: "requerem atenção",
+            label: "Pendências",
             tone: "red",
             value: formatCount(data.health.pending),
           },
@@ -731,7 +709,7 @@ function buildReportView(
           },
         ],
         secondary: [],
-        secondaryTitle: "Agenda clinica",
+        secondaryTitle: "Agenda clínica",
         totalForDonut: 100,
       };
     case "training":
@@ -739,17 +717,17 @@ function buildReportView(
         attention: data.training.pending,
         chartItems: data.training.disciplines,
         chartTitle: "Desempenho por disciplina",
-        listTitle: "Treinos pendentes / recertificacoes",
+        listTitle: "Treinos pendentes / recertificações",
         metrics: [
           {
-            detail: "sessoes",
-            label: "Sessoes realizadas",
+            detail: "sessões",
+            label: "Sessões realizadas",
             tone: "cyan",
             value: formatCount(data.training.sessions),
           },
           {
             detail: "avaliados",
-            label: "Binomios avaliados",
+            label: "Binômios avaliados",
             tone: "violet",
             value: formatCount(data.training.binomialsEvaluated),
           },
@@ -775,7 +753,7 @@ function buildReportView(
         attention: data.binomials.highlights,
         chartItems: [
           {
-            label: "Prontidao media",
+            label: "Prontidão media",
             percent: data.binomials.avgReadiness,
             tone: "cyan",
             value: data.binomials.avgReadiness,
@@ -787,43 +765,43 @@ function buildReportView(
             value: data.binomials.alerts,
           },
         ],
-        chartTitle: "Prontidao dos binomios",
-        listTitle: "Destaques do periodo",
+        chartTitle: "Prontidão dos binômios",
+        listTitle: "Destaques do período",
         metrics: [
           {
             detail: "ativos",
-            label: "Binomios ativos",
+            label: "Binômios ativos",
             tone: "cyan",
             value: formatCount(data.binomials.active),
           },
           {
             detail: "em treino",
-            label: "Em formacao",
+            label: "Em formação",
             tone: "violet",
             value: formatCount(data.binomials.formation),
           },
           {
             detail: "media",
-            label: "Prontidao media",
+            label: "Prontidão media",
             tone: "emerald",
             value: formatPercent(data.binomials.avgReadiness),
           },
           {
-            detail: "requerem atencao",
+            detail: "requerem atenção",
             label: "Alertas",
             tone: "amber",
             value: formatCount(data.binomials.alerts),
           },
         ],
         secondary: [],
-        secondaryTitle: "Insights e pendencias",
+        secondaryTitle: "Insights e pendências",
         totalForDonut: 100,
       };
     case "audit":
       return {
         attention: data.audit.recent,
         chartItems: data.audit.distribution,
-        chartTitle: "Distribuicao por criticidade",
+        chartTitle: "Distribuição por criticidade",
         listTitle: "Eventos auditados recentes",
         metrics: [
           {
@@ -834,7 +812,7 @@ function buildReportView(
           },
           {
             detail: "assinaturas",
-            label: "Pendencias",
+            label: "Pendências",
             tone: "amber",
             value: formatCount(data.audit.signaturesPending),
           },
@@ -845,7 +823,7 @@ function buildReportView(
             value: formatCount(data.audit.divergences),
           },
           {
-            detail: "criticas",
+            detail: "críticas",
             label: "Revisoes",
             tone: "violet",
             value: formatCount(data.audit.revisions),
@@ -859,12 +837,12 @@ function buildReportView(
       return {
         attention: [],
         chartItems: data.productivity.activity,
-        chartTitle: "Desempenho por modulo",
+        chartTitle: "Desempenho por módulo",
         listTitle: "Alertas de produtividade",
         metrics: [
           {
             detail: "atendidas",
-            label: "Ocorrencias",
+            label: "Ocorrências",
             tone: "cyan",
             value: formatCount(data.productivity.occurrences),
           },
@@ -876,19 +854,19 @@ function buildReportView(
           },
           {
             detail: "registros",
-            label: "Saude",
+            label: "Saúde",
             tone: "red",
             value: formatCount(data.productivity.healthEvents),
           },
           {
             detail: "apreendido",
-            label: "Apreensoes",
+            label: "Apreensões",
             tone: "emerald",
             value: formatKg(data.productivity.apprehensionGrams),
           },
         ],
         secondary: data.productivity.activity,
-        secondaryTitle: "Variacao vs. periodo anterior",
+        secondaryTitle: "Variação vs. período anterior",
         totalForDonut: data.productivity.activity.reduce(
           (sum, item) => sum + item.value,
           0,
@@ -912,21 +890,21 @@ export function ReportsHubPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-3xl font-black text-white">Hub de Relatorios</h1>
+          <h1 className="text-3xl font-black text-white">Hub de Relatórios</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Centralize consultas, exportacoes e relatorios agendados da unidade
-            K9. Periodo atual:{" "}
+            Centralize consultas, exportações e relatórios agendados da unidade
+            K9. Período atual:{" "}
             <span className="font-semibold text-cyan-200">{periodLabel}</span>.
           </p>
         </div>
         <Button className="rounded-2xl bg-cyan-300 text-slate-950 hover:bg-cyan-200">
           <CalendarClock className="mr-2 h-4 w-4" />
-          Agendar relatorio
+          Agendar relatório
         </Button>
       </header>
 
       {data.errors.length > 0 ? (
-        <Panel title="Fontes parcialmente indisponiveis">
+        <Panel title="Fontes parcialmente indisponíveis">
           <ul className="space-y-1 font-mono text-xs text-amber-100">
             {data.errors.slice(0, 5).map((error) => (
               <li key={error}>{error}</li>
@@ -940,28 +918,28 @@ export function ReportsHubPage() {
           {
             detail: "gerados",
             icon: FileText,
-            label: "Relatorios gerados no mes",
+            label: "Relatórios gerados no mes",
             tone: "cyan" as const,
             value: formatCount(data.generatedThisMonth),
           },
           {
             detail: "aguardando processamento",
             icon: Download,
-            label: "Exportacoes pendentes",
+            label: "Exportações pendentes",
             tone: "amber" as const,
             value: formatCount(data.pendingExports),
           },
           {
-            detail: "execucao automatica",
+            detail: "execução automática",
             icon: CalendarClock,
             label: "Agendamentos ativos",
             tone: "emerald" as const,
             value: formatCount(data.schedules.length),
           },
           {
-            detail: "sincronizacao",
+            detail: "sincronização",
             icon: Activity,
-            label: "Ultima atualizacao",
+            label: "Última atualização",
             tone: "violet" as const,
             value: data.loading ? "..." : formatDate(data.updatedAt),
           },
@@ -1016,7 +994,7 @@ export function ReportsHubPage() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr_0.7fr]">
-        <Panel action={<Badge className="border-cyan-300/20 bg-cyan-300/10 text-cyan-100">Ver todos</Badge>} title="Relatorios recentes">
+        <Panel action={<Badge className="border-cyan-300/20 bg-cyan-300/10 text-cyan-100">Ver todos</Badge>} title="Relatórios recentes">
           <div className="space-y-3">
             {data.recentReports.map((item) => (
               <ListItem item={item} key={item.id} />
@@ -1024,7 +1002,7 @@ export function ReportsHubPage() {
           </div>
         </Panel>
 
-        <Panel action={<Badge className="border-emerald-300/20 bg-emerald-300/10 text-emerald-100">Ver todos</Badge>} title="Agendamentos automaticos">
+        <Panel action={<Badge className="border-emerald-300/20 bg-emerald-300/10 text-emerald-100">Ver todos</Badge>} title="Agendamentos automáticos">
           <div className="space-y-3">
             {data.schedules.map((item) => (
               <ListItem item={item} key={item.id} />
@@ -1032,13 +1010,31 @@ export function ReportsHubPage() {
           </div>
         </Panel>
 
-        <Panel title="Formatos de exportacao">
-          <ExportFormats />
+        <Panel title="Formatos de exportação">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { label: "PDF", detail: "Documento portátil", tone: "red" as const },
+              { label: "Excel", detail: "Planilha editável", tone: "emerald" as const },
+              { label: "CSV", detail: "Valores separados", tone: "blue" as const },
+            ].map((format) => (
+              <div
+                className={cn(
+                  "rounded-2xl border bg-white/[0.035] p-4 text-left",
+                  toneClasses[format.tone],
+                )}
+                key={format.label}
+              >
+                <FileText className="mb-4 h-7 w-7" />
+                <p className="font-black text-white">{format.label}</p>
+                <p className="mt-1 text-xs text-slate-400">{format.detail}</p>
+              </div>
+            ))}
+          </div>
           <div className="mt-4 rounded-2xl border border-cyan-200/10 bg-cyan-300/8 p-4">
             <ShieldCheck className="mb-3 h-6 w-6 text-cyan-200" />
             <p className="text-sm font-black text-white">Dados seguros</p>
             <p className="mt-1 text-xs leading-5 text-slate-400">
-              Relatorios seguem as permissoes do perfil e preservam a origem dos
+              Relatórios seguem as permissões do perfil e preservam a origem dos
               registros.
             </p>
           </div>
@@ -1054,11 +1050,16 @@ export function ReportDetailPage({ reportId }: { reportId: ReportId }) {
   const definition = getReportDefinition(reportId);
   const view = buildReportView(reportId, data);
 
+  const getExportData = useCallback(
+    () => getExportableData(reportId, data),
+    [reportId, data],
+  );
+
   if (!definition) {
     return (
-      <Panel title="Relatorio nao encontrado">
+      <Panel title="Relatório não encontrado">
         <Link className="text-cyan-200" href="/reports">
-          Voltar ao Hub de Relatorios
+          Voltar ao Hub de Relatórios
         </Link>
       </Panel>
     );
@@ -1083,10 +1084,10 @@ export function ReportDetailPage({ reportId }: { reportId: ReportId }) {
               className="mb-2 inline-flex text-sm font-semibold text-cyan-200 hover:text-cyan-100"
               href="/reports"
             >
-              Hub de Relatorios
+              Hub de Relatórios
             </Link>
             <h1 className="text-3xl font-black text-white">
-              Relatorio de {definition.title}
+              Relatório de {definition.title}
             </h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-400">
               {definition.description}
@@ -1094,10 +1095,12 @@ export function ReportDetailPage({ reportId }: { reportId: ReportId }) {
           </div>
         </div>
 
-        <Button className="rounded-2xl bg-cyan-300 text-slate-950 hover:bg-cyan-200">
-          <Download className="mr-2 h-4 w-4" />
-          Exportar relatorio
-        </Button>
+        <ExportButton
+          getData={getExportData}
+          reportId={reportId}
+          reportTitle={definition.title}
+          subtitle={`Período: ${periodLabel}`}
+        />
       </header>
 
       <FilterBar label={periodLabel} />
@@ -1157,23 +1160,28 @@ export function ReportDetailPage({ reportId }: { reportId: ReportId }) {
               ))
             ) : (
               <div className="md:col-span-2 rounded-2xl border border-dashed border-cyan-200/15 bg-black/14 p-8 text-center text-sm text-slate-400">
-                Sem itens para exibir no periodo selecionado.
+                Sem itens para exibir no período selecionado.
               </div>
             )}
           </div>
         </Panel>
 
-        <Panel title="Exportacao e assinatura">
-          <ExportFormats />
+        <Panel title="Exportação e assinatura">
+          <ExportToolbar
+            getData={getExportData}
+            reportId={reportId}
+            reportTitle={definition.title}
+            subtitle={`Período: ${periodLabel}`}
+          />
           <div className="mt-4 rounded-2xl border border-cyan-200/10 bg-cyan-300/8 p-4">
             <ShieldCheck className="mb-3 h-6 w-6 text-cyan-200" />
             <p className="font-black text-white">Assinatura digital</p>
             <p className="mt-1 text-sm text-slate-400">
-              Relatorio validado com base nos registros consultados e filtros
+              Relatório validado com base nos registros consultados e filtros
               selecionados.
             </p>
             <Button className="mt-4 w-full rounded-2xl" variant="secondary">
-              Assinar relatorio
+              Assinar relatório
             </Button>
           </div>
         </Panel>

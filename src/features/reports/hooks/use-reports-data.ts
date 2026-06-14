@@ -347,7 +347,7 @@ function visible(records: RawRecord[]) {
 }
 
 function statusOf(record: RawRecord) {
-  return normalized(record.status ?? record.situacao ?? record.state);
+  return normalized(record.status ?? record.situação ?? record.state);
 }
 
 function isActive(record: RawRecord) {
@@ -357,8 +357,8 @@ function isActive(record: RawRecord) {
       "active",
       "ativo",
       "available",
-      "disponivel",
-      "em servico",
+      "disponível",
+      "em serviço",
       "em_servico",
       "operational",
       "operacional",
@@ -493,7 +493,7 @@ function priorityOf(record: RawRecord): "critical" | "high" | "medium" | "low" {
     [
       "critical",
       "critica",
-      "critico",
+      "crítico",
       "grave",
       "risco alto",
       "risco elevado",
@@ -692,9 +692,9 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
           reportItem(
             record,
             occurrenceCode(record),
-            "Em finalizacao",
+            "Em finalização",
             "violet",
-            "Finalizacao",
+            "Finalização",
           ),
         ),
     ]
@@ -755,7 +755,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
           text(record.name, record.item_name, record._id) ?? record._id,
           text(record.category_name, record.categoryName) ?? "Estoque",
           isExpired(record) ? "red" : "amber",
-          isExpired(record) ? "Vencido" : "Critico",
+          isExpired(record) ? "Vencido" : "Crítico",
           `${itemQuantity(record)} ${text(record.unit) ?? "un."}`,
         ),
       )
@@ -788,7 +788,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
       ["emerald", "amber", "red", "blue"],
     );
     const vehiclesMaintenance = vehicles.filter((record) =>
-      ["maintenance", "manutencao", "em manutencao"].includes(statusOf(record)),
+      ["maintenance", "manutenção", "em manutenção"].includes(statusOf(record)),
     );
     const docsExpiring = vehicles.filter((record) => {
       const date = dateValue(
@@ -809,7 +809,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
         : 0;
 
     const healthPending = healthEvents.filter((record) =>
-      ["pending", "pendente", "attention", "atencao"].includes(statusOf(record)),
+      ["pending", "pendente", "attention", "atenção"].includes(statusOf(record)),
     );
     const vaccineEvents = healthEvents.filter((record) =>
       normalized(record.type ?? record.event_type ?? record.kind).includes("vac"),
@@ -845,7 +845,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
           text(record.title, record.modality, record.type, record._id) ??
             "Treino pendente",
           text(record.dog_name, record.dogName, record.conductor_name) ??
-            "Sem responsavel",
+            "Sem responsável",
           "violet",
           "Pendente",
         ),
@@ -886,7 +886,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
 
     const auditDistribution = statItems(
       [
-        { label: "Critico", value: correctionsOpen.length },
+        { label: "Crítico", value: correctionsOpen.length },
         { label: "Alto", value: signaturesPending.length },
         { label: "Medio", value: auditLogs.length },
         { label: "Baixo", value: sealedOccurrences.length },
@@ -897,27 +897,27 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
     const recentReports: ReportListItem[] = [
       {
         date: new Date(),
-        detail: "Resumo operacional do periodo",
+        detail: "Resumo operacional do período",
         id: "recent-occurrences",
-        label: "Relatorio de Ocorrencias",
+        label: "Relatório de Ocorrências",
         meta: "Ragonha",
         status: "PDF",
         tone: "cyan",
       },
       {
         date: new Date(),
-        detail: "Inventario e movimentacoes",
+        detail: "Inventário e movimentações",
         id: "recent-inventory",
-        label: "Inventario de Estoque",
+        label: "Inventário de Estoque",
         meta: "Sistema",
         status: "XLSX",
         tone: "emerald",
       },
       {
         date: new Date(),
-        detail: "Sessoes e evolucao",
+        detail: "Sessões e evolução",
         id: "recent-training",
-        label: "Relatorio de Treinos",
+        label: "Relatório de Treinos",
         meta: "Instrutor K9",
         status: "PDF",
         tone: "violet",
@@ -926,8 +926,8 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
         date: new Date(),
         detail: "Atendimentos e vacinas",
         id: "recent-health",
-        label: "Relatorio de Saude",
-        meta: "Veterinario",
+        label: "Relatório de Saúde",
+        meta: "Veterinário",
         status: "CSV",
         tone: "red",
       },
@@ -938,7 +938,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
         date: new Date(),
         detail: "Toda segunda-feira as 08:00",
         id: "schedule-health",
-        label: "Relatorio Semanal de Saude",
+        label: "Relatório Semanal de Saúde",
         status: "Ativo",
         tone: "red",
       },
@@ -946,7 +946,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
         date: new Date(),
         detail: "Todo dia 5 de cada mes",
         id: "schedule-inventory",
-        label: "Relatorio Mensal de Estoque",
+        label: "Relatório Mensal de Estoque",
         status: "Ativo",
         tone: "emerald",
       },
@@ -954,7 +954,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
         date: new Date(),
         detail: "A cada 15 dias",
         id: "schedule-training",
-        label: "Relatorio de Treinos",
+        label: "Relatório de Treinos",
         status: "Ativo",
         tone: "violet",
       },
@@ -962,7 +962,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
         date: new Date(),
         detail: "Todo dia 1 do mes",
         id: "schedule-occurrences",
-        label: "Resumo Mensal de Ocorrencias",
+        label: "Resumo Mensal de Ocorrências",
         status: "Ativo",
         tone: "cyan",
       },
@@ -1006,7 +1006,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
         alerts: binomialAlerts.length,
         avgReadiness,
         formation: binomials.filter((record) =>
-          ["formation", "in_formation", "em formacao"].includes(statusOf(record)),
+          ["formation", "in_formation", "em formação"].includes(statusOf(record)),
         ).length,
         highlights: binomialHighlights,
         total: binomials.length,
@@ -1063,9 +1063,9 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
               text(record.dog_name, record.dogName, record.name, record._id) ??
                 "K9",
               text(record.description, record.notes, record.type) ??
-                "Atencao clinica",
+                "Atenção clínica",
               "red",
-              statusOf(record) || "Atencao",
+              statusOf(record) || "Atenção",
             ),
           )
           .slice(0, 5),
@@ -1103,7 +1103,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
       productivity: {
         activity: [
           {
-            label: "Ocorrencias",
+            label: "Ocorrências",
             percent: 36,
             tone: "cyan",
             value: periodOccurrences.length,
@@ -1121,13 +1121,13 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
             value: trainingSessions.length,
           },
           {
-            label: "Saude",
+            label: "Saúde",
             percent: 14,
             tone: "red",
             value: healthEvents.length,
           },
           {
-            label: "Apreensoes",
+            label: "Apreensões",
             percent: 8,
             tone: "amber",
             value: drugRecent.length,

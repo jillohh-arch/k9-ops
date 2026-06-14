@@ -126,7 +126,7 @@ export async function loadVehicleForEdit(vehicleId: string) {
   const data = snapshot.data();
   return {
     accessories: text(data, "accessories"),
-    base: text(data, "base", "lotacao"),
+    base: text(data, "base", "lotação"),
     brand: text(data, "brand", "marca"),
     capacity: text(data, "capacity") || `${numberText(data, "crew_size", "crewSize") || "4"} ocupantes`,
     chassis: text(data, "chassis"),
@@ -142,12 +142,12 @@ export async function loadVehicleForEdit(vehicleId: string) {
     name: text(data, "name", "nome") || "Canil",
     nextReviewAt: dateInput(data.next_review_at ?? data.nextReviewAt),
     nextReviewKm: numberText(data, "next_review_km", "nextReviewKm"),
-    notes: text(data, "notes", "observacoes"),
+    notes: text(data, "notes", "observações"),
     photoUrl: text(data, "photoUrl", "photo_url"),
     plate: text(data, "plate", "placa"),
     prefix: text(data, "prefix", "vehicle_prefix") || snapshot.id,
     renavam: text(data, "renavam"),
-    status: text(data, "status", "situacao") || "Ativa",
+    status: text(data, "status", "situação") || "Ativa",
     type: text(data, "type", "tipo") || "Operacional K9",
     unit: text(data, "unit", "unidade") || "Limeira/SP",
     year: text(data, "year", "ano"),

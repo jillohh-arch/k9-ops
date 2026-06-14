@@ -47,15 +47,15 @@ export function getAuthErrorMessage(error: unknown) {
     case "auth/invalid-credential":
     case "auth/wrong-password":
     case "auth/user-not-found":
-      return "RA ou senha invalidos.";
+      return "RA ou senha inválidos.";
     case "auth/invalid-email":
-      return "Informe um RA valido.";
+      return "Informe um RA válido.";
     case "auth/too-many-requests":
       return "Muitas tentativas. Aguarde um pouco e tente novamente.";
     case "auth/network-request-failed":
-      return "Falha de conexao. Verifique a internet e tente novamente.";
+      return "Falha de conexão. Verifique a internet e tente novamente.";
     default:
-      return "Nao foi possivel concluir a operacao agora. Tente novamente.";
+      return "Não foi possível concluir a operação agora. Tente novamente.";
   }
 }
 

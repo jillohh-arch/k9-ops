@@ -40,13 +40,13 @@ function normalize(value: unknown) {
 function validity(expiresAt: string | null) {
   if (!expiresAt) return { label: "Sem validade", tone: "slate" as const };
   const date = humanDate(expiresAt);
-  if (!date) return { label: "Data invalida", tone: "violet" as const };
+  if (!date) return { label: "Data inválida", tone: "violet" as const };
   const days = Math.ceil((date.getTime() - Date.now()) / 86_400_000);
   if (days < 0) return { label: "Vencido", tone: "violet" as const };
   if (days <= 30) {
     return { label: `Vence em ${days} dias`, tone: "amber" as const };
   }
-  return { label: "Valido", tone: "green" as const };
+  return { label: "Válido", tone: "green" as const };
 }
 
 export default function HumanCertificationsPage() {
@@ -92,7 +92,7 @@ export default function HumanCertificationsPage() {
     });
   }, [data.records, kind, search, usersByRa]);
   const valid = data.records.filter(
-    (record) => validity(humanText(record, "expires_at")).label === "Valido",
+    (record) => validity(humanText(record, "expires_at")).label === "Válido",
   ).length;
   const expiring = data.records.filter((record) =>
     validity(humanText(record, "expires_at")).label.startsWith("Vence em"),
@@ -122,7 +122,7 @@ export default function HumanCertificationsPage() {
       <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
         <EffectiveHeader
           description="Validade, anexos e rastreabilidade documental do efetivo humano."
-          title="Certificacoes e documentos"
+          title="Certificações e documentos"
         />
         {canEditHuman ? (
           <div className="flex flex-wrap gap-3">
@@ -139,12 +139,12 @@ export default function HumanCertificationsPage() {
               ))}
             </select>
             <button
-              className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-[#041018] disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200 disabled:opacity-40"
               disabled={!ownerRa}
               onClick={() => setDialog("certification")}
               type="button"
             >
-              <Plus className="h-4 w-4" /> Certificacao
+              <Plus className="h-4 w-4" /> Certificação
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/25 px-4 py-2.5 text-sm font-bold text-cyan-200 disabled:opacity-40"
@@ -169,19 +169,19 @@ export default function HumanCertificationsPage() {
         <SummaryCard
           detail="validade superior a 30 dias"
           icon={CheckCircle2}
-          label="Validos"
+          label="Válidos"
           tone="green"
           value={String(valid)}
         />
         <SummaryCard
-          detail="nos proximos 30 dias"
+          detail="nos próximos 30 dias"
           icon={CalendarClock}
           label="A vencer"
           tone="amber"
           value={String(expiring)}
         />
         <SummaryCard
-          detail="requerem regularizacao"
+          detail="requerem regularização"
           icon={GraduationCap}
           label="Vencidos"
           tone="violet"
@@ -210,7 +210,7 @@ export default function HumanCertificationsPage() {
               Todos
             </option>
             <option className="bg-[#0b1628]" value="certifications">
-              Certificacoes
+              Certificações
             </option>
             <option className="bg-[#0b1628]" value="documents">
               Documentos
@@ -222,7 +222,7 @@ export default function HumanCertificationsPage() {
       <DataState
         error={data.error}
         loading={data.loading}
-        noun="as certificacoes"
+        noun="as certificações"
       />
 
       {!data.loading && !data.error ? (
@@ -242,7 +242,7 @@ export default function HumanCertificationsPage() {
                       <p className="text-xs font-black uppercase tracking-[0.15em] text-cyan-300">
                         {record._source === "documents"
                           ? "Documento"
-                          : "Certificacao"}
+                          : "Certificação"}
                       </p>
                       <h2 className="mt-2 text-lg font-black text-white">
                         {humanText(record, "name") ?? "Sem nome"}

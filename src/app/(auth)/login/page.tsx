@@ -13,7 +13,7 @@ const assurances = [
   { label: "Acesso restrito", icon: LockKeyhole },
   { label: "Auditoria institucional", icon: ClipboardCheck },
   { label: "Dados protegidos", icon: ShieldCheck },
-  { label: "Registro operacional rastreavel", icon: Fingerprint },
+  { label: "Registro operacional rastreável", icon: Fingerprint },
 ];
 
 export default function LoginPage() {
@@ -30,7 +30,7 @@ export default function LoginPage() {
               <span className="text-cyan-300">K9</span> Ops
             </p>
             <p className="mt-3 text-base text-cyan-200/80">
-              Gestao Operacional K9
+              Gestão Operacional K9
             </p>
           </div>
 
@@ -46,7 +46,7 @@ export default function LoginPage() {
 
           <p className="mt-8 max-w-md text-base leading-8 text-cyan-50/72">
             Controle administrativo da unidade K9 com acompanhamento de efetivo,
-            ocorrencias, saude, treinos e integridade operacional.
+            ocorrências, saúde, treinos e integridade operacional.
           </p>
 
           <div className="mt-8 space-y-4">

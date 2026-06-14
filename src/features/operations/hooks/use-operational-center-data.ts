@@ -1,6 +1,14 @@
 "use client";
 
-import { collection, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  collectionGroup,
+  onSnapshot,
+  query,
+  where,
+  type Query,
+  type QueryConstraint,
+} from "firebase/firestore";
 import {
   useEffect,
   useMemo,
@@ -61,7 +69,7 @@ export type OperationOccurrence = {
   isCritical: boolean;
   location: string;
   nature: string;
-  priorityLabel: string;
+  priorityLabel: string | null;
   priorityTone: OperationStatusTone;
   status: string;
   tone: OperationStatusTone;
@@ -168,7 +176,11 @@ function createCollections(): CenterCollections {
 function subscribeCollection(
   path: string,
   setter: Dispatch<SetStateAction<CollectionState>>,
+  constraints?: QueryConstraint[],
 ) {
+  const ref: Query = constraints
+    ? query(collection(db, path), ...constraints)
+    : collection(db, path);
   return onSnapshot(
     collection(db, path),
     (snapshot) => {
@@ -286,7 +298,7 @@ function visibleRecords(records: RawRecord[]) {
 }
 
 function statusOf(record: RawRecord) {
-  return normalized(record.status ?? record.situacao ?? record.state);
+  return normalized(record.status ?? record.situação ?? record.state);
 }
 
 function hasAuditAction(record: RawRecord, action: string) {
@@ -304,8 +316,8 @@ function isActiveRecord(record: RawRecord) {
       "active",
       "ativo",
       "available",
-      "disponivel",
-      "em servico",
+      "disponível",
+      "em serviço",
       "em_servico",
       "operational",
       "operacional",
@@ -397,37 +409,51 @@ function occurrenceNature(record: RawRecord) {
       record.type,
       details?.nature,
       details?.type,
-    ) ?? "Ocorrencia sem natureza"
+      details?.type_name,
+      details?.typeName,
+    ) ?? "Natureza não informada"
   );
 }
 
 function occurrenceCode(record: RawRecord) {
-  return text(record.number, record.code, record.protocol, record._id) ?? record._id;
+  const details = asRecord(record.details);
+  return (
+    text(
+      record.bo_number,
+      record.boNumber,
+      record.number,
+      record.code,
+      record.protocol,
+      details?.bo_number,
+      details?.boNumber,
+      details?.number,
+    ) ?? record._id
+  );
 }
 
 function occurrenceLocation(record: RawRecord) {
   const details = asRecord(record.details);
-  const location = asRecord(record.location);
 
   return (
     text(
+      record.location_address,
+      record.locationAddress,
       record.location_label,
       record.locationLabel,
       record.address,
       record.bairro,
+      record.local,
       details?.location,
+      details?.location_address,
       details?.address,
       details?.bairro,
-      location?.address,
-      location?.bairro,
-      location?.name,
-    ) ?? "Local nao informado"
+    ) ?? "Local não informado"
   );
 }
 
 function occurrencePriority(record: RawRecord): {
   isCritical: boolean;
-  label: string;
+  label: string | null;
   tone: OperationStatusTone;
 } {
   const details = asRecord(record.details);
@@ -440,17 +466,21 @@ function occurrencePriority(record: RawRecord): {
       details?.severity,
   );
 
+  if (!value) {
+    return { isCritical: false, label: null, tone: "slate" };
+  }
+
   if (
     [
       "critical",
       "critica",
-      "critico",
+      "crítico",
       "risco elevado",
       "risco alto",
       "grave",
     ].includes(value)
   ) {
-    return { isCritical: true, label: "Critica", tone: "red" };
+    return { isCritical: true, label: "Crítica", tone: "red" };
   }
 
   if (["high", "alta", "alto"].includes(value)) {
@@ -458,14 +488,14 @@ function occurrencePriority(record: RawRecord): {
   }
 
   if (["medium", "media", "medio"].includes(value)) {
-    return { isCritical: false, label: "Media", tone: "amber" };
+    return { isCritical: false, label: "Média", tone: "amber" };
   }
 
   if (["low", "baixa", "baixo"].includes(value)) {
     return { isCritical: false, label: "Baixa", tone: "blue" };
   }
 
-  return { isCritical: false, label: "Media", tone: "amber" };
+  return { isCritical: false, label: null, tone: "slate" };
 }
 
 function occurrenceTone(status: string, isCritical: boolean): OperationStatusTone {
@@ -573,9 +603,9 @@ function mapOccurrence(
   return {
     code: occurrenceCode(record),
     date: occurrenceDate(record),
-    dogName: dogId ? dogName(dogs.get(dogId)) ?? `K9 ${dogId}` : null,
+    dogName: dogId ? dogName(dogs.get(dogId)) ?? null : null,
     handlerName: handlerRa
-      ? userName(users.get(handlerRa)) ?? `RA ${handlerRa}`
+      ? userName(users.get(handlerRa)) ?? null
       : null,
     id: record._id,
     isCritical: priority.isCritical,
@@ -625,19 +655,34 @@ export function useOperationalCenterData(
   const [collections, setCollections] = useState(createCollections);
 
   useEffect(() => {
-    const unsubscribes = centerCollectionPaths.map(({ key, path }) =>
-      subscribeCollection(path, (nextState) => {
-        setCollections((current) => {
-          const nextValue =
-            typeof nextState === "function" ? nextState(current[key]) : nextState;
+    // QW-4: Filter dogs, users, vehicles at query level by active==true.
+    // occurrences, active_shifts, vehicle_crews, inventory_items use their
+    // own status/isActive*() logic in the useMemo — do NOT add where here.
+    const unsubscribes = centerCollectionPaths.map(({ key, path }) => {
+      const constraints =
+        key === "dogs"
+          ? [where("active", "==", true)]
+          : key === "users"
+            ? [where("active", "==", true)]
+            : key === "vehicles"
+              ? [where("active", "==", true)]
+              : undefined;
+      return subscribeCollection(
+        path,
+        (nextState) => {
+          setCollections((current) => {
+            const nextValue =
+              typeof nextState === "function" ? nextState(current[key]) : nextState;
 
-          return {
-            ...current,
-            [key]: nextValue,
-          };
-        });
-      }),
-    );
+            return {
+              ...current,
+              [key]: nextValue,
+            };
+          });
+        },
+        constraints,
+      );
+    });
 
     return () => {
       unsubscribes.forEach((unsubscribe) => unsubscribe());
@@ -702,12 +747,12 @@ export function useOperationalCenterData(
 
     const attention: OperationAttention[] = [
       ...criticalOccurrences.slice(0, 3).map((occurrence) => ({
-        action: "Critico",
-        detail: `${occurrence.location}. Acompanhar evolucao.`,
+        action: "Crítico",
+        detail: `${occurrence.location}. Acompanhar evolução.`,
         id: `critical-${occurrence.id}`,
         label: `${occurrence.code} - ${occurrence.nature}`,
         severity: "critical" as const,
-        source: "Ocorrencia",
+        source: "Ocorrência",
       })),
       ...openOccurrences
         .filter((occurrence) =>
@@ -715,8 +760,8 @@ export function useOperationalCenterData(
         )
         .slice(0, 3)
         .map((occurrence) => ({
-          action: "Atencao",
-          detail: "Documento pronto para assinatura do responsavel.",
+          action: "Atenção",
+          detail: "Documento pronto para assinatura do responsável.",
           id: `signature-${occurrence.id}`,
           label: `${occurrence.code} - aguardando assinatura`,
           severity: "warning" as const,
@@ -727,11 +772,11 @@ export function useOperationalCenterData(
         .slice(0, 2)
         .map((occurrence) => ({
           action: "Informar",
-          detail: "Ocorrencia em finalizacao sem selo institucional.",
+          detail: "Ocorrência em finalização sem selo institucional.",
           id: `finalizing-${occurrence.id}`,
-          label: `${occurrence.code} - em finalizacao`,
+          label: `${occurrence.code} - em finalização`,
           severity: "info" as const,
-          source: "Finalizacao",
+          source: "Finalização",
         })),
     ].slice(0, 5);
 
@@ -740,8 +785,8 @@ export function useOperationalCenterData(
         at: occurrence.date,
         detail: occurrence.vehicleLabel ?? "App Mobile",
         id: `occurrence-${occurrence.id}`,
-        label: `${occurrence.code} finalizada`.replace("finalizada", formatStatus(occurrence.status)),
-        source: "Ocorrencia",
+        label: occurrence.nature,
+        source: "Ocorrência",
         tone: occurrence.tone,
       })),
       ...activeShifts.slice(0, 5).map((shift) => {
@@ -758,7 +803,7 @@ export function useOperationalCenterData(
           at: dateValue(shift.startedAt ?? shift.started_at ?? shift.created_at),
           detail: "Turno ativo",
           id: `shift-${shift._id}`,
-          label: `${dog} - ${handler}`,
+          label: `Turno: ${dog} + ${handler}`,
           source: "Turno",
           tone: "emerald" as const,
         };
@@ -778,7 +823,7 @@ export function useOperationalCenterData(
     const managerQueue: OperationQueueItem[] = [
       ...criticalInventory.slice(0, 2).map((item) => ({
         category: "Estoque",
-        detail: text(item.status) ?? "Abaixo do minimo",
+        detail: text(item.status) ?? "Abaixo do mínimo",
         id: `queue-inventory-${item._id}`,
         label: text(item.name, item.item_name, item._id) ?? item._id,
         tone:
@@ -797,7 +842,7 @@ export function useOperationalCenterData(
         category: "Auditoria",
         detail: "Devolvida para ajuste",
         id: `queue-correction-${occurrence._id}`,
-        label: `${occurrenceCode(occurrence)} com correcao aberta`,
+        label: `${occurrenceCode(occurrence)} com correção aberta`,
         tone: "violet" as const,
       })),
       ...criticalOccurrences.slice(0, 2).map((occurrence) => ({

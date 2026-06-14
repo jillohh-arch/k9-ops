@@ -115,12 +115,12 @@ export default function VehiclesPage() {
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
         <EffectiveHeader
-          description="Frota operacional, manutencao e disponibilidade das viaturas K9."
+          description="Frota operacional, manutenção e disponibilidade das viaturas K9."
           title="Viaturas"
         />
         {canCreateVehicle ? (
           <Link
-            className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-sm font-black text-[#041018]"
+            className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200"
             href="/vehicles/new"
           >
             <Plus className="h-4 w-4" /> Nova viatura
@@ -130,7 +130,7 @@ export default function VehiclesPage() {
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <SummaryCard
-          detail="cadastros visiveis"
+          detail="cadastros visíveis"
           icon={Car}
           label="Viaturas cadastradas"
           tone="cyan"
@@ -151,9 +151,9 @@ export default function VehiclesPage() {
           value={loading ? "..." : String(inUse)}
         />
         <SummaryCard
-          detail="status contem manutencao"
+          detail="status contem manutenção"
           icon={Wrench}
-          label="Em manutencao"
+          label="Em manutenção"
           tone="amber"
           value={loading ? "..." : String(maintenance)}
         />
@@ -172,7 +172,7 @@ export default function VehiclesPage() {
           options={[
             { label: "Status: Todos", value: "all" },
             { label: "Ativas", value: "active" },
-            { label: "Em manutencao", value: "maintenance" },
+            { label: "Em manutenção", value: "maintenance" },
             { label: "Reserva", value: "reserve" },
             { label: "Baixadas", value: "archived" },
           ]}
@@ -249,7 +249,7 @@ export default function VehiclesPage() {
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                        Proxima revisao
+                        Próxima revisão
                       </p>
                       <p className="mt-1 font-semibold text-slate-200">
                         {dateLabel(vehicle.nextReviewAt)}
@@ -259,21 +259,21 @@ export default function VehiclesPage() {
                   <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
                     <span className="inline-flex items-center gap-1">
                       <Gauge className="h-3.5 w-3.5 text-cyan-300/70" />
-                      {vehicle.crewSize} vagas na guarnicao
+                      {vehicle.crewSize} vagas na guarnição
                     </span>
-                    <span>{vehicle.unit ?? "Sem lotacao"}</span>
+                    <span>{vehicle.unit ?? "Sem lotação"}</span>
                   </div>
                 </div>
                 <div className="relative mt-4 flex gap-2 border-t border-white/8 pt-3">
                   <Link
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2.5 text-xs font-bold text-cyan-200"
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2.5 text-xs font-bold text-cyan-200 hover:bg-cyan-300/[0.12]"
                     href={`/vehicles/${encodeURIComponent(vehicle.id)}`}
                   >
                     <Eye className="h-4 w-4" /> Visualizar
                   </Link>
                   {canEditVehicle ? (
                     <Link
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-bold text-slate-300"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2.5 text-xs font-bold text-cyan-200 hover:bg-cyan-300/[0.12]"
                       href={`/vehicles/${encodeURIComponent(vehicle.id)}/edit`}
                     >
                       <Pencil className="h-4 w-4" /> Editar

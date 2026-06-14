@@ -69,9 +69,9 @@ export type HumanMovementInput = {
 export const humanSpecialtyOptions = [
   "Condutor K9",
   "Adestramento",
-  "Figuracao",
+  "Figuração",
   "Apoio operacional",
-  "Veterinario",
+  "Veterinário",
   "Administrativo",
 ] as const;
 
@@ -146,17 +146,17 @@ export async function loadHumanForEdit(ra: string) {
     isK9Instructor:
       data.is_k9_instructor === true ||
       text(data, "training_role") === "instrutor_k9",
-    notes: text(data, "notes", "observacoes"),
+    notes: text(data, "notes", "observações"),
     phone: text(data, "telefone", "phone"),
     photoUrl: text(data, "photoUrl", "image_url", "profileImageUrl"),
     ra,
     rank: text(data, "rank", "posto", "graduacao"),
-    role: text(data, "cargo", "role", "funcao"),
+    role: text(data, "cargo", "role", "função"),
     shiftLabel: text(data, "shift_label", "shiftLabel"),
     specialties: stringArray(data.specialties),
     status: text(data, "status") || "Ativo",
     team: text(data, "team", "equipe"),
-    unit: text(data, "unit", "unidade", "lotacao"),
+    unit: text(data, "unit", "unidade", "lotação"),
   } satisfies HumanFormValues;
 }
 

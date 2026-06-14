@@ -43,9 +43,9 @@ const binomialFormTabs: Array<{
   id: BinomialFormTab;
   label: string;
 }> = [
-  { id: "composition", label: "Composicao" },
-  { id: "link", label: "Vinculo" },
-  { id: "notes", label: "Observacoes" },
+  { id: "composition", label: "Composição" },
+  { id: "link", label: "Vínculo" },
+  { id: "notes", label: "Observações" },
 ];
 
 function Field({
@@ -96,7 +96,7 @@ function validate(values: BinomialFormValues) {
   const errors: Partial<Record<keyof BinomialFormValues, string>> = {};
   if (!values.handlerRa) errors.handlerRa = "Selecione o condutor.";
   if (!values.dogId) errors.dogId = "Selecione o K9.";
-  if (!values.startAt) errors.startAt = "Informe o inicio do vinculo.";
+  if (!values.startAt) errors.startAt = "Informe o início do vínculo.";
   if (!values.status) errors.status = "Informe o status.";
   if (!values.primarySpecialty) errors.primarySpecialty = "Informe a especialidade principal.";
   return errors;
@@ -144,7 +144,7 @@ export function BinomialAdminForm({
         if (!alive) return;
         setOptions(loadedOptions);
         if (loadedValues) setValues(loadedValues);
-        else setError("Binomio nao localizado.");
+        else setError("Binômio não localizado.");
       })
       .catch((err) => alive && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => alive && setLoading(false));
@@ -176,14 +176,14 @@ export function BinomialAdminForm({
     if (!canSaveBinomial) {
       setError(
         mode === "create"
-          ? "Seu perfil nao permite criar binomios."
-          : "Seu perfil nao permite editar binomios.",
+          ? "Seu perfil não permite criar binômios."
+          : "Seu perfil não permite editar binômios.",
       );
       return;
     }
     const nextErrors = validate(values);
     if (Object.keys(nextErrors).length) {
-      setError("Preencha os campos obrigatorios do vinculo.");
+      setError("Preencha os campos obrigatórios do vínculo.");
       return;
     }
     setSaving(true);
@@ -200,7 +200,7 @@ export function BinomialAdminForm({
 
   async function confirmArchive() {
     if (!canArchiveBinomial) {
-      setError("Seu perfil nao permite encerrar binomios.");
+      setError("Seu perfil não permite encerrar binômios.");
       setArchiveOpen(false);
       return;
     }
@@ -219,7 +219,7 @@ export function BinomialAdminForm({
   if (loading) {
     return (
       <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-sm text-slate-500">
-        Carregando vinculo...
+        Carregando vínculo...
       </div>
     );
   }
@@ -233,22 +233,22 @@ export function BinomialAdminForm({
             href={paths.binomials}
           >
             <ArrowLeft className="h-4 w-4" />
-            Binomios
+            Binômios
           </Link>
           <h1 className="mt-3 text-3xl font-black text-white">
-            {mode === "create" ? "Vincular Binomio" : "Editar Vinculo"}
+            {mode === "create" ? "Vincular Binômio" : "Editar Vínculo"}
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Associe condutor e K9 sem quebrar o vinculo operacional do mobile.
+            Associe condutor e K9 sem quebrar o vínculo operacional do mobile.
           </p>
         </div>
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-black text-[#041018] disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200 disabled:opacity-50"
           disabled={saving || !canSaveBinomial}
           type="submit"
         >
           {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Salvar binomio
+          Salvar binômio
         </button>
       </div>
 
@@ -293,7 +293,7 @@ export function BinomialAdminForm({
                     Condutor
                   </p>
                   <p className="mt-1 text-xl font-black text-white">
-                    {selectedHandler?.callsign ?? "Aguardando selecao"}
+                    {selectedHandler?.callsign ?? "Aguardando seleção"}
                   </p>
                   <p className="font-mono text-xs text-slate-500">
                     RA {values.handlerRa || "--"}
@@ -309,7 +309,7 @@ export function BinomialAdminForm({
                     K9
                   </p>
                   <p className="mt-1 text-xl font-black text-cyan-200">
-                    {selectedDog?.name ?? "Aguardando selecao"}
+                    {selectedDog?.name ?? "Aguardando seleção"}
                   </p>
                   <p className="font-mono text-xs text-slate-500">
                     {selectedDog?.registrationNumber ?? "--"}
@@ -327,7 +327,7 @@ export function BinomialAdminForm({
 
           <Section
             active={activeFormTab === "composition"}
-            title="1. Composicao do binomio"
+            title="1. Composição do binômio"
           >
             <div className="grid gap-4 md:grid-cols-2">
               <Field error={errors.handlerRa} label="Condutor" required>
@@ -367,10 +367,10 @@ export function BinomialAdminForm({
 
           <Section
             active={activeFormTab === "link"}
-            title="2. Dados do vinculo"
+            title="2. Dados do vínculo"
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <Field error={errors.startAt} label="Data de inicio" required>
+              <Field error={errors.startAt} label="Data de início" required>
                 <input className={inputClass} onChange={(event) => setField("startAt", event.target.value)} type="date" value={values.startAt} />
               </Field>
               <Field label="Data de encerramento">
@@ -378,16 +378,16 @@ export function BinomialAdminForm({
               </Field>
               <Field error={errors.status} label="Status" required>
                 <select className={`${inputClass} appearance-none`} onChange={(event) => setField("status", event.target.value)} value={values.status}>
-                  {["Ativo", "Operacional", "Em formacao", "Afastado", "Encerrado"].map((item) => (
+                  {["Ativo", "Operacional", "Em formação", "Afastado", "Encerrado"].map((item) => (
                     <option className="bg-[#0b1628]" key={item}>
                       {item}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Tipo de vinculo">
+              <Field label="Tipo de vínculo">
                 <select className={`${inputClass} appearance-none`} onChange={(event) => setField("type", event.target.value)} value={values.type}>
-                  {["Operacional", "Formacao", "Substituicao temporaria", "Apoio"].map((item) => (
+                  {["Operacional", "Formação", "Substituição temporária", "Apoio"].map((item) => (
                     <option className="bg-[#0b1628]" key={item}>
                       {item}
                     </option>
@@ -409,7 +409,7 @@ export function BinomialAdminForm({
               <Field label="Equipe">
                 <input className={inputClass} onChange={(event) => setField("team", event.target.value)} value={values.team} />
               </Field>
-              <Field label="Prontidao combinada (%)">
+              <Field label="Prontidão combinada (%)">
                 <input className={inputClass} inputMode="numeric" onChange={(event) => setField("readinessScore", event.target.value.replace(/[^\d,.]/g, ""))} value={values.readinessScore} />
               </Field>
               <Field label="Sinergia (%)">
@@ -425,7 +425,7 @@ export function BinomialAdminForm({
               />
               <span>
                 <strong className="block text-sm text-white">
-                  Vinculo principal ativo
+                  Vínculo principal ativo
                 </strong>
                 <span className="text-xs text-slate-500">
                   Quando ativo, sincroniza `dogs.conductorRa` para o mobile.
@@ -436,12 +436,12 @@ export function BinomialAdminForm({
 
           <Section
             active={activeFormTab === "notes"}
-            title="3. Avaliacao inicial e observacoes"
+            title="3. Avaliação inicial e observações"
           >
             <textarea
               className="min-h-32 w-full resize-y rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
               onChange={(event) => setField("notes", event.target.value)}
-              placeholder="Compatibilidade, restricoes, rotina da dupla, observacoes operacionais..."
+              placeholder="Compatibilidade, restrições, rotina da dupla, observações operacionais..."
               value={values.notes}
             />
           </Section>
@@ -450,7 +450,7 @@ export function BinomialAdminForm({
         <aside className="space-y-4">
           <section className="rounded-3xl border border-cyan-300/20 bg-[#0b1628]/88 p-5">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-black text-white">Resumo do binomio</h2>
+              <h2 className="text-sm font-black text-white">Resumo do binômio</h2>
               <StatusPill label={values.status || "Pendente"} tone={values.active ? "green" : "violet"} />
             </div>
             <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
@@ -463,8 +463,8 @@ export function BinomialAdminForm({
                 ["Condutor", selectedHandler?.callsign ?? "--"],
                 ["K9", selectedDog?.name ?? "--"],
                 ["Especialidade", specialtyLabel(values.primarySpecialty)],
-                ["Inicio", values.startAt || "--"],
-                ["Prontidao", `${values.readinessScore || "--"}%`],
+                ["Início", values.startAt || "--"],
+                ["Prontidão", `${values.readinessScore || "--"}%`],
               ].map(([label, value]) => (
                 <div className="flex justify-between gap-4" key={label}>
                   <span className="text-slate-500">{label}</span>
@@ -474,9 +474,9 @@ export function BinomialAdminForm({
             </div>
           </section>
           <section className="rounded-3xl border border-white/8 bg-[#0b1628]/72 p-5">
-            <h2 className="text-sm font-black text-white">Checklist do vinculo</h2>
+            <h2 className="text-sm font-black text-white">Checklist do vínculo</h2>
             <div className="mt-4 space-y-2">
-              {["Condutor selecionado", "K9 selecionado", "Dados do vinculo", "Auditoria orientada"].map((item, index) => (
+              {["Condutor selecionado", "K9 selecionado", "Dados do vínculo", "Auditoria orientada"].map((item, index) => (
                 <div className="flex items-center justify-between text-xs" key={item}>
                   <span className="text-slate-400">{item}</span>
                   <span className={cn("flex h-5 w-5 items-center justify-center rounded-full border", checklist[index] ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-300" : "border-white/10 text-slate-600")}>
@@ -489,8 +489,8 @@ export function BinomialAdminForm({
           <section className="rounded-3xl border border-amber-300/15 bg-amber-300/[0.045] p-5">
             <ShieldCheck className="h-5 w-5 text-amber-200" />
             <p className="mt-3 text-xs leading-5 text-amber-50/75">
-              A Function encerra vinculos ativos anteriores do mesmo K9 quando
-              este for marcado como vinculo principal ativo.
+              A Function encerra vínculos ativos anteriores do mesmo K9 quando
+              este for marcado como vínculo principal ativo.
             </p>
           </section>
           {mode === "edit" && canArchiveBinomial ? (
@@ -499,7 +499,7 @@ export function BinomialAdminForm({
               onClick={() => setArchiveOpen(true)}
               type="button"
             >
-              <Archive className="h-4 w-4" /> Encerrar vinculo
+              <Archive className="h-4 w-4" /> Encerrar vínculo
             </button>
           ) : null}
         </aside>
@@ -508,23 +508,23 @@ export function BinomialAdminForm({
       {archiveOpen && canArchiveBinomial ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5">
           <div className="w-full max-w-md rounded-3xl border border-red-300/20 bg-[#091525] p-6">
-            <h2 className="text-xl font-black text-white">Encerrar binomio</h2>
+            <h2 className="text-xl font-black text-white">Encerrar binômio</h2>
             <p className="mt-2 text-sm text-slate-400">
-              O historico permanece preservado. Se for vinculo principal atual,
-              o K9 fica sem condutor titular ate nova atribuicao.
+              O histórico permanece preservado. Se for vínculo principal atual,
+              o K9 fica sem condutor titular ate nova atribuição.
             </p>
             <textarea
               className="mt-5 min-h-24 w-full rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-white outline-none"
               onChange={(event) => setArchiveReason(event.target.value)}
-              placeholder="Motivo obrigatorio"
+              placeholder="Motivo obrigatório"
               value={archiveReason}
             />
             <div className="mt-5 flex gap-3">
-              <button className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300" onClick={() => setArchiveOpen(false)} type="button">
+              <button className="flex-1 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]" onClick={() => setArchiveOpen(false)} type="button">
                 Cancelar
               </button>
               <button
-                className="flex-1 rounded-xl bg-red-400 px-4 py-3 text-sm font-black text-[#170607] disabled:opacity-50"
+                className="flex-1 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-200 hover:bg-red-400/[0.18] disabled:opacity-50"
                 disabled={archiveReason.trim().length < 5 || archiving}
                 onClick={confirmArchive}
                 type="button"

@@ -118,7 +118,7 @@ function RecordFields({
       </label>
       <label className="sm:col-span-2">
         <span className="mb-2 block text-xs font-semibold text-slate-300">
-          Observacoes
+          Observações
         </span>
         <textarea
           className="min-h-24 w-full rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-white outline-none"
@@ -196,7 +196,7 @@ export function HumanRecordDialog({
       onClose={onClose}
       title={
         kind === "certification"
-          ? "Nova certificacao"
+          ? "Nova certificação"
           : "Novo documento funcional"
       }
     >
@@ -214,7 +214,7 @@ export function HumanRecordDialog({
         </label>
         {error ? <p className="text-sm text-red-300">{error}</p> : null}
         <button
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-[#041018] disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200 disabled:opacity-50"
           disabled={saving}
           type="submit"
         >
@@ -230,9 +230,9 @@ const emptyMovement: HumanMovementInput = {
   destinationUnit: "",
   endedAt: "",
   expectedEndAt: "",
-  movementType: "Transferencia",
+  movementType: "Transferência",
   notes: "",
-  operationalImpact: "Medio",
+  operationalImpact: "Médio",
   ra: "",
   reason: "",
   startAt: new Date().toISOString().slice(0, 10),
@@ -272,7 +272,7 @@ export function HumanMovementDialog({
       setError(
         caught instanceof Error
           ? caught.message
-          : "Falha ao salvar movimentacao.",
+          : "Falha ao salvar movimentação.",
       );
     } finally {
       setSaving(false);
@@ -280,7 +280,7 @@ export function HumanMovementDialog({
   }
 
   return (
-    <DialogShell onClose={onClose} title="Nova movimentacao">
+    <DialogShell onClose={onClose} title="Nova movimentação">
       <form className="mt-6 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
         <label>
           <span className="mb-2 block text-xs font-semibold text-slate-300">
@@ -308,11 +308,11 @@ export function HumanMovementDialog({
             value={values.movementType}
           >
             {[
-              "Transferencia",
-              "Afastamento medico",
-              "Ferias",
-              "Licenca",
-              "Substituicao",
+              "Transferência",
+              "Afastamento médico",
+              "Férias",
+              "Licença",
+              "Substituição",
               "Retorno operacional",
             ].map((item) => (
               <option className="bg-[#0b1628]" key={item}>
@@ -323,7 +323,7 @@ export function HumanMovementDialog({
         </label>
         <label>
           <span className="mb-2 block text-xs font-semibold text-slate-300">
-            Inicio *
+            Início *
           </span>
           <input
             className={inputClass}
@@ -370,7 +370,7 @@ export function HumanMovementDialog({
             onChange={(event) => set("operationalImpact", event.target.value)}
             value={values.operationalImpact}
           >
-            {["Baixo", "Medio", "Alto"].map((item) => (
+            {["Baixo", "Médio", "Alto"].map((item) => (
               <option className="bg-[#0b1628]" key={item}>
                 {item}
               </option>
@@ -379,7 +379,7 @@ export function HumanMovementDialog({
         </label>
         <label className="sm:col-span-2">
           <span className="mb-2 block text-xs font-semibold text-slate-300">
-            Destino / nova lotacao
+            Destino / nova lotação
           </span>
           <input
             className={inputClass}
@@ -401,11 +401,11 @@ export function HumanMovementDialog({
           <p className="text-sm text-red-300 sm:col-span-2">{error}</p>
         ) : null}
         <button
-          className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-[#041018] disabled:opacity-50 sm:col-span-2"
+          className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200 disabled:opacity-50 sm:col-span-2"
           disabled={saving}
           type="submit"
         >
-          {saving ? "Salvando..." : "Salvar movimentacao"}
+          {saving ? "Salvando..." : "Salvar movimentação"}
         </button>
       </form>
     </DialogShell>

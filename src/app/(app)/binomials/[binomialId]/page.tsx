@@ -47,10 +47,10 @@ function eventTitle(record: BinomialRecord) {
     return binomialText(record, "trainingType", "modality", "type") ?? "Treino conjunto";
   }
   if (record._source.startsWith("occurrences")) {
-    return binomialText(record, "type_name", "nature", "nature_name") ?? "Ocorrencia";
+    return binomialText(record, "type_name", "nature", "nature_name") ?? "Ocorrência";
   }
   if (record._source === "shift_logs") return "Turno operacional";
-  return binomialText(record, "summary", "status") ?? "Evento do binomio";
+  return binomialText(record, "summary", "status") ?? "Evento do binômio";
 }
 
 function yearsLabel(date: Date | null) {
@@ -72,9 +72,9 @@ export default function BinomialProfilePage() {
   if (data.loading || data.error || (!data.dog && !data.handler)) {
     return (
       <DataState
-        error={data.error ?? (!data.loading ? "Binomio nao localizado." : null)}
+        error={data.error ?? (!data.loading ? "Binômio não localizado." : null)}
         loading={data.loading}
-        noun="o perfil do binomio"
+        noun="o perfil do binômio"
       />
     );
   }
@@ -97,7 +97,7 @@ export default function BinomialProfilePage() {
   const startAt = binomialDate(
     data.binomial?.start_at ?? data.binomial?.startAt,
   );
-  const status = binomialText(data.binomial, "status") ?? "Vinculo ativo";
+  const status = binomialText(data.binomial, "status") ?? "Vínculo ativo";
   const readiness = binomialNumber(
     data.binomial,
     "readiness_score",
@@ -120,13 +120,13 @@ export default function BinomialProfilePage() {
             href={paths.binomials}
           >
             <ArrowLeft className="h-4 w-4" />
-            Binomios
+            Binômios
           </Link>
           <h1 className="mt-3 text-3xl font-black text-white">
-            Perfil do Binomio
+            Perfil do Binômio
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Vinculo operacional, atividades e historico compartilhado.
+            Vínculo operacional, atividades e histórico compartilhado.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -135,14 +135,14 @@ export default function BinomialProfilePage() {
               className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/[0.08] px-4 py-2.5 text-sm font-bold text-cyan-200"
               href={`/binomials/${encodeURIComponent(binomialId)}/edit`}
             >
-              <Pencil className="h-4 w-4" /> Editar vinculo
+              <Pencil className="h-4 w-4" /> Editar vínculo
             </Link>
           ) : null}
           <Link
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300"
             href={`/binomials/${encodeURIComponent(binomialId)}/history`}
           >
-            <History className="h-4 w-4" /> Ver historico
+            <History className="h-4 w-4" /> Ver histórico
           </Link>
         </div>
       </div>
@@ -186,10 +186,10 @@ export default function BinomialProfilePage() {
               </p>
               <h2 className="mt-2 text-2xl font-black text-cyan-200">{dogName}</h2>
               <p className="mt-1 font-mono text-xs text-slate-500">
-                RGA {binomialText(data.dog, "registrationNumber", "matricula", "rga") ?? "--"}
+                RGA {binomialText(data.dog, "registrationNumber", "matrícula", "rga") ?? "--"}
               </p>
               <p className="mt-4 text-sm text-slate-400">
-                {binomialText(data.dog, "breed", "raca") ?? "Raca nao informada"}
+                {binomialText(data.dog, "breed", "raça") ?? "Raça não informada"}
               </p>
             </div>
             <EntityImage
@@ -204,14 +204,14 @@ export default function BinomialProfilePage() {
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <SummaryCard
-          detail={readiness == null ? "nao informado" : "prontidao administrativa"}
+          detail={readiness == null ? "não informado" : "prontidão administrativa"}
           icon={Activity}
-          label="Prontidao"
+          label="Prontidão"
           tone="cyan"
           value={readiness == null ? "--" : `${readiness}%`}
         />
         <SummaryCard
-          detail={synergy == null ? "nao informado" : "avaliacao do vinculo"}
+          detail={synergy == null ? "não informado" : "avaliação do vínculo"}
           icon={HeartPulse}
           label="Sinergia"
           tone="green"
@@ -227,7 +227,7 @@ export default function BinomialProfilePage() {
         <SummaryCard
           detail={`desde ${formatDate(startAt)}`}
           icon={CalendarDays}
-          label="Tempo de vinculo"
+          label="Tempo de vínculo"
           tone="violet"
           value={yearsLabel(startAt)}
         />
@@ -235,10 +235,10 @@ export default function BinomialProfilePage() {
 
       <section className="grid gap-5 xl:grid-cols-3">
         <section className="rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5">
-          <h2 className="text-sm font-black text-white">Resumo do vinculo</h2>
+          <h2 className="text-sm font-black text-white">Resumo do vínculo</h2>
           <div className="mt-4 space-y-3 text-sm">
             {[
-              ["Inicio", formatDate(startAt)],
+              ["Início", formatDate(startAt)],
               ["Tipo", binomialText(data.binomial, "type") ?? "Legado do K9"],
               ["Especialidade", specialtyLabel(binomialText(data.binomial, "primary_specialty", "primarySpecialty") ?? "")],
               ["Unidade", binomialText(data.binomial, "unit") ?? "--"],
@@ -262,7 +262,7 @@ export default function BinomialProfilePage() {
           <div className="mt-4 space-y-3">
             {[
               ["Treinos conjuntos", data.trainings.length, "blue"],
-              ["Ocorrencias", data.occurrences.length, "violet"],
+              ["Ocorrências", data.occurrences.length, "violet"],
               ["Turnos registrados", data.shifts.length, "cyan"],
             ].map(([label, value, tone]) => (
               <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3" key={String(label)}>
@@ -276,7 +276,7 @@ export default function BinomialProfilePage() {
         </section>
 
         <section className="rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5">
-          <h2 className="text-sm font-black text-white">Ultimos eventos</h2>
+          <h2 className="text-sm font-black text-white">Últimos eventos</h2>
           <div className="mt-4 space-y-3">
             {recentEvents.slice(0, 4).length ? (
               recentEvents.slice(0, 4).map((record) => (
@@ -306,7 +306,7 @@ export default function BinomialProfilePage() {
             className="text-xs font-bold text-cyan-300"
             href={`/binomials/${encodeURIComponent(binomialId)}/history`}
           >
-          Ver historico completo
+          Ver histórico completo
         </Link>
       </div>
         <div className="mt-4 grid gap-3">
@@ -332,7 +332,7 @@ export default function BinomialProfilePage() {
               </article>
             ))
           ) : (
-            <p className="text-sm text-slate-500">Sem historico compartilhado.</p>
+            <p className="text-sm text-slate-500">Sem histórico compartilhado.</p>
           )}
         </div>
       </section>

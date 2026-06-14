@@ -213,12 +213,14 @@ export function StatusPill({
   tone = "slate",
 }: {
   label: string;
-  tone?: "green" | "blue" | "amber" | "violet" | "slate";
+  tone?: "green" | "blue" | "amber" | "violet" | "slate" | "cyan" | "red";
 }) {
   const tones = {
     amber: "border-amber-300/25 bg-amber-300/10 text-amber-200",
     blue: "border-blue-300/25 bg-blue-300/10 text-blue-200",
+    cyan: "border-cyan-300/25 bg-cyan-300/10 text-cyan-200",
     green: "border-emerald-300/25 bg-emerald-300/10 text-emerald-200",
+    red: "border-red-300/25 bg-red-300/10 text-red-200",
     slate: "border-slate-400/20 bg-slate-400/8 text-slate-300",
     violet: "border-violet-300/25 bg-violet-300/10 text-violet-200",
   };

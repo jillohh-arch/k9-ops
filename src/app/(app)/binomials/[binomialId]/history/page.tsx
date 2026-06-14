@@ -42,7 +42,7 @@ function category(record: BinomialRecord) {
 
 function categoryLabel(value: string) {
   const labels: Record<string, string> = {
-    occurrence: "Ocorrencia",
+    occurrence: "Ocorrência",
     other: "Outro",
     shift: "Turno",
     training: "Treino",
@@ -89,9 +89,9 @@ export default function BinomialHistoryPage() {
   if (data.loading || data.error || (!data.dog && !data.handler)) {
     return (
       <DataState
-        error={data.error ?? (!data.loading ? "Binomio nao localizado." : null)}
+        error={data.error ?? (!data.loading ? "Binômio não localizado." : null)}
         loading={data.loading}
-        noun="o historico do binomio"
+        noun="o histórico do binômio"
       />
     );
   }
@@ -116,7 +116,7 @@ export default function BinomialHistoryPage() {
           Voltar ao perfil
         </Link>
         <h1 className="mt-3 text-3xl font-black text-white">
-          Historico do Binomio
+          Histórico do Binômio
         </h1>
         <p className="mt-2 text-sm text-slate-400">
           Linha do tempo de {handlerName} + {dogName}.
@@ -130,7 +130,7 @@ export default function BinomialHistoryPage() {
             <input
               className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.035] pl-11 pr-4 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar treino, ocorrencia ou turno..."
+              placeholder="Buscar treino, ocorrência ou turno..."
               value={search}
             />
           </label>
@@ -141,7 +141,7 @@ export default function BinomialHistoryPage() {
           >
             <option className="bg-[#0b1628]" value="all">Todos</option>
             <option className="bg-[#0b1628]" value="training">Treinos</option>
-            <option className="bg-[#0b1628]" value="occurrence">Ocorrencias</option>
+            <option className="bg-[#0b1628]" value="occurrence">Ocorrências</option>
             <option className="bg-[#0b1628]" value="shift">Turnos</option>
           </select>
         </div>
@@ -189,7 +189,7 @@ export default function BinomialHistoryPage() {
       </section>
 
       <Link className="inline-flex text-sm font-bold text-cyan-300" href={paths.binomials}>
-        Voltar para binomios
+        Voltar para binômios
       </Link>
     </div>
   );

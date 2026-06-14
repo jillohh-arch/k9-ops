@@ -1,5 +1,5 @@
-import { ReportDetailPage } from "@/features/reports/components/report-pages";
+import { InventoryReport } from "@/features/reports/components/inventory-report";
 
 export default function InventoryReportPage() {
-  return <ReportDetailPage reportId="inventory" />;
+  return <InventoryReport />;
 }

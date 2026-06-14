@@ -154,7 +154,7 @@ export function getProfileIdFromLegacyValue(value: string | null | undefined) {
     consulta: "condutor",
     consulta_leitura: "condutor",
     estoque: "almoxarifado",
-    gestao: "subinspetor_inspetor",
+    gestão: "subinspetor_inspetor",
     gestor: "subinspetor_inspetor",
     gestor_comando: "subinspetor_inspetor",
     inspetor: "subinspetor_inspetor",

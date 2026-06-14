@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -53,12 +53,14 @@ import {
   type ProfileRecord,
 } from "@/features/effective/hooks/use-k9-profile-data";
 import { specialtyLabel } from "@/features/effective/hooks/use-effective-data";
-import { canonicalModality } from "@/features/effective/lib/k9-modalities";
+import { canônicalModality } from "@/features/effective/lib/k9-modalities";
 import {
   HealthEventHub,
   type HealthHubSection,
 } from "@/features/health/components/health-event-hub";
 import { paths } from "@/lib/routes/paths";
+import { db } from "@/lib/firebase/client";
+import { doc, getDoc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 
 type TimelineItem = {
@@ -70,7 +72,7 @@ type TimelineItem = {
 };
 
 type HealthTab =
-  | "clinical"
+  | "clínical"
   | "documents"
   | "overview"
   | "vaccines"
@@ -108,7 +110,7 @@ function firstDate(record: Record<string, unknown> | null, keys: string[]) {
 }
 
 function ageLabel(date: Date | null) {
-  if (!date) return "Nao informada";
+  if (!date) return "Não informada";
   const now = new Date();
   let years = now.getFullYear() - date.getFullYear();
   let months = now.getMonth() - date.getMonth();
@@ -121,7 +123,7 @@ function ageLabel(date: Date | null) {
 }
 
 function dateLabel(date: Date | null) {
-  return date ? dateFormatter.format(date) : "Nao informado";
+  return date ? dateFormatter.format(date) : "Não informado";
 }
 
 function eventType(record: ProfileRecord) {
@@ -140,13 +142,13 @@ function eventTitle(record: ProfileRecord) {
     antiparasitic: "Antiparasitario",
     consultation: "Consulta",
     exam: "Exame",
-    medication: "Medicacao",
-    other: "Evento de saude",
+    medication: "Medicação",
+    other: "Evento de saúde",
     surgery: "Cirurgia",
     symptom: "Sintoma",
     vaccination: "Vacina",
   };
-  return subtype ? `${labels[type] ?? "Saude"}: ${subtype}` : labels[type] ?? type;
+  return subtype ? `${labels[type] ?? "Saúde"}: ${subtype}` : labels[type] ?? type;
 }
 
 function sessionTitle(record: ProfileRecord) {
@@ -157,7 +159,7 @@ function sessionTitle(record: ProfileRecord) {
       "specialty",
       "type",
       "activityType",
-    ]) ?? "Sessao de treino"
+    ]) ?? "Sessão de treino"
   ).replaceAll("_", " ");
 }
 
@@ -169,7 +171,7 @@ function occurrenceTitle(record: ProfileRecord) {
       "nature_name",
       "nature",
       "type_code",
-    ]) ?? "Ocorrencia"
+    ]) ?? "Ocorrência"
   );
 }
 
@@ -188,18 +190,18 @@ function specialtyStatus(record: ProfileRecord) {
     return { label: "Operacional", tone: "green" as const };
   }
   if (["in_formation", "formation", "em_formacao"].includes(status)) {
-    return { label: "Em formacao", tone: "blue" as const };
+    return { label: "Em formação", tone: "blue" as const };
   }
-  if (["maintenance", "manutencao"].includes(status)) {
-    return { label: "Manutencao", tone: "amber" as const };
+  if (["maintenance", "manutenção"].includes(status)) {
+    return { label: "Manutenção", tone: "amber" as const };
   }
-  return { label: "Nao iniciada", tone: "slate" as const };
+  return { label: "Não iniciada", tone: "slate" as const };
 }
 
 function dogStatus(dog: ProfileRecord, specialties: ProfileRecord[]) {
-  const status = normalized(profileText(dog, ["status", "situacao"]));
+  const status = normalized(profileText(dog, ["status", "situação"]));
   if (!["ativo", "active", ""].includes(status)) {
-    return { label: profileText(dog, ["status"]) ?? "Fora de operacao", tone: "violet" as const };
+    return { label: profileText(dog, ["status"]) ?? "Fora de operação", tone: "violet" as const };
   }
   if (
     specialties.some((specialty) =>
@@ -217,7 +219,7 @@ function dogStatus(dog: ProfileRecord, specialties: ProfileRecord[]) {
       ),
     )
   ) {
-    return { label: "Em formacao", tone: "blue" as const };
+    return { label: "Em formação", tone: "blue" as const };
   }
   return { label: "Ativo", tone: "slate" as const };
 }
@@ -247,7 +249,7 @@ function vaccineState(record: ProfileRecord) {
   if (!dueDate) {
     return {
       dueDate: null,
-      label: "Prazo nao informado",
+      label: "Prazo não informado",
       tone: "slate" as const,
     };
   }
@@ -330,11 +332,34 @@ export default function K9ProfilePage() {
   const params = useParams<{ dogId: string }>();
   const dogId = decodeURIComponent(params.dogId ?? "");
   const data = useK9ProfileData(dogId);
+  const [conductor, setConductor] = useState<ProfileRecord | null>(null);
   const [healthTab, setHealthTab] = useState<HealthTab>("overview");
   const [healthHubOpen, setHealthHubOpen] = useState(false);
   const [healthHubSection, setHealthHubSection] =
     useState<HealthHubSection>("vaccination");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // QW-2: Fetch the single conductor document instead of subscribing to
+  // the entire users collection. conductorRa is read from the dog record.
+  useEffect(() => {
+    const ra = profileText(data.dog, [
+      "conductorRa",
+      "conductor_ra",
+      "handlerId",
+      "handler_id",
+    ]);
+    if (!ra) {
+      setConductor(null);
+      return;
+    }
+    getDoc(doc(db, "users", ra)).then((snap) => {
+      if (snap.exists()) {
+        setConductor({ ...snap.data(), _id: snap.id, _source: "users" });
+      } else {
+        setConductor(null);
+      }
+    });
+  }, [data.dog]);
 
   const view = useMemo(() => {
     if (!data.dog) return null;
@@ -344,14 +369,14 @@ export default function K9ProfilePage() {
       const modality =
         profileText(specialty, ["type", "modality", "name"]) ?? specialty._id;
       specialtiesByModality.set(
-        canonicalModality(modality),
+        canônicalModality(modality),
         specialty,
       );
     }
     for (const progress of data.trainingProgress) {
       const modality =
         profileText(progress, ["modality", "type", "name"]) ?? progress._id;
-      const key = canonicalModality(modality);
+      const key = canônicalModality(modality);
       specialtiesByModality.set(key, {
         ...(specialtiesByModality.get(key) ?? {}),
         ...progress,
@@ -367,27 +392,23 @@ export default function K9ProfilePage() {
       "handlerId",
       "handler_id",
     ]);
-    const conductor =
-      data.users.find(
-        (user) =>
-          profileText(user, ["ra", "_id", "id"]) === conductorRa,
-      ) ?? null;
+    // conductor is now fetched via useEffect (QW-2 fix) — do not re-find here
     const weights = [...data.weightRecords].sort(
       (a, b) =>
         (profileRecordDate(b)?.getTime() ?? 0) -
         (profileRecordDate(a)?.getTime() ?? 0),
     );
     const latestWeight = weights[0] ?? null;
-    const canonicalWeight = weightValue(latestWeight);
-    const currentWeight = canonicalWeight ?? profileNumber(dog, ["weight"]);
+    const canônicalWeight = weightValue(latestWeight);
+    const currentWeight = canônicalWeight ?? profileNumber(dog, ["weight"]);
     const idealMin = profileNumber(dog, ["idealWeightMin", "ideal_weight_min"]);
     const idealMax = profileNumber(dog, ["idealWeightMax", "ideal_weight_max"]);
     const weightState =
-      canonicalWeight == null
-        ? { label: "Sem pesagem canonica", tone: "violet" as const }
+      canônicalWeight == null
+        ? { label: "Sem pesagem canônica", tone: "violet" as const }
         : idealMin == null || idealMax == null
           ? { label: "Faixa ideal ausente", tone: "amber" as const }
-          : canonicalWeight >= idealMin && canonicalWeight <= idealMax
+          : canônicalWeight >= idealMin && canônicalWeight <= idealMax
             ? { label: "Dentro da faixa ideal", tone: "green" as const }
             : { label: "Fora da faixa ideal", tone: "amber" as const };
 
@@ -399,7 +420,7 @@ export default function K9ProfilePage() {
     const vaccines = healthEvents.filter(
       (record) => eventType(record) === "vaccination",
     );
-    const clinicalEvents = healthEvents.filter(
+    const clínicalEvents = healthEvents.filter(
       (record) => eventType(record) !== "vaccination",
     );
     const latestVaccine = vaccines[0] ?? null;
@@ -420,7 +441,7 @@ export default function K9ProfilePage() {
       vaccineDate == null
         ? { label: "Sem registro", tone: "violet" as const }
         : vaccineDays == null
-          ? { label: "Prazo nao informado", tone: "slate" as const }
+          ? { label: "Prazo não informado", tone: "slate" as const }
         : vaccineDays < 0
           ? { label: "Vencida", tone: "amber" as const }
           : vaccineDays <= 30
@@ -460,7 +481,7 @@ export default function K9ProfilePage() {
             "healthObservations",
             "professionalClinic",
             "vetName",
-          ]) ?? "Registro de saude",
+          ]) ?? "Registro de saúde",
         id: `health:${record._id}`,
         title: eventTitle(record),
       })),
@@ -476,7 +497,7 @@ export default function K9ProfilePage() {
         date: profileRecordDate(record) ?? new Date(0),
         detail:
           profileText(record, ["location", "local", "result", "status"]) ??
-          "Sessao registrada",
+          "Sessão registrada",
         id: `training:${record._source}:${record._id}`,
         title: sessionTitle(record),
       })),
@@ -502,8 +523,8 @@ export default function K9ProfilePage() {
     return {
       conductor,
       conductorRa,
-      canonicalWeight,
-      clinicalEvents,
+      canônicalWeight,
+      clínicalEvents,
       currentWeight,
       dog,
       documents,
@@ -524,7 +545,8 @@ export default function K9ProfilePage() {
       weights,
       weightState,
     };
-  }, [data]);
+    // conductor is a useState variable; re-run when it arrives from getDoc
+  }, [conductor, data]);
 
   if (data.loading && !data.dog) {
     return <DataState error={null} loading noun="o perfil do K9" />;
@@ -546,9 +568,9 @@ export default function K9ProfilePage() {
         </Link>
         <div className="rounded-3xl border border-dashed border-white/10 p-12 text-center">
           <Dog className="mx-auto h-12 w-12 text-slate-600" />
-          <h1 className="mt-4 text-xl font-black text-white">K9 nao localizado</h1>
+          <h1 className="mt-4 text-xl font-black text-white">K9 não localizado</h1>
           <p className="mt-2 text-sm text-slate-500">
-            O documento dogs/{dogId} nao existe ou nao esta acessivel.
+            O documento dogs/{dogId} não existe ou não está acessível.
           </p>
         </div>
       </div>
@@ -557,12 +579,12 @@ export default function K9ProfilePage() {
 
   const dog = view.dog;
   const name = profileText(dog, ["name", "nome"]) ?? "K9";
-  const breed = profileText(dog, ["breed", "raca"]) ?? "Raca nao informada";
-  const sex = profileText(dog, ["sex", "sexo"]) ?? "Sexo nao informado";
+  const breed = profileText(dog, ["breed", "raça"]) ?? "Raça não informada";
+  const sex = profileText(dog, ["sex", "sexo"]) ?? "Sexo não informado";
   const birthDate = firstDate(dog, ["dateOfBirth", "date_of_birth"]);
   const registration =
     profileText(dog, [
-      "matricula",
+      "matrícula",
       "registrationNumber",
       "registration_number",
       "rga",
@@ -584,7 +606,7 @@ export default function K9ProfilePage() {
       "name",
     ]) ??
     view.conductorRa ??
-    "Nao vinculado";
+    "Não vinculado";
   const conductorPhoto = profileText(view.conductor, [
     "photoUrl",
     "photo_url",
@@ -615,7 +637,7 @@ export default function K9ProfilePage() {
       const date = profileRecordDate(record);
       return {
         date: date ? dateFormatter.format(date) : "--",
-        fullDate: date ? dateTimeFormatter.format(date) : "Data nao informada",
+        fullDate: date ? dateTimeFormatter.format(date) : "Data não informada",
         weight: weightValue(record),
       };
     })
@@ -639,8 +661,8 @@ export default function K9ProfilePage() {
   const previousWeight =
     view.weights.length > 1 ? weightValue(view.weights[1]) : null;
   const weightDelta =
-    view.canonicalWeight != null && previousWeight != null
-      ? view.canonicalWeight - previousWeight
+    view.canônicalWeight != null && previousWeight != null
+      ? view.canônicalWeight - previousWeight
       : null;
 
   function openHealthHub(section: HealthHubSection) {
@@ -671,7 +693,7 @@ export default function K9ProfilePage() {
             Perfil do K9
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Cadastro, formacao, saude e atividade operacional em uma unica visao.
+            Cadastro, formação, saúde e atividade operacional em uma única visão.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -710,7 +732,7 @@ export default function K9ProfilePage() {
             </p>
             <div className="mt-5 grid gap-4 border-y border-white/8 py-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                { icon: Dog, label: "Raca", value: breed },
+                { icon: Dog, label: "Raça", value: breed },
                 { icon: IdCard, label: "Sexo", value: sex },
                 { icon: CalendarDays, label: "Idade", value: ageLabel(birthDate) },
                 {
@@ -762,9 +784,9 @@ export default function K9ProfilePage() {
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <MetricCard
-          detail="status derivado de vacina e proxima dose"
+          detail="status derivado de vacina e próxima dose"
           icon={Syringe}
-          label="Vacinacao"
+          label="Vacinação"
           tone="green"
           value={view.vaccineState.label}
         />
@@ -774,20 +796,20 @@ export default function K9ProfilePage() {
           label="Peso canonico"
           tone="cyan"
           value={
-            view.canonicalWeight == null
+            view.canônicalWeight == null
               ? "--"
-              : `${view.canonicalWeight.toFixed(1)} kg`
+              : `${view.canônicalWeight.toFixed(1)} kg`
           }
         />
         <MetricCard
-          detail="sessoes registradas nos ultimos 30 dias"
+          detail="sessões registradas nos últimos 30 dias"
           icon={Target}
           label="Treinos recentes"
           tone="violet"
           value={String(view.sessions30.length)}
         />
         <MetricCard
-          detail="ocorrencias vinculadas nos ultimos 30 dias"
+          detail="ocorrências vinculadas nos últimos 30 dias"
           icon={ShieldCheck}
           label="Missoes recentes"
           tone="blue"
@@ -812,11 +834,11 @@ export default function K9ProfilePage() {
         <SectionCard title="Resumo do K9">
           <dl className="mt-4 space-y-3 text-xs">
             {[
-              ["Identificacao", registration],
-              ["Microchip", microchip ?? "Nao informado"],
+              ["Identificação", registration],
+              ["Microchip", microchip ?? "Não informado"],
               ["Nascimento", dateLabel(birthDate)],
-              ["Pelagem", color ?? "Nao informada"],
-              ["Situacao cadastral", profileText(dog, ["status"]) ?? "Ativo"],
+              ["Pelagem", color ?? "Não informada"],
+              ["Situação cadastral", profileText(dog, ["status"]) ?? "Ativo"],
             ].map(([label, value]) => (
               <div className="flex justify-between gap-4" key={label}>
                 <dt className="text-slate-500">{label}</dt>
@@ -826,13 +848,13 @@ export default function K9ProfilePage() {
           </dl>
         </SectionCard>
 
-        <SectionCard title="Saude por evidencia">
+        <SectionCard title="Saúde por evidência">
           <div className="mt-4 space-y-3">
             <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-xs text-slate-300">
                   <Syringe className="h-4 w-4 text-emerald-300" />
-                  Vacinacao
+                  Vacinação
                 </span>
                 <StatusPill
                   label={view.vaccineState.label}
@@ -840,7 +862,7 @@ export default function K9ProfilePage() {
                 />
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                Ultima: {dateLabel(view.vaccineDate)} - Proxima:{" "}
+                Última: {dateLabel(view.vaccineDate)} - Próxima:{" "}
                 {dateLabel(view.vaccineDue)}
               </p>
             </div>
@@ -859,13 +881,13 @@ export default function K9ProfilePage() {
                 Ideal:{" "}
                 {view.idealMin != null && view.idealMax != null
                   ? `${view.idealMin.toFixed(1)}-${view.idealMax.toFixed(1)} kg`
-                  : "nao cadastrada"}
+                  : "não cadastrada"}
               </p>
             </div>
             <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
               <div className="flex items-center gap-2 text-xs text-slate-300">
                 <Stethoscope className="h-4 w-4 text-blue-300" />
-                Ultimo exame
+                Último exame
               </div>
               <p className="mt-2 text-sm font-bold text-white">
                 {lastExam
@@ -908,7 +930,7 @@ export default function K9ProfilePage() {
                     </div>
                     <p className="mt-2 text-[11px] text-slate-500">
                       {currentModule
-                        ? `Modulo/fase atual: ${currentModule}`
+                        ? `Módulo/fase atual: ${currentModule}`
                         : "Estado lido do cadastro da especialidade"}
                     </p>
                   </div>
@@ -939,13 +961,13 @@ export default function K9ProfilePage() {
               </p>
               <p className="mt-2 text-xs text-slate-400">
                 {profileText(view.conductor, ["unit", "unidade"]) ??
-                  "Unidade nao informada"}
+                  "Unidade não informada"}
               </p>
             </div>
           </div>
           <div className="mt-5 rounded-xl border border-white/8 bg-white/[0.025] p-3">
             <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-              Natureza do vinculo
+              Natureza do vínculo
             </p>
             <p className="mt-2 text-xs font-semibold text-slate-300">
               Condutor titular registrado em dogs.conductorRa
@@ -966,17 +988,17 @@ export default function K9ProfilePage() {
               </span>
               <div>
                 <h2 className="text-xl font-black text-white">
-                  Prontuario clinico
+                  Prontuário clínico
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  Vacinas, pesagem canonica e evidencias de saude do K9.
+                  Vacinas, pesagem canônica e evidências de saúde do K9.
                 </p>
               </div>
             </div>
             {canWriteHealth ? (
               <button
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-[#031018] transition hover:bg-cyan-200"
-                onClick={() => openHealthHub("clinical")}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] transition hover:bg-cyan-200"
+                onClick={() => openHealthHub("clínical")}
                 type="button"
               >
                 <Plus className="h-4 w-4" />
@@ -997,8 +1019,8 @@ export default function K9ProfilePage() {
                 label: `Peso (${view.weights.length})`,
               },
               {
-                id: "clinical" as const,
-                label: `Atendimentos (${view.clinicalEvents.length})`,
+                id: "clínical" as const,
+                label: `Atendimentos (${view.clínicalEvents.length})`,
               },
               {
                 id: "documents" as const,
@@ -1037,13 +1059,13 @@ export default function K9ProfilePage() {
                     />
                   </div>
                   <p className="mt-4 text-xs uppercase tracking-[0.14em] text-slate-500">
-                    Carteira de vacinacao
+                    Carteira de vacinação
                   </p>
                   <p className="mt-2 text-2xl font-black text-white">
                     {view.vaccines.length} registro(s)
                   </p>
                   <p className="mt-2 text-xs text-slate-500">
-                    Proxima dose: {dateLabel(view.vaccineDue)}
+                    Próxima dose: {dateLabel(view.vaccineDue)}
                   </p>
                   <button
                     className="mt-4 text-xs font-black text-cyan-200"
@@ -1068,22 +1090,22 @@ export default function K9ProfilePage() {
                     Peso atual
                   </p>
                   <p className="mt-2 font-mono text-2xl font-black text-white">
-                    {view.canonicalWeight == null
+                    {view.canônicalWeight == null
                       ? "--"
-                      : `${view.canonicalWeight.toFixed(1)} kg`}
+                      : `${view.canônicalWeight.toFixed(1)} kg`}
                   </p>
                   <p className="mt-2 text-xs text-slate-500">
                     Ideal:{" "}
                     {view.idealMin != null && view.idealMax != null
                       ? `${view.idealMin.toFixed(1)} a ${view.idealMax.toFixed(1)} kg`
-                      : "faixa nao cadastrada"}
+                      : "faixa não cadastrada"}
                   </p>
                   <button
                     className="mt-4 text-xs font-black text-cyan-200"
                     onClick={() => setHealthTab("weight")}
                     type="button"
                   >
-                    Ver evolucao do peso
+                    Ver evolução do peso
                   </button>
                 </article>
               </div>
@@ -1092,10 +1114,10 @@ export default function K9ProfilePage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-black text-white">
-                      Ultimas evidencias clinicas
+                      Últimas evidências clínicas
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Registros reais da subcolecao health_events.
+                      Registros reais da subcoleção health_events.
                     </p>
                   </div>
                   <span className="rounded-full border border-white/10 px-3 py-1 font-mono text-xs text-slate-400">
@@ -1130,7 +1152,7 @@ export default function K9ProfilePage() {
                   ))}
                   {!view.healthEvents.length ? (
                     <p className="py-8 text-center text-sm text-slate-500">
-                      Nenhum evento clinico localizado.
+                      Nenhum evento clínico localizado.
                     </p>
                   ) : null}
                 </div>
@@ -1143,10 +1165,10 @@ export default function K9ProfilePage() {
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h3 className="text-lg font-black text-white">
-                    Carteira de vacinacao
+                    Carteira de vacinação
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Aplicacao, validade e responsabilidade profissional.
+                    Aplicação, validade e responsabilidade profissional.
                   </p>
                 </div>
                 {canWriteHealth ? (
@@ -1189,7 +1211,7 @@ export default function K9ProfilePage() {
                       </div>
                       <div>
                         <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
-                          Proxima dose
+                          Próxima dose
                         </p>
                         <p className="mt-2 font-mono text-sm font-bold text-slate-200">
                           {dateLabel(state.dueDate)}
@@ -1197,15 +1219,15 @@ export default function K9ProfilePage() {
                       </div>
                       <div>
                         <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
-                          Responsavel
+                          Responsável
                         </p>
                         <p className="mt-2 text-sm font-bold text-slate-200">
-                          {profileText(vaccine, ["vetName"]) ?? "Nao informado"}
+                          {profileText(vaccine, ["vetName"]) ?? "Não informado"}
                         </p>
                         <p className="mt-1 font-mono text-[10px] text-slate-500">
                           {profileText(vaccine, ["professionalCrmv"]) ??
                             profileText(vaccine, ["professionalClinic"]) ??
-                            "Sem CRMV/clinica"}
+                            "Sem CRMV/clínica"}
                         </p>
                       </div>
                       <div className="lg:text-right">
@@ -1218,7 +1240,7 @@ export default function K9ProfilePage() {
                   <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center">
                     <Syringe className="mx-auto h-10 w-10 text-slate-700" />
                     <p className="mt-3 text-sm text-slate-500">
-                      Nenhuma vacina localizada no prontuario.
+                      Nenhuma vacina localizada no prontuário.
                     </p>
                   </div>
                 ) : null}
@@ -1231,15 +1253,15 @@ export default function K9ProfilePage() {
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h3 className="text-lg font-black text-white">
-                    Evolucao do peso
+                    Evolução do peso
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Serie canonica de dogs/{dogId}/weight_records.
+                    Serie canônica de dogs/{dogId}/weight_records.
                   </p>
                 </div>
                 {canWriteHealth ? (
                   <button
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2.5 text-sm font-black text-cyan-100"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                     onClick={() => openHealthHub("weight")}
                     type="button"
                   >
@@ -1317,7 +1339,7 @@ export default function K9ProfilePage() {
                     <div className="flex h-[300px] flex-col items-center justify-center text-center">
                       <Scale className="h-10 w-10 text-slate-700" />
                       <p className="mt-3 text-sm text-slate-500">
-                        Nenhuma pesagem canonica localizada.
+                        Nenhuma pesagem canônica localizada.
                       </p>
                     </div>
                   )}
@@ -1327,9 +1349,9 @@ export default function K9ProfilePage() {
                   <article className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
                     <p className="text-xs text-slate-500">Peso atual</p>
                     <p className="mt-2 font-mono text-2xl font-black text-white">
-                      {view.canonicalWeight == null
+                      {view.canônicalWeight == null
                         ? "--"
-                        : `${view.canonicalWeight.toFixed(1)} kg`}
+                        : `${view.canônicalWeight.toFixed(1)} kg`}
                     </p>
                     {weightDelta != null ? (
                       <p
@@ -1348,7 +1370,7 @@ export default function K9ProfilePage() {
                           <TrendingDown className="h-4 w-4" />
                         ) : null}
                         {weightDelta === 0
-                          ? "Sem variacao"
+                          ? "Sem variação"
                           : `${weightDelta > 0 ? "+" : ""}${weightDelta.toFixed(1)} kg`}
                       </p>
                     ) : null}
@@ -1358,14 +1380,14 @@ export default function K9ProfilePage() {
                     <p className="mt-2 font-mono text-lg font-black text-white">
                       {view.idealMin != null && view.idealMax != null
                         ? `${view.idealMin.toFixed(1)}-${view.idealMax.toFixed(1)} kg`
-                        : "Nao cadastrada"}
+                        : "Não cadastrada"}
                     </p>
                     <p className="mt-2 text-xs text-slate-500">
-                      Parametro administrativo do cadastro.
+                      Parâmetro administrativo do cadastro.
                     </p>
                   </article>
                   <article className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-                    <p className="text-xs text-slate-500">Historico</p>
+                    <p className="text-xs text-slate-500">Histórico</p>
                     <p className="mt-2 font-mono text-2xl font-black text-white">
                       {view.weights.length}
                     </p>
@@ -1387,7 +1409,7 @@ export default function K9ProfilePage() {
                     </span>
                     <span className="text-sm text-slate-400">
                       {profileText(record, ["context"])?.replaceAll("_", " ") ??
-                        "Contexto nao informado"}
+                        "Contexto não informado"}
                       {index === 0 ? " - registro atual" : ""}
                     </span>
                     <span className="font-mono text-sm font-black text-white">
@@ -1399,7 +1421,7 @@ export default function K9ProfilePage() {
             </div>
           ) : null}
 
-          {healthTab === "clinical" ? (
+          {healthTab === "clínical" ? (
             <div>
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
@@ -1407,13 +1429,13 @@ export default function K9ProfilePage() {
                     Atendimentos e tratamentos
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Exames, consultas, medicacoes e demais eventos clinicos.
+                    Exames, consultas, medicações e demais eventos clínicos.
                   </p>
                 </div>
                 {canWriteHealth ? (
                   <button
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-300/20 bg-blue-300/[0.07] px-4 py-2.5 text-sm font-black text-blue-100"
-                    onClick={() => openHealthHub("clinical")}
+                    onClick={() => openHealthHub("clínical")}
                     type="button"
                   >
                     <Plus className="h-4 w-4" />
@@ -1423,7 +1445,7 @@ export default function K9ProfilePage() {
               </div>
 
               <div className="mt-5 grid gap-3">
-                {view.clinicalEvents.map((event) => {
+                {view.clínicalEvents.map((event) => {
                   const type = eventType(event);
                   const dueDate = firstDate(event, [
                     "nextDueDate",
@@ -1471,7 +1493,7 @@ export default function K9ProfilePage() {
                           ) : null}
                           {attachmentUrl ? (
                             <a
-                              className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2 text-xs font-black text-cyan-100"
+                              className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                               href={attachmentUrl}
                               rel="noreferrer"
                               target="_blank"
@@ -1489,40 +1511,40 @@ export default function K9ProfilePage() {
                             Profissional
                           </p>
                           <p className="mt-1 text-sm font-bold text-slate-300">
-                            {profileText(event, ["vetName"]) ?? "Nao informado"}
+                            {profileText(event, ["vetName"]) ?? "Não informado"}
                           </p>
                           <p className="mt-1 font-mono text-[10px] text-slate-500">
                             {profileText(event, ["professionalCrmv"]) ??
-                              "CRMV nao informado"}
+                              "CRMV não informado"}
                           </p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
-                            Clinica / unidade
+                            Clínica / unidade
                           </p>
                           <p className="mt-1 text-sm font-bold text-slate-300">
                             {profileText(event, ["professionalClinic"]) ??
-                              "Nao informada"}
+                              "Não informada"}
                           </p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.14em] text-slate-600">
-                            Observacoes
+                            Observações
                           </p>
                           <p className="mt-1 text-sm leading-5 text-slate-400">
                             {profileText(event, ["healthObservations"]) ??
-                              "Nenhuma observacao registrada."}
+                              "Nenhuma observação registrada."}
                           </p>
                         </div>
                       </div>
                     </article>
                   );
                 })}
-                {!view.clinicalEvents.length ? (
+                {!view.clínicalEvents.length ? (
                   <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center">
                     <Stethoscope className="mx-auto h-10 w-10 text-slate-700" />
                     <p className="mt-3 text-sm text-slate-500">
-                      Nenhum atendimento clinico localizado.
+                      Nenhum atendimento clínico localizado.
                     </p>
                   </div>
                 ) : null}
@@ -1538,7 +1560,7 @@ export default function K9ProfilePage() {
                     Laudos e documentos
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Arquivos preservados no prontuario e fontes legadas.
+                    Arquivos preservados no prontuário e fontes legadas.
                   </p>
                 </div>
                 {canWriteHealth ? (
@@ -1587,7 +1609,7 @@ export default function K9ProfilePage() {
                         <div>
                           <p className="text-xs text-slate-500">
                             {profileText(document, ["emissor", "issuer"]) ??
-                              "Emissor nao informado"}
+                              "Emissor não informado"}
                           </p>
                           <p className="mt-1 font-mono text-[10px] text-slate-600">
                             {dateLabel(profileRecordDate(document))}
@@ -1595,7 +1617,7 @@ export default function K9ProfilePage() {
                         </div>
                         {url ? (
                           <a
-                            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2 text-xs font-black text-cyan-100"
+                            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                             href={url}
                             rel="noreferrer"
                             target="_blank"
@@ -1648,7 +1670,7 @@ export default function K9ProfilePage() {
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {profileText(session, ["location", "local"]) ??
-                      "Local nao informado"}
+                      "Local não informado"}
                   </p>
                 </div>
                 <div className="md:text-right">
@@ -1669,7 +1691,7 @@ export default function K9ProfilePage() {
             ))}
             {!view.sessions.length ? (
               <p className="py-8 text-center text-sm text-slate-500">
-                Nenhuma sessao de treino localizada.
+                Nenhuma sessão de treino localizada.
               </p>
             ) : null}
           </div>
@@ -1742,16 +1764,16 @@ export default function K9ProfilePage() {
             ) : (
               <CircleAlert className="h-4 w-4 text-amber-300" />
             )}
-            Evidencia administrativa
+            Evidência administrativa
           </p>
           <p className="mt-3 text-sm font-bold text-white">
             {view.vaccineState.tone === "green" &&
             view.weightState.tone === "green"
               ? "Vacina e peso em conformidade"
-              : "Ha dados de saude a revisar"}
+              : "Há dados de saúde a revisar"}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            Indicador administrativo; nao substitui avaliacao veterinaria.
+            Indicador administrativo; não substitui avaliação veterinária.
           </p>
         </div>
       </section>

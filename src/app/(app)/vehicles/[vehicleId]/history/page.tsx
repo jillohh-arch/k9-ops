@@ -35,8 +35,8 @@ function formatDate(date: Date | null) {
 function sourceLabel(source: string) {
   const labels: Record<string, string> = {
     active_shifts: "Turno ativo",
-    occurrences: "Ocorrencia",
-    shift_logs: "Historico de turno",
+    occurrences: "Ocorrência",
+    shift_logs: "Histórico de turno",
     vehicle_events: "Evento da viatura",
   };
   return labels[source] ?? source;
@@ -73,9 +73,9 @@ export default function VehicleHistoryPage() {
   if (data.loading || data.error || !data.vehicle) {
     return (
       <DataState
-        error={data.error ?? (!data.loading ? "Viatura nao localizada." : null)}
+        error={data.error ?? (!data.loading ? "Viatura não localizada." : null)}
         loading={data.loading}
-        noun="o historico da viatura"
+        noun="o histórico da viatura"
       />
     );
   }
@@ -95,7 +95,7 @@ export default function VehicleHistoryPage() {
           Voltar ao perfil
         </Link>
         <h1 className="mt-3 text-3xl font-black text-white">
-          Historico da Viatura
+          Histórico da Viatura
         </h1>
         <p className="mt-2 text-sm text-slate-400">
           Linha do tempo completa de {label}.
@@ -109,7 +109,7 @@ export default function VehicleHistoryPage() {
             <input
               className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.035] pl-11 pr-4 text-sm text-slate-100 outline-none focus:border-cyan-300/35"
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar no historico..."
+              placeholder="Buscar no histórico..."
               value={search}
             />
           </label>
@@ -121,8 +121,8 @@ export default function VehicleHistoryPage() {
             <option className="bg-[#0b1628]" value="all">Todas as origens</option>
             <option className="bg-[#0b1628]" value="vehicle_events">Eventos da viatura</option>
             <option className="bg-[#0b1628]" value="active_shifts">Turnos ativos</option>
-            <option className="bg-[#0b1628]" value="shift_logs">Historico de turno</option>
-            <option className="bg-[#0b1628]" value="occurrences">Ocorrencias</option>
+            <option className="bg-[#0b1628]" value="shift_logs">Histórico de turno</option>
+            <option className="bg-[#0b1628]" value="occurrences">Ocorrências</option>
           </select>
         </div>
 

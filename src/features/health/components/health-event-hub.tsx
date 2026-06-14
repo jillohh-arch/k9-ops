@@ -23,7 +23,7 @@ import type { HealthDogSummary } from "@/features/health/hooks/use-health-data";
 import { cn } from "@/lib/utils";
 
 export type HealthHubSection =
-  | "clinical"
+  | "clínical"
   | "document"
   | "medication"
   | "vaccination"
@@ -36,7 +36,7 @@ const sections: Array<{
   label: string;
 }> = [
   {
-    description: "Dose aplicada e proximo vencimento",
+    description: "Dose aplicada e próximo vencimento",
     icon: Syringe,
     id: "vaccination",
     label: "Vacina",
@@ -48,16 +48,16 @@ const sections: Array<{
     label: "Pesagem",
   },
   {
-    description: "Exame ou consulta veterinaria",
+    description: "Exame ou consulta veterinária",
     icon: Stethoscope,
-    id: "clinical",
+    id: "clínical",
     label: "Exame / consulta",
   },
   {
     description: "Produto, protocolo ou tratamento",
     icon: Pill,
     id: "medication",
-    label: "Medicacao",
+    label: "Medicação",
   },
   {
     description: "Laudo, atestado ou documento",
@@ -79,7 +79,7 @@ function errorMessage(error: unknown) {
       .replace(/^Firebase:\s*/i, "")
       .replace(/\s*\(functions\/[^)]+\)\.?$/i, "");
   }
-  return "Nao foi possivel salvar o registro.";
+  return "Não foi possível salvar o registro.";
 }
 
 function Field({
@@ -133,7 +133,7 @@ export function HealthEventHub({
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [weightKg, setWeightKg] = useState("");
   const [weightContext, setWeightContext] = useState("canil");
-  const [clinicalType, setClinicalType] =
+  const [clínicalType, setClínicalType] =
     useState<"consultation" | "exam">("exam");
   const [documentType, setDocumentType] = useState("laudo");
   const [documentIssuer, setDocumentIssuer] = useState("");
@@ -159,7 +159,7 @@ export function HealthEventHub({
     setAttachmentFile(null);
     setWeightKg("");
     setWeightContext("canil");
-    setClinicalType("exam");
+    setClínicalType("exam");
     setDocumentType("laudo");
     setDocumentIssuer("");
     setDocumentFile(null);
@@ -227,7 +227,7 @@ export function HealthEventHub({
               ? "vaccination"
               : section === "medication"
                 ? "medication"
-                : clinicalType,
+                : clínicalType,
           vetName,
         });
       }
@@ -260,10 +260,10 @@ export function HealthEventHub({
             </span>
             <div>
               <h2 className="text-xl font-black text-white">
-                Registrar evento de saude
+                Registrar evento de saúde
               </h2>
               <p className="mt-1 text-sm text-slate-400">
-                O registro entra no prontuario e recalcula a prontidao.
+                O registro entra no prontuário e recalcula a prontidão.
               </p>
             </div>
           </div>
@@ -391,8 +391,8 @@ export function HealthEventHub({
                       <option className="bg-[#0b1628]" value="canil">
                         Canil
                       </option>
-                      <option className="bg-[#0b1628]" value="clinica_vet">
-                        Clinica veterinaria
+                      <option className="bg-[#0b1628]" value="clínica_vet">
+                        Clínica veterinária
                       </option>
                       <option className="bg-[#0b1628]" value="casa">
                         Residencia
@@ -418,7 +418,7 @@ export function HealthEventHub({
                     <input
                       className={inputClass}
                       onChange={(event) => setDocumentIssuer(event.target.value)}
-                      placeholder="Clinica ou profissional"
+                      placeholder="Clínica ou profissional"
                       value={documentIssuer}
                     />
                   </Field>
@@ -442,16 +442,16 @@ export function HealthEventHub({
                 </>
               ) : (
                 <>
-                  {section === "clinical" ? (
+                  {section === "clínical" ? (
                     <Field label="Atendimento" required>
                       <select
                         className={inputClass}
                         onChange={(event) =>
-                          setClinicalType(
+                          setClínicalType(
                             event.target.value as "consultation" | "exam",
                           )
                         }
-                        value={clinicalType}
+                        value={clínicalType}
                       >
                         <option className="bg-[#0b1628]" value="exam">
                           Exame
@@ -489,8 +489,8 @@ export function HealthEventHub({
                   <Field
                     label={
                       section === "vaccination"
-                        ? "Proxima dose"
-                        : "Retorno / proxima avaliacao"
+                        ? "Próxima dose"
+                        : "Retorno / próxima avaliação"
                     }
                   >
                     <input
@@ -504,7 +504,7 @@ export function HealthEventHub({
                     <input
                       className={inputClass}
                       onChange={(event) => setVetName(event.target.value)}
-                      placeholder="Nome do veterinario"
+                      placeholder="Nome do veterinário"
                       value={vetName}
                     />
                   </Field>
@@ -516,13 +516,13 @@ export function HealthEventHub({
                       value={professionalCrmv}
                     />
                   </Field>
-                  <Field label="Clinica">
+                  <Field label="Clínica">
                     <input
                       className={inputClass}
                       onChange={(event) =>
                         setProfessionalClinic(event.target.value)
                       }
-                      placeholder="Clinica ou unidade"
+                      placeholder="Clínica ou unidade"
                       value={professionalClinic}
                     />
                   </Field>
@@ -562,16 +562,16 @@ export function HealthEventHub({
               <Field
                 label={
                   section === "document"
-                    ? "Descricao"
+                    ? "Descrição"
                     : section === "weight"
-                      ? "Observacoes da pesagem"
-                      : "Observacoes"
+                      ? "Observações da pesagem"
+                      : "Observações"
                 }
               >
                 <textarea
                   className="min-h-28 w-full resize-y rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35"
                   onChange={(event) => setObservations(event.target.value)}
-                  placeholder="Informacoes relevantes para o prontuario..."
+                  placeholder="Informações relevantes para o prontuário..."
                   value={observations}
                 />
               </Field>
@@ -585,7 +585,7 @@ export function HealthEventHub({
 
             <div className="mt-5 flex flex-col-reverse gap-3 border-t border-white/8 pt-5 sm:flex-row sm:justify-end">
               <button
-                className="rounded-xl border border-white/10 px-5 py-3 text-sm font-bold text-slate-300"
+                className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-5 py-3 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                 disabled={saving}
                 onClick={close}
                 type="button"
@@ -593,7 +593,7 @@ export function HealthEventHub({
                 Cancelar
               </button>
               <button
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-[#031018] shadow-[0_0_28px_rgba(34,211,238,0.16)] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-[0_0_28px_rgba(34,211,238,0.16)] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={saving || dogs.length === 0}
                 type="submit"
               >

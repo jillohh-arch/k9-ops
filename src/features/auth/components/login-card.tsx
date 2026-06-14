@@ -67,7 +67,7 @@ export function LoginCard() {
     setSuccess(null);
 
     if (!ra.trim()) {
-      setError("Informe seu RA antes de solicitar a recuperacao.");
+      setError("Informe seu RA antes de solicitar a recuperação.");
       return;
     }
 
@@ -75,7 +75,7 @@ export function LoginCard() {
 
     try {
       await sendPasswordResetForRa(ra);
-      setSuccess("Enviamos as instrucoes de recuperacao vinculadas ao RA informado.");
+      setSuccess("Enviamos as instruções de recuperação vinculadas ao RA informado.");
     } catch (caughtError) {
       setError(getAuthErrorMessage(caughtError));
     } finally {
@@ -196,7 +196,7 @@ export function LoginCard() {
                 <ShieldCheck className="h-6 w-6" />
               </div>
               <p className="max-w-sm text-sm leading-6 text-cyan-50/70">
-                Ambiente seguro. Acesso monitorado e restrito a usuarios
+                Ambiente seguro. Acesso monitorado e restrito a usuários
                 autorizados.
               </p>
             </div>

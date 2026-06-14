@@ -27,7 +27,6 @@ export type K9ProfileState = {
   specialties: ProfileRecord[];
   trainingProgress: ProfileRecord[];
   trainingSessions: ProfileRecord[];
-  users: ProfileRecord[];
   weightRecords: ProfileRecord[];
 };
 
@@ -127,7 +126,6 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
     useState<NamedRecords>(emptyRecords);
   const [occurrences, setOccurrences] = useState<NamedRecords>(emptyRecords);
   const [documents, setDocuments] = useState<NamedRecords>(emptyRecords);
-  const [users, setUsers] = useState<NamedRecords>(emptyRecords);
 
   useEffect(() => {
     if (!dogId) return;
@@ -210,6 +208,9 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
           key: "dog-training-sessions",
           source: query(collection(db, "dogs", dogId, "training_sessions")),
         },
+        // QW-1: Keep only dogId variants; dog_id variants are redundant
+        // (both produce the same _id key after mergeRecords normalization).
+        // If the database uses dog_id instead, swap the field name below.
         {
           key: "root-training-sessions-dogId",
           source: query(
@@ -218,24 +219,10 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
           ),
         },
         {
-          key: "root-training-sessions-dog_id",
-          source: query(
-            collection(db, "training_sessions"),
-            where("dog_id", "==", dogId),
-          ),
-        },
-        {
           key: "root-trainings-dogId",
           source: query(
             collection(db, "trainings"),
             where("dogId", "==", dogId),
-          ),
-        },
-        {
-          key: "root-trainings-dog_id",
-          source: query(
-            collection(db, "trainings"),
-            where("dog_id", "==", dogId),
           ),
         },
       ],
@@ -292,15 +279,6 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
     );
   }, [dogId]);
 
-  useEffect(
-    () =>
-      subscribeMany(
-        [{ key: "users", source: query(collection(db, "users")) }],
-        setUsers,
-      ),
-    [],
-  );
-
   return useMemo(
     () => ({
       dog,
@@ -313,8 +291,7 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
         trainingProgress.error ??
         trainingSessions.error ??
         occurrences.error ??
-        documents.error ??
-        users.error,
+        documents.error,
       healthEvents: healthEvents.records,
       loading:
         dogLoading ||
@@ -324,13 +301,11 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
         trainingProgress.loading ||
         trainingSessions.loading ||
         occurrences.loading ||
-        documents.loading ||
-        users.loading,
+        documents.loading,
       occurrences: occurrences.records,
       specialties: specialties.records,
       trainingProgress: trainingProgress.records,
       trainingSessions: trainingSessions.records,
-      users: users.records,
       weightRecords: weightRecords.records,
     }),
     [
@@ -343,7 +318,6 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
       specialties,
       trainingProgress,
       trainingSessions,
-      users,
       weightRecords,
     ],
   );

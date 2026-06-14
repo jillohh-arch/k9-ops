@@ -1,5 +1,5 @@
-import { ReportDetailPage } from "@/features/reports/components/report-pages";
+import { ApprehensionsReport } from "@/features/reports/components/apprehensions-report";
 
 export default function ApprehensionsReportPage() {
-  return <ReportDetailPage reportId="apprehensions" />;
+  return <ApprehensionsReport />;
 }

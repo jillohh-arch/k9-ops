@@ -1,5 +1,5 @@
-import { ReportDetailPage } from "@/features/reports/components/report-pages";
+import { EffectiveReport } from "@/features/reports/components/effective-report";
 
 export default function EffectiveReportPage() {
-  return <ReportDetailPage reportId="effective" />;
+  return <EffectiveReport />;
 }

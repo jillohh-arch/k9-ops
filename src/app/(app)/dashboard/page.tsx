@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   collection,
+  collectionGroup,
   onSnapshot,
   query,
   where,
@@ -50,7 +51,7 @@ const summaryCardMeta = [
   },
   {
     collection: "binomials",
-    label: "Binomios",
+    label: "Binômios",
     image: "/assets/card_binomio.png",
     imageClassName: "right-0 -bottom-2 h-[154px] w-[360px]",
     tone: "amber",
@@ -376,7 +377,7 @@ function recordText(record: Record<string, unknown>, fields: string[]) {
 
 function statusOf(record: Record<string, unknown>) {
   return normalizeText(
-    record.status ?? record.current_status ?? record.state ?? record.situacao,
+    record.status ?? record.current_status ?? record.state ?? record.situação,
   );
 }
 
@@ -487,10 +488,10 @@ function weightRecordValue(record: Record<string, unknown>) {
 
 function dogIdealWeightRange(record: Record<string, unknown>) {
   const min = parseNumber(
-    record.idealWeightMin ?? record.ideal_weight_min ?? record.peso_minimo,
+    record.idealWeightMin ?? record.ideal_weight_min ?? record.peso_mínimo,
   );
   const max = parseNumber(
-    record.idealWeightMax ?? record.ideal_weight_max ?? record.peso_maximo,
+    record.idealWeightMax ?? record.ideal_weight_max ?? record.peso_máximo,
   );
 
   return min > 0 && max >= min ? { max, min } : null;
@@ -510,7 +511,7 @@ function occurrenceNature(record: Record<string, unknown>) {
       "nature",
       "natureza",
       "type_code",
-    ]) || "Nao informada"
+    ]) || "Não informada"
   );
 }
 
@@ -765,87 +766,77 @@ export default function DashboardPage() {
       return () => window.clearTimeout(emptyStateTimer);
     }
 
+    // QW-6: Replaced N+1 (2 listeners per dog) with 2 collectionGroup queries.
+    // 2 listeners regardless of dog count vs. 2*N listeners previously.
+    // Filter by dogId in memory using a Set for O(1) lookups.
+    const dogIdSet = new Set(dogIds);
     const healthByDog = new Map<string, DashboardRecord[]>();
     const weightsByDog = new Map<string, DashboardRecord[]>();
-    const pendingHealth = new Set(dogIds);
-    const pendingWeights = new Set(dogIds);
-    const healthErrors = new Map<string, string>();
-    const weightErrors = new Map<string, string>();
+    let healthError: string | null = null;
+    let weightError: string | null = null;
 
-    const unsubscribes = dogIds.flatMap((dogId) => [
-      onSnapshot(
-        collection(db, "dogs", dogId, "health_events"),
-        (snapshot) => {
-          healthByDog.set(
-            dogId,
-            snapshot.docs.map((documentSnapshot) => ({
-              ...documentSnapshot.data(),
-              _dogId: dogId,
-              _id: documentSnapshot.id,
-            })),
-          );
-          pendingHealth.delete(dogId);
-          healthErrors.delete(dogId);
-          setHealthEvents({
-            error:
-              healthErrors.size > 0
-                ? Array.from(healthErrors.values()).join(" | ")
-                : null,
-            loading: pendingHealth.size > 0,
-            records: Array.from(healthByDog.values()).flat(),
-          });
-        },
-        (error) => {
-          pendingHealth.delete(dogId);
-          healthErrors.set(dogId, error.message);
-          setHealthEvents({
-            error: Array.from(healthErrors.values()).join(" | "),
-            loading: pendingHealth.size > 0,
-            records: Array.from(healthByDog.values()).flat(),
-          });
-        },
-      ),
-      onSnapshot(
-        collection(db, "dogs", dogId, "weight_records"),
-        (snapshot) => {
-          weightsByDog.set(
-            dogId,
-            snapshot.docs.map((documentSnapshot) => ({
-              ...documentSnapshot.data(),
-              _dogId: dogId,
-              _id: documentSnapshot.id,
-            })),
-          );
-          pendingWeights.delete(dogId);
-          weightErrors.delete(dogId);
-          setWeightRecords({
-            error:
-              weightErrors.size > 0
-                ? Array.from(weightErrors.values()).join(" | ")
-                : null,
-            loading: pendingWeights.size > 0,
-            records: Array.from(weightsByDog.values()).flat(),
-          });
-        },
-        (error) => {
-          pendingWeights.delete(dogId);
-          weightErrors.set(dogId, error.message);
-          setWeightRecords({
-            error: Array.from(weightErrors.values()).join(" | "),
-            loading: pendingWeights.size > 0,
-            records: Array.from(weightsByDog.values()).flat(),
-          });
-        },
-      ),
-    ]);
+    const updateHealth = () =>
+      setHealthEvents({
+        error: healthError,
+        loading: false,
+        records: Array.from(healthByDog.values()).flat(),
+      });
+    const updateWeight = () =>
+      setWeightRecords({
+        error: weightError,
+        loading: false,
+        records: Array.from(weightsByDog.values()).flat(),
+      });
+
+    const unsubHealth = onSnapshot(
+      collectionGroup(db, "health_events"),
+      (snapshot) => {
+        healthByDog.clear();
+        for (const docSnap of snapshot.docs) {
+          const dogId = dogIdentity(docSnap.data());
+          if (dogId && dogIdSet.has(dogId)) {
+            healthByDog.set(dogId, [
+              ...(healthByDog.get(dogId) ?? []),
+              { ...docSnap.data(), _dogId: dogId, _id: docSnap.id },
+            ]);
+          }
+        }
+        healthError = null;
+        updateHealth();
+      },
+      (error) => {
+        healthError = error.message;
+        updateHealth();
+      },
+    );
+
+    const unsubWeight = onSnapshot(
+      collectionGroup(db, "weight_records"),
+      (snapshot) => {
+        weightsByDog.clear();
+        for (const docSnap of snapshot.docs) {
+          const dogId = dogIdentity(docSnap.data());
+          if (dogId && dogIdSet.has(dogId)) {
+            weightsByDog.set(dogId, [
+              ...(weightsByDog.get(dogId) ?? []),
+              { ...docSnap.data(), _dogId: dogId, _id: docSnap.id },
+            ]);
+          }
+        }
+        weightError = null;
+        updateWeight();
+      },
+      (error) => {
+        weightError = error.message;
+        updateWeight();
+      },
+    );
 
     return () => {
-      unsubscribes.forEach((unsubscribe) => unsubscribe());
+      unsubHealth();
+      unsubWeight();
     };
-  }, [
-    dashboardCollections.dogs.loading,
-    dashboardCollections.dogs.records,
-  ]);
+  }, [dashboardCollections.dogs.loading, dashboardCollections.dogs.records]);
 
   useEffect(() => {
     const ra = profile?.ra?.trim();
@@ -1153,19 +1144,19 @@ export default function DashboardPage() {
 
       if (vaccine === "overdue") {
         issues.push({
-          detail: `dose vencida ha ${formatCount(Math.abs(vaccineDays ?? 0))} dia(s)`,
+          detail: `dose vencida há ${formatCount(Math.abs(vaccineDays ?? 0))} dia(s)`,
           label: "Vacina vencida",
           severity: "critical",
         });
       } else if (vaccine === "due_soon") {
         issues.push({
-          detail: `proxima dose em ${formatCount(vaccineDays ?? 0)} dia(s)`,
+          detail: `próxima dose em ${formatCount(vaccineDays ?? 0)} dia(s)`,
           label: "Vacina a vencer",
           severity: "warning",
         });
       } else if (vaccine === "missing") {
         issues.push({
-          detail: "nenhuma vacinacao localizada",
+          detail: "nenhuma vacinação localizada",
           label: "Sem registro de vacina",
           severity: "missing",
         });
@@ -1185,7 +1176,7 @@ export default function DashboardPage() {
         });
       } else if (weight === "missing_range") {
         issues.push({
-          detail: "cadastre minimo e maximo ideais",
+          detail: "cadastre mínimo e máximo ideais",
           label: "Faixa ideal ausente",
           severity: "missing",
         });
@@ -1195,7 +1186,7 @@ export default function DashboardPage() {
         issues.push({
           detail:
             examAgeDays >= 365
-              ? `ultimo exame ha ${formatCount(examAgeDays)} dias`
+              ? `último exame há ${formatCount(examAgeDays)} dias`
               : `revisar periodicidade; ${formatCount(examAgeDays)} dias`,
           label: examAgeDays >= 365 ? "Exame atrasado" : "Exame a revisar",
           severity: examAgeDays >= 365 ? "critical" : "warning",
@@ -1283,7 +1274,7 @@ export default function DashboardPage() {
       binomials: {
         detail:
           activeVehicleCrews.length > 0
-            ? `${formatCount(activeVehicleCrews.length)} guarnicoes em viatura`
+            ? `${formatCount(activeVehicleCrews.length)} guarnições em viatura`
             : `${formatCount(activeShifts.length)} turnos ativos`,
         error:
           dashboardCollections.activeShifts.error ??
@@ -1409,7 +1400,7 @@ export default function DashboardPage() {
                 </span>
                 <div>
                   <h2 className="text-lg font-bold text-white">
-                    Ocorrencias do periodo
+                    Ocorrências do período
                   </h2>
                   <p className="mt-0.5 text-sm text-slate-400">
                     Volume, andamento e naturezas registradas.
@@ -1426,7 +1417,7 @@ export default function DashboardPage() {
               {
                 label: "Registradas",
                 value: occurrenceMetrics.total,
-                detail: "no periodo",
+                detail: "no período",
                 icon: ListChecks,
                 tone: "cyan",
               },
@@ -1514,14 +1505,14 @@ export default function DashboardPage() {
               </div>
             ) : (
               <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-500">
-                Nenhuma ocorrencia registrada neste periodo.
+                Nenhuma ocorrência registrada neste período.
               </p>
             )}
           </div>
 
           {occurrences.error ? (
             <p className="mt-4 text-xs text-red-200/80">
-              Nao foi possivel carregar ocorrencias: {occurrences.error}
+              Não foi possível carregar ocorrências: {occurrences.error}
             </p>
           ) : null}
         </article>
@@ -1535,7 +1526,7 @@ export default function DashboardPage() {
                 </span>
                 <div>
                   <h2 className="text-lg font-bold text-white">
-                    Pendencias abertas
+                    Pendências abertas
                   </h2>
                   <p className="mt-0.5 text-sm text-slate-400">
                     Itens que ainda exigem acompanhamento.
@@ -1555,28 +1546,28 @@ export default function DashboardPage() {
               {
                 label: "Aguardando assinaturas",
                 value: pendingMetrics.awaitingSignatureOccurrences,
-                detail: "ocorrencias em rodada de assinatura",
+                detail: "ocorrências em rodada de assinatura",
                 icon: FileSignature,
                 tone: "amber",
                 loading: occurrences.loading,
                 error: occurrences.error,
               },
               {
-                label: "Em finalizacao",
+                label: "Em finalização",
                 value: pendingMetrics.finalizingOccurrences,
                 detail:
                   pendingMetrics.finalizedWithPending > 0
                     ? `${formatCount(pendingMetrics.finalizedWithPending)} finalizada(s) com pendencia`
-                    : "rascunhos ainda nao selados",
+                    : "rascunhos ainda não selados",
                 icon: Clock3,
                 tone: "blue",
                 loading: occurrences.loading,
                 error: occurrences.error,
               },
               {
-                label: "Minhas acoes",
+                label: "Minhas ações",
                 value: pendingMetrics.personalActions,
-                detail: "convites, assinaturas e avaliacoes",
+                detail: "convites, assinaturas e avaliações",
                 icon: ListChecks,
                 tone: "red",
                 loading: notifications.loading,
@@ -1584,12 +1575,12 @@ export default function DashboardPage() {
               },
               {
                 label: profile?.isK9Instructor
-                  ? "Evolucoes para avaliar"
-                  : "Minhas evolucoes pendentes",
+                  ? "Evoluções para avaliar"
+                  : "Minhas evoluções pendentes",
                 value: pendingMetrics.pendingPromotions,
                 detail: profile?.isK9Instructor
-                  ? "solicitacoes aguardando instrutor"
-                  : "solicitacoes aguardando decisao",
+                  ? "solicitações aguardando instrutor"
+                  : "solicitações aguardando decisão",
                 icon: GraduationCap,
                 tone: "violet",
                 loading: promotionRequests.loading,
@@ -1622,7 +1613,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    {pending.error ? "dados indisponiveis" : pending.detail}
+                    {pending.error ? "dados indisponíveis" : pending.detail}
                   </p>
                 </div>
               </div>
@@ -1630,8 +1621,8 @@ export default function DashboardPage() {
           </div>
 
           <p className="mt-4 text-xs leading-5 text-slate-500">
-            Pendencias pessoais respeitam as permissoes do usuario logado.
-            Indicadores de ocorrencia representam toda a unidade.
+            Pendências pessoais respeitam as permissões do usuário logado.
+            Indicadores de ocorrência representam toda a unidade.
           </p>
         </article>
       </section>
@@ -1645,10 +1636,10 @@ export default function DashboardPage() {
               </span>
               <div>
                 <h2 className="text-lg font-bold text-white">
-                  Saude e prontidao K9
+                  Saúde e prontidão K9
                 </h2>
                 <p className="mt-0.5 text-sm text-slate-400">
-                  Vacinas, pesagem canonica e exames dos caes ativos.
+                  Vacinas, pesagem canônica e exames dos caes ativos.
                 </p>
               </div>
             </div>
@@ -1657,8 +1648,8 @@ export default function DashboardPage() {
                 {healthLoading
                   ? "..."
                   : healthError
-                    ? "dados indisponiveis"
-                    : `${formatCount(healthMetrics.critical)} criticos`}
+                    ? "dados indisponíveis"
+                    : `${formatCount(healthMetrics.critical)} críticos`}
               </Badge>
               <Badge tone="cyan">
                 {healthLoading
@@ -1674,7 +1665,7 @@ export default function DashboardPage() {
                 <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-200/70">
-                      Prontos por evidencia
+                      Prontos por evidência
                     </p>
                     <div className="mt-3 flex items-baseline gap-2">
                       <span className="font-mono text-5xl font-black text-white">
@@ -1689,7 +1680,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <p className="mt-2 max-w-md text-xs leading-5 text-slate-400">
-                      Criterio: vacinacao vigente e ultimo peso de
+                      Critério: vacinação vigente e último peso de
                       weight_records dentro da faixa ideal cadastrada.
                     </p>
                   </div>
@@ -1710,14 +1701,14 @@ export default function DashboardPage() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {[
                   {
-                    detail: "exigem regularizacao",
+                    detail: "exigem regularização",
                     icon: Syringe,
                     label: "Vacinas vencidas",
                     tone: "red",
                     value: healthMetrics.vaccinesOverdue,
                   },
                   {
-                    detail: "nos proximos 30 dias",
+                    detail: "nos próximos 30 dias",
                     icon: CalendarDays,
                     label: "Vacinas a vencer",
                     tone: "amber",
@@ -1726,7 +1717,7 @@ export default function DashboardPage() {
                   {
                     detail: "fora do intervalo ideal",
                     icon: Scale,
-                    label: "Peso em atencao",
+                    label: "Peso em atenção",
                     tone: "blue",
                     value: healthMetrics.outOfRangeWeight,
                   },
@@ -1776,10 +1767,10 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-bold text-white">
-                    K9 que exigem atencao
+                    K9 que exigem atenção
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Ate 4 prioridades clinicas ou lacunas de cadastro.
+                    Ate 4 prioridades clínicas ou lacunas de cadastro.
                   </p>
                 </div>
                 <Badge tone="slate">{healthMetrics.attention.length} exibidos</Badge>
@@ -1787,11 +1778,11 @@ export default function DashboardPage() {
 
               {healthLoading ? (
                 <div className="mt-4 rounded-2xl border border-dashed border-white/10 p-5 text-sm text-slate-500">
-                  Carregando prontuarios...
+                  Carregando prontuários...
                 </div>
               ) : healthError ? (
                 <div className="mt-4 rounded-2xl border border-red-300/15 bg-red-300/[0.04] p-5 text-sm text-red-200/80">
-                  Nao foi possivel carregar os dados de saude: {healthError}
+                  Não foi possível carregar os dados de saúde: {healthError}
                 </div>
               ) : healthMetrics.attention.length > 0 ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1828,9 +1819,9 @@ export default function DashboardPage() {
                             }
                           >
                             {isCritical
-                              ? "critico"
+                              ? "crítico"
                               : hasWarning
-                                ? "atencao"
+                                ? "atenção"
                                 : "cadastro"}
                           </Badge>
                         </div>
@@ -1860,13 +1851,13 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="mt-4 rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.04] p-5 text-sm text-emerald-200/80">
-                  Nenhuma pendencia calculavel nos prontuarios ativos.
+                  Nenhuma pendência calculável nos prontuários ativos.
                 </div>
               )}
 
               <p className="mt-4 text-xs leading-5 text-slate-500">
-                A prontidao e um indicador administrativo. A avaliacao clinica
-                continua pertencendo ao profissional responsavel.
+                A prontidão e um indicador administrativo. A avaliação clínica
+                continua pertencendo ao profissional responsável.
               </p>
             </div>
           </div>
@@ -1881,7 +1872,7 @@ export default function DashboardPage() {
                 Drogas apreendidas por tipo
               </h2>
               <p className="mt-1 text-sm text-slate-400">
-                Distribuicao total de apreensoes no periodo selecionado.
+                Distribuição total de apreensões no período selecionado.
               </p>
             </div>
             <div className="min-w-[170px] rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-3 text-right shadow-[inset_0_0_24px_rgba(34,211,238,0.05),0_0_28px_rgba(34,211,238,0.06)]">
@@ -1948,12 +1939,12 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-dashed border-cyan-200/16 bg-black/10 p-5 text-sm text-slate-400">
-              Nenhuma apreensao de droga registrada no periodo.
+              Nenhuma apreensão de droga registrada no período.
             </div>
           )}
           {drugStatsError ? (
             <p className="mt-3 text-xs text-red-200/80">
-              Nao foi possivel ler ocorrencias: {drugStatsError}
+              Não foi possível ler ocorrências: {drugStatsError}
             </p>
           ) : null}
         </article>
@@ -1965,7 +1956,7 @@ export default function DashboardPage() {
                 Integridade institucional
               </h2>
               <p className="mt-1 text-sm text-slate-400">
-                Cobertura de selo, assinaturas e correcoes em curso.
+                Cobertura de selo, assinaturas e correções em curso.
               </p>
             </div>
             <div className="text-right">
@@ -1987,7 +1978,7 @@ export default function DashboardPage() {
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             {[
               {
-                label: "Ocorrencias seladas",
+                label: "Ocorrências seladas",
                 value: integrityMetrics.sealed,
                 detail: `${formatCount(integrityMetrics.finalized)} finalizada(s)`,
                 tone: "violet",
@@ -2001,7 +1992,7 @@ export default function DashboardPage() {
                 icon: FileSignature,
               },
               {
-                label: "Correcoes em curso",
+                label: "Correções em curso",
                 value: integrityMetrics.correctionsInProgress,
                 detail: "devolvidas para ajuste",
                 tone: "red",
@@ -2038,7 +2029,7 @@ export default function DashboardPage() {
                   Versoes de hash aplicadas
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Presenca do selo; a validacao criptografica completa ocorre no
+                  Presença do selo; a validação criptográfica completa ocorre no
                   verificador.
                 </p>
               </div>
@@ -2065,7 +2056,7 @@ export default function DashboardPage() {
 
           {occurrences.error ? (
             <p className="mt-4 text-xs text-red-200/80">
-              Nao foi possivel carregar os indicadores de integridade:{" "}
+              Não foi possível carregar os indicadores de integridade:{" "}
               {occurrences.error}
             </p>
           ) : null}

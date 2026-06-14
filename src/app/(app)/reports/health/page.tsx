@@ -1,5 +1,5 @@
-import { ReportDetailPage } from "@/features/reports/components/report-pages";
+import { HealthReport } from "@/features/reports/components/health-report";
 
 export default function HealthReportPage() {
-  return <ReportDetailPage reportId="health" />;
+  return <HealthReport />;
 }

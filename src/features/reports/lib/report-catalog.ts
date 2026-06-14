@@ -20,10 +20,10 @@ export type ReportTone =
   | "violet";
 
 export type ReportCategory =
-  | "Administracao"
+  | "Administraçao"
   | "Logistica"
   | "Operacional"
-  | "Saude";
+  | "Saúde";
 
 export type ReportDefinition = {
   category: ReportCategory;
@@ -45,12 +45,12 @@ export const reportDefinitions: ReportDefinition[] = [
     href: `${reportsBasePath}/occurrences`,
     id: "occurrences",
     indicators: 12,
-    title: "Ocorrencias",
+    title: "Ocorrências",
     tone: "cyan",
   },
   {
     category: "Logistica",
-    description: "Movimentacoes, niveis de estoque, consumo e inventario.",
+    description: "Movimentações, níveis de estoque, consumo e inventário.",
     href: `${reportsBasePath}/inventory`,
     id: "inventory",
     indicators: 9,
@@ -59,7 +59,7 @@ export const reportDefinitions: ReportDefinition[] = [
   },
   {
     category: "Operacional",
-    description: "Efetivo K9, humano, binomios, status e movimentacoes.",
+    description: "Efetivo K9, humano, binômios, status e movimentações.",
     href: `${reportsBasePath}/effective`,
     id: "effective",
     indicators: 11,
@@ -68,16 +68,16 @@ export const reportDefinitions: ReportDefinition[] = [
   },
   {
     category: "Operacional",
-    description: "Drogas e materiais apreendidos por tipo, peso e ocorrencia.",
+    description: "Drogas e materiais apreendidos por tipo, peso e ocorrência.",
     href: `${reportsBasePath}/apprehensions`,
     id: "apprehensions",
     indicators: 7,
-    title: "Apreensoes",
+    title: "Apreensões",
     tone: "amber",
   },
   {
     category: "Logistica",
-    description: "Frota, utilizacao, status, manutencao e documentacao.",
+    description: "Frota, utilização, status, manutenção e documentação.",
     href: `${reportsBasePath}/vehicles`,
     id: "vehicles",
     indicators: 6,
@@ -85,17 +85,17 @@ export const reportDefinitions: ReportDefinition[] = [
     tone: "cyan",
   },
   {
-    category: "Saude",
-    description: "Atendimentos, exames, vacinas e prontidao veterinaria.",
+    category: "Saúde",
+    description: "Atendimentos, exames, vacinas e prontidão veterinária.",
     href: `${reportsBasePath}/health`,
     id: "health",
     indicators: 10,
-    title: "Saude",
+    title: "Saúde",
     tone: "red",
   },
   {
     category: "Operacional",
-    description: "Sessoes, modalidades, evolucao, frequencia e certificacoes.",
+    description: "Sessões, modalidades, evolução, frequência e certificações.",
     href: `${reportsBasePath}/training`,
     id: "training",
     indicators: 8,
@@ -104,15 +104,15 @@ export const reportDefinitions: ReportDefinition[] = [
   },
   {
     category: "Operacional",
-    description: "Desempenho, prontidao e produtividade dos binomios.",
+    description: "Desempenho, prontidão e produtividade dos binômios.",
     href: `${reportsBasePath}/binomials`,
     id: "binomials",
     indicators: 8,
-    title: "Binomios",
+    title: "Binômios",
     tone: "emerald",
   },
   {
-    category: "Administracao",
+    category: "Administraçao",
     description: "Integridade, assinaturas, divergencias e eventos auditados.",
     href: `${reportsBasePath}/audit`,
     id: "audit",
@@ -121,8 +121,8 @@ export const reportDefinitions: ReportDefinition[] = [
     tone: "blue",
   },
   {
-    category: "Administracao",
-    description: "Visao executiva consolidada da produtividade da unidade.",
+    category: "Administraçao",
+    description: "Visão executiva consolidada da produtividade da unidade.",
     href: `${reportsBasePath}/productivity`,
     id: "productivity",
     indicators: 10,
@@ -135,8 +135,8 @@ export const reportCategories: Array<"Todos" | ReportCategory> = [
   "Todos",
   "Operacional",
   "Logistica",
-  "Saude",
-  "Administracao",
+  "Saúde",
+  "Administraçao",
 ];
 
 export function getReportDefinition(id: ReportId) {

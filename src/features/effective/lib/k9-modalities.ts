@@ -1,7 +1,7 @@
-export const canonicalK9Modalities = [
+export const canônicalK9Modalities = [
   { label: "Busca & Captura", value: "busca_captura" },
-  { label: "Deteccao", value: "deteccao" },
-  { label: "Guarda & Protecao", value: "guarda_protecao" },
+  { label: "Detecção", value: "deteccao" },
+  { label: "Guarda & Proteção", value: "guarda_protecao" },
 ] as const;
 
 function modalitySlug(value: string) {
@@ -16,7 +16,7 @@ function modalitySlug(value: string) {
     .replace(/_+/g, "_");
 }
 
-export function canonicalModality(value: string) {
+export function canônicalModality(value: string) {
   const slug = modalitySlug(value);
 
   if (
@@ -46,23 +46,23 @@ export function canonicalModality(value: string) {
   return slug;
 }
 
-export function canonicalModalityLabel(value: string) {
-  const canonical = canonicalModality(value);
+export function canônicalModalityLabel(value: string) {
+  const canônical = canônicalModality(value);
   return (
-    canonicalK9Modalities.find((item) => item.value === canonical)?.label ??
-    canonical
+    canônicalK9Modalities.find((item) => item.value === canônical)?.label ??
+    canônical
       .replaceAll("_", " ")
       .replace(/\b\w/g, (character) => character.toUpperCase())
   );
 }
 
-export function canonicalizeModalities(values: string[]) {
+export function canônicalizeModalities(values: string[]) {
   return Array.from(
-    new Set(values.map(canonicalModality).filter(Boolean)),
+    new Set(values.map(canônicalModality).filter(Boolean)),
   );
 }
 
 export function isCanonicalK9Modality(value: string) {
-  const canonical = canonicalModality(value);
-  return canonicalK9Modalities.some((item) => item.value === canonical);
+  const canônical = canônicalModality(value);
+  return canônicalK9Modalities.some((item) => item.value === canônical);
 }

@@ -37,12 +37,12 @@ function normalize(value: unknown) {
 
 function sourceLabel(source: string) {
   const labels: Record<string, string> = {
-    auditLogs: "Administracao",
-    certifications: "Certificacao",
+    auditLogs: "Administraçao",
+    certifications: "Certificação",
     documents: "Documento",
-    effective_movements: "Movimentacao",
-    occurrences: "Ocorrencia",
-    promotion_requests: "Avaliacao",
+    effective_movements: "Movimentação",
+    occurrences: "Ocorrência",
+    promotion_requests: "Avaliação",
     shift_logs: "Turno",
     trainings: "Treino",
   };
@@ -74,9 +74,9 @@ export default function HumanHistoryPage() {
   if (data.loading || data.error || !data.user) {
     return (
       <DataState
-        error={data.error ?? (!data.loading ? "Agente nao localizado." : null)}
+        error={data.error ?? (!data.loading ? "Agente não localizado." : null)}
         loading={data.loading}
-        noun="o historico humano"
+        noun="o histórico humano"
       />
     );
   }
@@ -96,10 +96,10 @@ export default function HumanHistoryPage() {
             Auditoria funcional
           </p>
           <h1 className="mt-1 text-3xl font-black text-white">
-            Historico do agente
+            Histórico do agente
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Treinos, ocorrencias, turnos, documentos e alteracoes administrativas.
+            Treinos, ocorrências, turnos, documentos e alterações administrativas.
           </p>
         </div>
         <Link
@@ -123,9 +123,9 @@ export default function HumanHistoryPage() {
             <StatusPill label={`RA ${ra}`} tone="blue" />
           </div>
           <p className="mt-2 text-sm text-slate-400">
-            {humanText(data.user, "cargo", "accessLevel") ?? "Funcao nao informada"}
+            {humanText(data.user, "cargo", "accessLevel") ?? "Função não informada"}
             {" · "}
-            {humanText(data.user, "unit") ?? "Lotacao nao informada"}
+            {humanText(data.user, "unit") ?? "Lotação não informada"}
           </p>
         </div>
       </section>
@@ -146,9 +146,9 @@ export default function HumanHistoryPage() {
           value={String(data.trainings.length)}
         />
         <SummaryCard
-          detail="participacoes localizadas"
+          detail="participações localizadas"
           icon={ShieldCheck}
-          label="Ocorrencias"
+          label="Ocorrências"
           tone="violet"
           value={String(data.occurrences.length)}
         />
@@ -271,19 +271,19 @@ export default function HumanHistoryPage() {
                       {humanText(dog, "name", "nome") ?? dog._id}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {humanText(dog, "breed", "raca") ?? "Sem raca informada"}
+                      {humanText(dog, "breed", "raça") ?? "Sem raça informada"}
                     </p>
                   </div>
                 </Link>
               ))}
               {!data.linkedDogs.length ? (
-                <p className="text-sm text-slate-500">Nenhum vinculo atual.</p>
+                <p className="text-sm text-slate-500">Nenhum vínculo atual.</p>
               ) : null}
             </div>
           </section>
           <section className="rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5">
             <h2 className="text-sm font-black text-white">
-              Composicao do historico
+              Composição do histórico
             </h2>
             <div className="mt-4 space-y-3 text-sm">
               {(
@@ -291,12 +291,12 @@ export default function HumanHistoryPage() {
                   { icon: Activity, label: "Treino", total: data.trainings.length },
                   {
                     icon: ShieldCheck,
-                    label: "Ocorrencia",
+                    label: "Ocorrência",
                     total: data.occurrences.length,
                   },
                   {
                     icon: GraduationCap,
-                    label: "Certificacao",
+                    label: "Certificação",
                     total: data.certifications.length,
                   },
                   {

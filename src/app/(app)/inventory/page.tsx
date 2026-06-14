@@ -65,7 +65,7 @@ const inventoryUnits = [
 
 const movementTypes = [
   { id: "entrada", label: "Entrada", icon: ArrowUpCircle },
-  { id: "saida", label: "Saida", icon: ArrowDownCircle },
+  { id: "saida", label: "Saída", icon: ArrowDownCircle },
   { id: "ajuste", label: "Ajuste", icon: RotateCcw },
   { id: "perda", label: "Perda", icon: AlertTriangle },
   { id: "descarte", label: "Descarte", icon: Trash2 },
@@ -85,9 +85,9 @@ const inventoryTabs: Array<{
     label: "Consulta",
   },
   {
-    description: "entradas, saidas e ajustes",
+    description: "entradas, saídas e ajustes",
     id: "movements",
-    label: "Movimentacao",
+    label: "Movimentação",
   },
   {
     description: "itens e categorias",
@@ -263,7 +263,7 @@ export default function InventoryPage() {
 
   function startNewItem() {
     if (!canCreateInventory) {
-      setFormError("Seu perfil nao permite cadastrar itens de estoque.");
+      setFormError("Seu perfil não permite cadastrar itens de estoque.");
       return;
     }
     setActiveTab("catalog");
@@ -272,14 +272,14 @@ export default function InventoryPage() {
     setItemValues({
       ...emptyInventoryItemFormValues,
       categoryId: categories[0]?.id ?? "alimentacao",
-      categoryName: categories[0]?.name ?? "Alimentacao",
+      categoryName: categories[0]?.name ?? "Alimentação",
     });
     setFormError(null);
   }
 
   function startEditItem(item: InventoryItem) {
     if (!canEditInventory) {
-      setFormError("Seu perfil nao permite editar itens de estoque.");
+      setFormError("Seu perfil não permite editar itens de estoque.");
       return;
     }
     setActiveTab("catalog");
@@ -292,7 +292,7 @@ export default function InventoryPage() {
 
   function startMovement(item: InventoryItem, type = "saida") {
     if (!canCreateInventory) {
-      setFormError("Seu perfil nao permite registrar movimentacoes de estoque.");
+      setFormError("Seu perfil não permite registrar movimentações de estoque.");
       return;
     }
     setActiveTab("movements");
@@ -307,14 +307,14 @@ export default function InventoryPage() {
 
   async function handleSeedDefaults() {
     if (!canCreateInventory) {
-      setFormError("Seu perfil nao permite conferir/criar categorias.");
+      setFormError("Seu perfil não permite conferir/criar categorias.");
       return;
     }
     setSeeding(true);
     setFormError(null);
     try {
       const seeded = await seedInventoryDefaults();
-      setMessage(`${seeded} categorias padrao conferidas no Firebase.`);
+      setMessage(`${seeded} categorias padrão conferidas no Firebase.`);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -325,7 +325,7 @@ export default function InventoryPage() {
   async function handleSaveCategory(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canCreateInventory) {
-      setFormError("Seu perfil nao permite criar categorias de estoque.");
+      setFormError("Seu perfil não permite criar categorias de estoque.");
       return;
     }
     if (!categoryValues.name.trim()) {
@@ -350,8 +350,8 @@ export default function InventoryPage() {
     if (!canSaveInventoryItem) {
       setFormError(
         itemMode === "create"
-          ? "Seu perfil nao permite cadastrar itens de estoque."
-          : "Seu perfil nao permite editar itens de estoque.",
+          ? "Seu perfil não permite cadastrar itens de estoque."
+          : "Seu perfil não permite editar itens de estoque.",
       );
       return;
     }
@@ -378,7 +378,7 @@ export default function InventoryPage() {
 
   async function handleArchiveItem(item: InventoryItem) {
     if (!canArchiveInventory) {
-      setFormError("Seu perfil nao permite arquivar itens de estoque.");
+      setFormError("Seu perfil não permite arquivar itens de estoque.");
       return;
     }
     const reason = window.prompt(`Motivo para arquivar ${item.name}:`);
@@ -396,7 +396,7 @@ export default function InventoryPage() {
   async function handleCreateMovement(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canCreateInventory) {
-      setFormError("Seu perfil nao permite registrar movimentacoes de estoque.");
+      setFormError("Seu perfil não permite registrar movimentações de estoque.");
       return;
     }
     if (!movementValues.itemId) {
@@ -404,7 +404,7 @@ export default function InventoryPage() {
       return;
     }
     if (!movementValues.quantity.trim() || !movementValues.reason.trim()) {
-      setFormError("Informe quantidade e motivo da movimentacao.");
+      setFormError("Informe quantidade e motivo da movimentação.");
       return;
     }
     setSavingMovement(true);
@@ -412,7 +412,7 @@ export default function InventoryPage() {
     try {
       const response = await createInventoryMovement(movementValues);
       setMessage(
-        `Movimentacao registrada. Saldo atual: ${numberText(
+        `Movimentação registrada. Saldo atual: ${numberText(
           Number(response.balance_after ?? 0),
           movementValues.unit,
         )}.`,
@@ -436,13 +436,13 @@ export default function InventoryPage() {
             Controle de insumos K9
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
-            Cadastre itens, registre entradas e saidas auditaveis e acompanhe
-            saldo minimo, validade e consumo operacional.
+            Cadastre itens, registre entradas e saídas auditáveis e acompanhe
+            saldo mínimo, validade e consumo operacional.
           </p>
         </div>
         {canCreateInventory ? (
           <button
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-5 py-3 text-sm font-black text-cyan-100 transition hover:border-cyan-300/35"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-5 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-300/[0.12]"
             disabled={seeding}
             onClick={handleSeedDefaults}
             type="button"
@@ -476,19 +476,19 @@ export default function InventoryPage() {
         <StatCard
           detail="baixo, zerado ou vencido"
           icon={AlertTriangle}
-          title="Criticos"
+          title="Críticos"
           tone={summary.criticalItems.length ? "red" : "emerald"}
           value={loading ? "..." : String(summary.criticalItems.length)}
         />
         <StatCard
-          detail="vencem nos proximos 30 dias"
+          detail="vencem nos próximos 30 dias"
           icon={ClipboardList}
-          title="Validade proxima"
+          title="Validade próxima"
           tone={summary.expiringItems.length ? "amber" : "cyan"}
           value={loading ? "..." : String(summary.expiringItems.length)}
         />
         <StatCard
-          detail="somatorio de saidas/perdas"
+          detail="somatorio de saídas/perdas"
           icon={ArrowDownCircle}
           title="Consumo 30 dias"
           tone="amber"
@@ -538,12 +538,12 @@ export default function InventoryPage() {
               <div>
                 <h2 className="text-xl font-black text-white">Itens cadastrados</h2>
                 <p className="text-sm text-slate-500">
-                  Saldo atual calculado por movimentacoes.
+                  Saldo atual calculado por movimentações.
                 </p>
               </div>
               {canCreateInventory ? (
                 <button
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-[#041018]"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200"
                   onClick={startNewItem}
                   type="button"
                 >
@@ -621,7 +621,7 @@ export default function InventoryPage() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-slate-500">Minimo</p>
+                          <p className="text-slate-500">Mínimo</p>
                           <p className="font-mono font-bold text-slate-200">
                             {numberText(item.minimumQuantity, item.unit)}
                           </p>
@@ -637,7 +637,7 @@ export default function InventoryPage() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       {canEditInventory ? (
                         <button
-                          className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-300 transition hover:border-cyan-300/30 hover:text-cyan-100"
+                          className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-300/[0.12]"
                           onClick={() => startEditItem(item)}
                           type="button"
                         >
@@ -658,13 +658,13 @@ export default function InventoryPage() {
                             onClick={() => startMovement(item, "saida")}
                             type="button"
                           >
-                            Saida
+                            Saída
                           </button>
                         </>
                       ) : null}
                       {canArchiveInventory ? (
                         <button
-                          className="rounded-xl border border-red-300/20 px-3 py-2 text-xs font-bold text-red-200"
+                          className="rounded-xl border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-400/[0.18]"
                           onClick={() => handleArchiveItem(item)}
                           type="button"
                         >
@@ -686,9 +686,9 @@ export default function InventoryPage() {
           >
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-black text-white">Movimentacoes recentes</h2>
+                <h2 className="text-xl font-black text-white">Movimentações recentes</h2>
                 <p className="text-sm text-slate-500">
-                  Historico auditavel das entradas e saidas.
+                  Histórico auditável das entradas e saídas.
                 </p>
               </div>
               <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-bold text-slate-400">
@@ -729,7 +729,7 @@ export default function InventoryPage() {
               ))}
               {movements.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">
-                  Nenhuma movimentacao registrada ainda.
+                  Nenhuma movimentação registrada ainda.
                 </div>
               ) : null}
             </div>
@@ -750,7 +750,7 @@ export default function InventoryPage() {
                   {itemMode === "create" ? "Novo item" : "Editar item"}
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Saldo inicial vira movimentacao auditada.
+                  Saldo inicial vira movimentação auditada.
                 </p>
               </div>
               <span className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-200">
@@ -763,7 +763,7 @@ export default function InventoryPage() {
                 <input
                   className={inputClass}
                   onChange={(event) => setItemField("name", event.target.value)}
-                  placeholder="Ex.: Racao operacional premium"
+                  placeholder="Ex.: Raçao operacional premium"
                   value={itemValues.name}
                 />
               </Field>
@@ -805,7 +805,7 @@ export default function InventoryPage() {
                 </Field>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Estoque minimo">
+                <Field label="Estoque mínimo">
                   <input
                     className={inputClass}
                     inputMode="decimal"
@@ -817,7 +817,7 @@ export default function InventoryPage() {
                   />
                 </Field>
                 <Field
-                  hint={itemMode === "edit" ? "Na edicao, use movimentacao." : undefined}
+                  hint={itemMode === "edit" ? "Na edição, use movimentação." : undefined}
                   label="Saldo inicial"
                 >
                   <input
@@ -843,7 +843,7 @@ export default function InventoryPage() {
                     value={itemValues.supplierName}
                   />
                 </Field>
-                <Field label="Localizacao">
+                <Field label="Localização">
                   <input
                     className={inputClass}
                     onChange={(event) =>
@@ -874,11 +874,11 @@ export default function InventoryPage() {
                   />
                 </Field>
               </div>
-              <Field label="Observacoes">
+              <Field label="Observações">
                 <textarea
                   className={textareaClass}
                   onChange={(event) => setItemField("notes", event.target.value)}
-                  placeholder="Detalhes de uso, especificacao, restricoes..."
+                  placeholder="Detalhes de uso, especificação, restrições..."
                   value={itemValues.notes}
                 />
               </Field>
@@ -891,7 +891,7 @@ export default function InventoryPage() {
                 Item ativo
               </label>
               <button
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-sm font-black text-[#041018] disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200 disabled:opacity-50"
                 disabled={savingItem || !canSaveInventoryItem}
                 type="submit"
               >
@@ -913,7 +913,7 @@ export default function InventoryPage() {
               <div>
                 <h2 className="text-xl font-black text-white">Movimentar estoque</h2>
                 <p className="text-sm text-slate-500">
-                  Entrada, saida ou ajuste com trilha.
+                  Entrada, saída ou ajuste com trilha.
                 </p>
               </div>
               <span className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-emerald-200">
@@ -1055,23 +1055,23 @@ export default function InventoryPage() {
                   </select>
                 </Field>
               </div>
-              <Field label="Observacoes">
+              <Field label="Observações">
                 <textarea
                   className={textareaClass}
                   onChange={(event) =>
                     setMovementField("notes", event.target.value)
                   }
-                  placeholder="Detalhes da movimentacao..."
+                  placeholder="Detalhes da movimentação..."
                   value={movementValues.notes}
                 />
               </Field>
               <button
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 text-sm font-black text-[#041018] disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200 disabled:opacity-50"
                 disabled={savingMovement}
                 type="submit"
               >
                 {savingMovement ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Registrar movimentacao
+                Registrar movimentação
               </button>
             </div>
             </form>
@@ -1087,7 +1087,7 @@ export default function InventoryPage() {
             >
               <h2 className="text-lg font-black text-white">Nova categoria</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Para insumos que nao cabem nas categorias padrao.
+                Para insumos que não cabem nas categorias padrão.
               </p>
               <div className="mt-4 space-y-3">
                 <Field label="Nome">
@@ -1103,7 +1103,7 @@ export default function InventoryPage() {
                     value={categoryValues.name}
                   />
                 </Field>
-                <Field label="Descricao">
+                <Field label="Descrição">
                   <input
                     className={inputClass}
                     onChange={(event) =>
@@ -1117,7 +1117,7 @@ export default function InventoryPage() {
                   />
                 </Field>
                 <button
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200 disabled:opacity-50"
                   disabled={savingCategory}
                   type="submit"
                 >

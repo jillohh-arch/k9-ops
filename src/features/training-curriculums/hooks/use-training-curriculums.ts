@@ -14,9 +14,9 @@ import {
 } from "react";
 
 import {
-  canonicalK9Modalities,
-  canonicalModality,
-  canonicalModalityLabel,
+  canônicalK9Modalities,
+  canônicalModality,
+  canônicalModalityLabel,
 } from "@/features/effective/lib/k9-modalities";
 import { db } from "@/lib/firebase/client";
 
@@ -385,7 +385,7 @@ export function useTrainingCurriculums(): TrainingCurriculumsData {
             .length,
           title:
             text(record, "title", "label", "name") ||
-            `Modulo ${record._id}`,
+            `Módulo ${record._id}`,
         };
         accumulator[programId] = [
           ...(accumulator[programId] ?? []),
@@ -401,7 +401,7 @@ export function useTrainingCurriculums(): TrainingCurriculumsData {
     const programs = programsState.records
       .filter((record) => !isDeleted(record))
       .map((record): CurriculumProgram => {
-        const modality = canonicalModality(
+        const modality = canônicalModality(
           text(record, "modality", "modality_id") || record._id,
         );
         return {
@@ -410,17 +410,17 @@ export function useTrainingCurriculums(): TrainingCurriculumsData {
           id: record._id,
           label:
             text(record, "label", "name", "title") ||
-            canonicalModalityLabel(modality),
+            canônicalModalityLabel(modality),
           modality,
           modules: modulesByProgram[record._id] ?? [],
           version: text(record, "version", "program_version") || "v1",
         };
       })
       .sort((a, b) => {
-        const orderA = canonicalK9Modalities.findIndex(
+        const orderA = canônicalK9Modalities.findIndex(
           (item) => item.value === a.modality,
         );
-        const orderB = canonicalK9Modalities.findIndex(
+        const orderB = canônicalK9Modalities.findIndex(
           (item) => item.value === b.modality,
         );
         if (orderA !== orderB) return orderA - orderB;

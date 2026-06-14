@@ -148,29 +148,29 @@ export default function HumansPage() {
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
         <EffectiveHeader
-          description="Pessoas, funcoes e disponibilidade operacional da equipe."
+          description="Pessoas, funções e disponibilidade operacional da equipe."
           title="Efetivo Humano"
         />
         <div className="flex flex-wrap gap-3">
           {canEditHuman ? (
             <>
               <Link
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300"
+                className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                 href={paths.humanCertifications}
               >
-                <FileBadge className="h-4 w-4" /> Certificacoes
+                <FileBadge className="h-4 w-4" /> Certificações
               </Link>
               <Link
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300"
+                className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                 href={paths.humanMovements}
               >
-                <MoveRight className="h-4 w-4" /> Movimentacoes
+                <MoveRight className="h-4 w-4" /> Movimentações
               </Link>
             </>
           ) : null}
           {canCreateHuman ? (
             <Link
-              className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-sm font-black text-[#041018]"
+              className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-cyan-200 shadow-[0_0_24px_rgba(77,208,225,0.24)]"
               href={paths.humanNew}
             >
               <Plus className="h-4 w-4" /> Novo agente
@@ -181,7 +181,7 @@ export default function HumansPage() {
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <SummaryCard
-          detail="total visivel na unidade"
+          detail="total visível na unidade"
           icon={Users}
           label="Agentes cadastrados"
           tone="cyan"
@@ -195,7 +195,7 @@ export default function HumansPage() {
           value={loading ? "..." : String(active)}
         />
         <SummaryCard
-          detail="por funcao ou vinculo com K9"
+          detail="por função ou vínculo com K9"
           icon={Dog}
           label="Condutores"
           tone="blue"
@@ -229,10 +229,10 @@ export default function HumansPage() {
           value={status}
         />
         <FilterSelect
-          label="Funcao"
+          label="Função"
           onChange={(value) => updateFilter(setRole, value)}
           options={[
-            { label: "Funcao: Todas", value: "all" },
+            { label: "Função: Todas", value: "all" },
             ...roleOptions,
           ]}
           value={role}
@@ -307,7 +307,7 @@ export default function HumansPage() {
                         {user.accessLevel}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {user.unit ?? "Unidade nao informada"}
+                        {user.unit ?? "Unidade não informada"}
                       </p>
                       {user.fullName && user.fullName !== user.callsign ? (
                         <p className="mt-2 truncate text-xs text-slate-500">
@@ -356,14 +356,14 @@ export default function HumansPage() {
                     )}
                   >
                     <Link
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2.5 text-xs font-bold text-cyan-200 lg:flex-none"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/[0.12] lg:flex-none"
                       href={`/humans/${encodeURIComponent(user.ra)}`}
                     >
                       <Eye className="h-4 w-4" /> Ver perfil
                     </Link>
                     {canEditHuman ? (
                       <Link
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-bold text-slate-300 lg:flex-none"
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/[0.12] lg:flex-none"
                         href={`/humans/${encodeURIComponent(user.ra)}/edit`}
                       >
                         <Pencil className="h-4 w-4" /> Editar

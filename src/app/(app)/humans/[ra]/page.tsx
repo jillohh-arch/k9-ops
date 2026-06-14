@@ -19,6 +19,7 @@ import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
+import { HumanManagementPanel } from "@/features/effective/components/human-management-panel";
 import {
   HumanMovementDialog,
   HumanRecordDialog,
@@ -56,19 +57,19 @@ function eventPresentation(record: HumanRecord) {
   if (record._source === "occurrences") {
     return {
       label:
-        humanText(record, "type_name", "type_code") ?? "Ocorrencia atendida",
+        humanText(record, "type_name", "type_code") ?? "Ocorrência atendida",
       tone: "violet" as const,
     };
   }
   if (record._source === "effective_movements") {
     return {
-      label: humanText(record, "movement_type") ?? "Movimentacao funcional",
+      label: humanText(record, "movement_type") ?? "Movimentação funcional",
       tone: "amber" as const,
     };
   }
   if (record._source === "certifications") {
     return {
-      label: humanText(record, "name") ?? "Certificacao registrada",
+      label: humanText(record, "name") ?? "Certificação registrada",
       tone: "green" as const,
     };
   }
@@ -81,7 +82,7 @@ function eventPresentation(record: HumanRecord) {
   return {
     label:
       humanText(record, "summary", "action", "status") ??
-      "Atualizacao operacional",
+      "Atualização operacional",
     tone: "slate" as const,
   };
 }
@@ -123,7 +124,7 @@ export default function HumanProfilePage() {
   if (data.loading || data.error || !data.user) {
     return (
       <DataState
-        error={data.error ?? (!data.loading ? "Agente nao localizado." : null)}
+        error={data.error ?? (!data.loading ? "Agente não localizado." : null)}
         loading={data.loading}
         noun="o perfil humano"
       />
@@ -161,7 +162,7 @@ export default function HumanProfilePage() {
             Perfil do agente
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Cadastro, vinculos e historico operacional rastreavel.
+            Cadastro, vínculos e histórico operacional rastreável.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -177,15 +178,15 @@ export default function HumanProfilePage() {
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300"
             href={`/humans/${encodeURIComponent(ra)}/history`}
           >
-            <History className="h-4 w-4" /> Ver historico
+            <History className="h-4 w-4" /> Ver histórico
           </Link>
           {canEditHuman ? (
             <button
-              className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-[#041018]"
+              className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200"
               onClick={() => setDialog("movement")}
               type="button"
             >
-              <Plus className="h-4 w-4" /> Movimentacao
+              <Plus className="h-4 w-4" /> Movimentação
             </button>
           ) : null}
         </div>
@@ -216,13 +217,13 @@ export default function HumanProfilePage() {
               {[
                 ["RA", ra],
                 [
-                  "Funcao",
+                  "Função",
                   humanText(user, "cargo", "role", "accessLevel") ?? "--",
                 ],
-                ["Lotacao", humanText(user, "unit", "unidade") ?? "--"],
+                ["Lotação", humanText(user, "unit", "unidade") ?? "--"],
                 ["Equipe", humanText(user, "team", "equipe") ?? "--"],
                 [
-                  "Posto / Graduacao",
+                  "Posto / Graduação",
                   humanText(user, "rank", "posto", "graduacao") ?? "--",
                 ],
                 [
@@ -254,7 +255,7 @@ export default function HumanProfilePage() {
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <SummaryCard
-          detail="vinculos titulares no cadastro"
+          detail="vínculos titulares no cadastro"
           icon={Dog}
           label="K9 vinculados"
           tone="cyan"
@@ -268,16 +269,16 @@ export default function HumanProfilePage() {
           value={String(data.trainings.length)}
         />
         <SummaryCard
-          detail="participacao principal ou equipe"
+          detail="participação principal ou equipe"
           icon={ShieldCheck}
-          label="Ocorrencias"
+          label="Ocorrências"
           tone="violet"
           value={String(data.occurrences.length)}
         />
         <SummaryCard
-          detail="cursos e habilitacoes"
+          detail="cursos e habilitações"
           icon={GraduationCap}
-          label="Certificacoes"
+          label="Certificações"
           tone="green"
           value={String(data.certifications.length)}
         />
@@ -303,9 +304,9 @@ export default function HumanProfilePage() {
               </div>
             ))}
           </div>
-          {humanText(user, "notes", "observacoes") ? (
+          {humanText(user, "notes", "observações") ? (
             <p className="mt-5 border-t border-white/8 pt-4 text-xs leading-5 text-slate-400">
-              {humanText(user, "notes", "observacoes")}
+              {humanText(user, "notes", "observações")}
             </p>
           ) : null}
         </Panel>
@@ -332,11 +333,11 @@ export default function HumanProfilePage() {
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-400">
               <CalendarDays className="h-4 w-4 text-cyan-300/60" />
-              {humanText(user, "shift_label") ?? "Jornada nao cadastrada"}
+              {humanText(user, "shift_label") ?? "Jornada não cadastrada"}
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-400">
               <MapPin className="h-4 w-4 text-cyan-300/60" />
-              {humanText(user, "unit") ?? "Lotacao nao cadastrada"}
+              {humanText(user, "unit") ?? "Lotação não cadastrada"}
             </div>
           </div>
         </Panel>
@@ -365,7 +366,7 @@ export default function HumanProfilePage() {
                       {humanText(dog, "name", "nome") ?? dog._id}
                     </p>
                     <p className="mt-1 truncate text-xs text-slate-500">
-                      {humanText(dog, "breed", "raca") ?? "Raca nao informada"}
+                      {humanText(dog, "breed", "raça") ?? "Raça não informada"}
                     </p>
                   </div>
                 </Link>
@@ -378,7 +379,7 @@ export default function HumanProfilePage() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Habilitacoes e documentos">
+        <Panel title="Habilitações e documentos">
           {canEditHuman ? (
             <div className="mt-4 flex flex-wrap gap-2">
               <button
@@ -386,7 +387,7 @@ export default function HumanProfilePage() {
                 onClick={() => setDialog("certification")}
                 type="button"
               >
-                <GraduationCap className="h-4 w-4" /> Nova certificacao
+                <GraduationCap className="h-4 w-4" /> Nova certificação
               </button>
               <button
                 className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-300"
@@ -413,7 +414,7 @@ export default function HumanProfilePage() {
                       {humanText(record, "issuer", "type") ??
                         (record._source === "documents"
                           ? "Documento"
-                          : "Certificacao")}
+                          : "Certificação")}
                     </p>
                   </div>
                   <span className="font-mono text-[11px] text-slate-500">
@@ -423,7 +424,7 @@ export default function HumanProfilePage() {
               ))}
             {!data.certifications.length && !data.documents.length ? (
               <p className="py-4 text-sm text-slate-500">
-                Nenhuma certificacao ou documento cadastrado.
+                Nenhuma certificação ou documento cadastrado.
               </p>
             ) : null}
           </div>
@@ -485,7 +486,7 @@ export default function HumanProfilePage() {
                     ) ?? "Treino"}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {humanText(training, "location") ?? "Local nao informado"}
+                    {humanText(training, "location") ?? "Local não informado"}
                   </p>
                 </div>
                 <p className="text-sm font-semibold text-cyan-100 md:text-right">
@@ -500,6 +501,8 @@ export default function HumanProfilePage() {
           )}
         </div>
       </Panel>
+
+      <HumanManagementPanel ra={ra} userName={callsign} />
 
       {dialog === "certification" || dialog === "document" ? (
         <HumanRecordDialog

@@ -21,11 +21,12 @@ import type { LucideIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { canonicalModalityLabel } from "@/features/effective/lib/k9-modalities";
+import { canônicalModalityLabel } from "@/features/effective/lib/k9-modalities";
 import {
   useTrainingCurriculums,
   type CurriculumProgram,
 } from "@/features/training-curriculums/hooks/use-training-curriculums";
+import { hasRealValue } from "@/features/training/components/training-matrix-utils";
 import {
   useTrainingData,
   type TrainingDogSummary,
@@ -43,7 +44,7 @@ type ModalityView = {
   value: string;
 };
 
-type CriterionStatus = {
+type CritérionStatus = {
   current: string;
   detail: string;
   icon: LucideIcon;
@@ -64,19 +65,19 @@ const modalityViews: ModalityView[] = [
   },
   {
     icon: Crosshair,
-    label: "Deteccao",
+    label: "Detecção",
     tone: "emerald",
     value: "deteccao",
   },
   {
     icon: ShieldCheck,
-    label: "Guarda & Protecao",
+    label: "Guarda & Proteção",
     tone: "amber",
     value: "guarda_protecao",
   },
   {
     icon: Dog,
-    label: "Obediencia",
+    label: "Obediência",
     tone: "violet",
     value: "obediencia",
   },
@@ -225,7 +226,7 @@ function emptyCell(modality: ModalityView): TrainingMatrixCell {
     sessionCount: 0,
     source: "none",
     status: "not_started",
-    statusLabel: "Nao iniciado",
+    statusLabel: "Não iniciado",
     tone: "slate",
   };
 }
@@ -299,35 +300,74 @@ function ProgressBar({
   );
 }
 
-function CriterionCard({ criterion }: { criterion: CriterionStatus }) {
+function CritérionCard({ criterion }: { criterion: CritérionStatus }) {
   const Icon = criterion.icon;
+  const hasTarget =
+    criterion.target &&
+    hasRealValue(criterion.target) &&
+    criterion.target !== "--";
+
+  const borderTone = criterion.ok ? criterion.tone : "amber";
+
+  const glowClasses: Record<string, string> = {
+    amber: "shadow-[0_0_24px_rgba(251,191,36,0.28)]",
+    blue: "shadow-[0_0_24px_rgba(96,165,250,0.28)]",
+    cyan: "shadow-[0_0_24px_rgba(34,211,238,0.28)]",
+    emerald: "shadow-[0_0_24px_rgba(52,211,153,0.28)]",
+    red: "shadow-[0_0_24px_rgba(248,113,113,0.28)]",
+    slate: "",
+    violet: "shadow-[0_0_24px_rgba(167,139,250,0.28)]",
+  };
 
   return (
     <article
       className={cn(
-        "rounded-[1.25rem] border p-4",
-        criterion.ok ? toneClasses[criterion.tone] : toneClasses.amber,
+        "rounded-[1.25rem] border p-4 transition",
+        toneClasses[borderTone],
+        criterion.ok && glowClasses[borderTone],
       )}
     >
       <div className="flex items-start gap-3">
-        <Icon className="h-6 w-6 shrink-0" />
+        <span
+          className={cn(
+            "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border",
+            toneClasses[criterion.ok ? criterion.tone : "amber"],
+          )}
+        >
+          <Icon className="h-5 w-5" />
+        </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-slate-300">{criterion.label}</p>
-          <p className="mt-3 font-mono text-3xl font-black text-white">
-            {criterion.current}
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+            {criterion.label}
           </p>
-          <p className="mt-1 text-xs text-slate-400">{criterion.detail}</p>
+          <p className="mt-2 font-mono text-4xl font-black leading-none text-white">
+            {hasRealValue(criterion.current) ? criterion.current : "—"}
+          </p>
+          <p className="mt-1.5 text-xs text-slate-400">{criterion.detail}</p>
           <div className="mt-3">
             <ProgressBar
               className={cn(
-                "bg-gradient-to-r",
+                "h-2.5 bg-gradient-to-r",
                 gradientClasses[criterion.ok ? criterion.tone : "amber"],
               )}
               value={criterion.progress}
             />
           </div>
+          <p className="mt-2 text-xs">
+            {hasTarget ? (
+              <span className="text-emerald-300/70">Meta: {criterion.target}</span>
+            ) : (
+              <span className="text-slate-600">Sem meta</span>
+            )}
+          </p>
         </div>
       </div>
+      {criterion.ok ? (
+        <div className="mt-3 flex items-center gap-1.5 text-emerald-300">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Cumprido</span>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -360,12 +400,12 @@ function ReadinessSummary({
             isReady ? "text-emerald-300" : "text-amber-200",
           )}
         >
-          {isReady ? "Apto a evoluir" : "Ainda nao apto"}
+          {isReady ? "Apto a evoluir" : "Ainda não apto"}
         </p>
         <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-400">
           {isReady
-            ? "Todos os criterios minimos foram atendidos; a evolucao depende da avaliacao do Instrutor K9."
-            : "Algum criterio curricular ainda precisa ser cumprido antes da solicitacao de evolucao."}
+            ? "Todos os critérios mínimos foram atendidos; a evolução depende da avaliação do Instrutor K9."
+            : "Algum criterio curricular ainda precisa ser cumprido antes da solicitação de evolução."}
         </p>
         <p className="mt-4 font-mono text-3xl font-black text-white">
           {formatPercent(score)}
@@ -393,8 +433,8 @@ function HistoryChart({ sessions }: { sessions: TrainingSessionSummary[] }) {
 
   return (
     <Panel
-      action={<Badge tone="slate">ultimas {recent.length || 0}</Badge>}
-      title="Historico de progresso do modulo"
+      action={<Badge tone="slate">últimas {recent.length || 0}</Badge>}
+      title="Histórico de progresso do módulo"
     >
       {recent.length ? (
         <div className="rounded-2xl border border-white/10 bg-black/18 p-4">
@@ -439,7 +479,7 @@ function HistoryChart({ sessions }: { sessions: TrainingSessionSummary[] }) {
           </div>
         </div>
       ) : (
-        <EmptyState label="Ainda nao ha sessoes para desenhar o historico." />
+        <EmptyState label="Ainda não há sessões para desenhar o histórico." />
       )}
     </Panel>
   );
@@ -527,7 +567,7 @@ export default function TrainingMatrixPage() {
     [selectedDog, selectedModality.value, training.sessions],
   );
 
-  const criteria = useMemo<CriterionStatus[]>(() => {
+  const criteria = useMemo<CritérionStatus[]>(() => {
     if (!currentModule) return [];
     const achievedMilestones = Math.min(
       currentModule.requiredMilestoneCount,
@@ -547,10 +587,10 @@ export default function TrainingMatrixPage() {
     return [
       {
         current: `${achievedMilestones} / ${currentModule.requiredMilestoneCount || "--"}`,
-        detail: `${Math.round(scorePart(achievedMilestones, currentModule.requiredMilestoneCount) ?? 0)}% concluido`,
+        detail: `${Math.round(scorePart(achievedMilestones, currentModule.requiredMilestoneCount) ?? 0)}% concluído`,
         icon: Flag,
-        label: "Marcos obrigatorios",
-        missingLabel: "marco obrigatorio pendente",
+        label: "Marcos obrigatórios",
+        missingLabel: "marco obrigatório pendente",
         ok:
           currentModule.requiredMilestoneCount === 0 ||
           achievedMilestones >= currentModule.requiredMilestoneCount,
@@ -562,10 +602,10 @@ export default function TrainingMatrixPage() {
       },
       {
         current: `${sessions.length} / ${sessionTarget || "--"}`,
-        detail: `${Math.round(scorePart(sessions.length, sessionTarget) ?? 0)}% concluido`,
+        detail: `${Math.round(scorePart(sessions.length, sessionTarget) ?? 0)}% concluído`,
         icon: CalendarDays,
-        label: "Sessoes completas",
-        missingLabel: "sessao completa pendente",
+        label: "Sessões completas",
+        missingLabel: "sessão completa pendente",
         ok: sessionTarget <= 0 || sessions.length >= sessionTarget,
         progress: scorePart(sessions.length, sessionTarget) ?? 0,
         target: String(sessionTarget),
@@ -573,7 +613,7 @@ export default function TrainingMatrixPage() {
       },
       {
         current: formatPercent(rate),
-        detail: rateTarget == null ? "sem meta minima" : `Meta minima: ${formatPercent(rateTarget)}`,
+        detail: rateTarget == null ? "sem meta mínima" : `Meta mínima: ${formatPercent(rateTarget)}`,
         icon: Target,
         label: "Sucesso medio",
         missingLabel: "pontos percentuais de sucesso",
@@ -585,10 +625,10 @@ export default function TrainingMatrixPage() {
       },
       {
         current: formatDistance(distance),
-        detail: `Meta minima: ${formatDistance(distanceTarget)}`,
+        detail: `Meta mínima: ${formatDistance(distanceTarget)}`,
         icon: Ruler,
-        label: "Distancia minima",
-        missingLabel: "distancia minima pendente",
+        label: "Distância mínima",
+        missingLabel: "distância mínima pendente",
         ok: distanceTarget == null || distance >= distanceTarget,
         progress: scorePart(distance, distanceTarget) ?? 100,
         target: formatDistance(distanceTarget),
@@ -626,25 +666,25 @@ export default function TrainingMatrixPage() {
               Treinamentos
             </p>
             <h1 className="mt-2 text-3xl font-black text-white md:text-4xl">
-              Prontidao K9
+              Prontidão K9
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              Avaliacao de evolucao por modalidade com base nas metricas
-              curriculares, sessoes e progresso canonico.
+              Avaliação de evolução por modalidade com base nas métricas
+              curriculares, sessões e progresso canonico.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
-              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100 transition hover:border-cyan-200/40"
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
               href={paths.training}
             >
               voltar aos treinos
             </Link>
             <Link
-              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100 transition hover:border-cyan-200/40"
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
               href={paths.trainingCurriculums}
             >
-              curriculos
+              currículos
             </Link>
           </div>
         </div>
@@ -723,29 +763,31 @@ export default function TrainingMatrixPage() {
               ready ? (
                 <Badge tone="green">apto a evoluir</Badge>
               ) : (
-                <Badge tone="red">ainda nao apto</Badge>
+                <Badge tone="red">ainda não apto</Badge>
               )
             }
-            subtitle={`${currentModule?.title ?? "Sem modulo atual"} · ${cell.statusLabel}`}
+            subtitle={`${currentModule?.title ?? "Sem módulo atual"} · ${cell.statusLabel}`}
             title={`${selectedDog?.dogName ?? "K9"} · ${
-              program?.label ?? canonicalModalityLabel(selectedModality.value)
+              program?.label ?? canônicalModalityLabel(selectedModality.value)
             }`}
           >
             {currentModule ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {criteria.map((criterion) => (
-                  <CriterionCard
-                    criterion={criterion}
-                    key={criterion.label}
-                  />
-                ))}
+                {criteria
+                  .filter((c) => hasRealValue(c.current))
+                  .map((criterion) => (
+                    <CritérionCard
+                      criterion={criterion}
+                      key={criterion.label}
+                    />
+                  ))}
               </div>
             ) : (
-              <EmptyState label="Nao ha curriculo/modulo para calcular a prontidao dessa modalidade." />
+              <EmptyState label="Não há currículo/módulo para calcular a prontidão dessa modalidade." />
             )}
           </Panel>
 
-          <Panel title="Pendencias para evolucao">
+          <Panel title="Pendências para evolução">
             {currentModule ? (
               <div className="grid gap-3 md:grid-cols-2">
                 {pending.map((item) => (
@@ -761,44 +803,44 @@ export default function TrainingMatrixPage() {
                   <PendingItem
                     detail={`${eventCoverage} de ${currentModule.criteria.requiredEvents.length} eventos esperados`}
                     icon={Flag}
-                    label="eventos obrigatorios pendentes"
+                    label="eventos obrigatórios pendentes"
                     tone="blue"
                   />
                 ) : null}
                 {cell.pendingPromotions > 0 ? (
                   <PendingItem
-                    detail="solicitacao aguardando decisao"
+                    detail="solicitação aguardando decisão"
                     icon={UserCheck}
-                    label="validacao do Instrutor K9"
+                    label="validação do Instrutor K9"
                     tone="amber"
                   />
                 ) : null}
                 {!pending.length && eventsOk && cell.pendingPromotions === 0 ? (
                   <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.08] p-4 text-emerald-200 md:col-span-2">
-                    Todos os criterios calculados foram atendidos.
+                    Todos os critérios calculados foram atendidos.
                   </div>
                 ) : null}
               </div>
             ) : (
-              <EmptyState label="Cadastre criterios no curriculo para gerar pendencias." />
+              <EmptyState label="Cadastre critérios no currículo para gerar pendências." />
             )}
           </Panel>
 
           <Panel
-            action={<Link className="text-sm font-semibold text-cyan-200" href={paths.trainingCurriculums}>editar criterios</Link>}
-            title="Criterios avaliados recentemente"
+            action={<Link className="text-sm font-semibold text-cyan-200" href={paths.trainingCurriculums}>editar critérios</Link>}
+            title="Critérios avaliados recentemente"
           >
             {currentModule ? (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[760px] border-separate border-spacing-y-2 text-sm">
                   <thead className="text-left text-xs uppercase tracking-[0.14em] text-slate-500">
                     <tr>
-                      <th className="px-3 py-2">Criterio</th>
+                      <th className="px-3 py-2">Critério</th>
                       <th className="px-3 py-2">Tipo</th>
-                      <th className="px-3 py-2">Meta minima</th>
+                      <th className="px-3 py-2">Meta mínima</th>
                       <th className="px-3 py-2">Resultado</th>
                       <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Ultima avaliacao</th>
+                      <th className="px-3 py-2">Última avaliação</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -811,17 +853,17 @@ export default function TrainingMatrixPage() {
                             {milestone.title}
                           </td>
                           <td className="border-y border-white/10 bg-white/[0.035] px-3 py-3 text-slate-300">
-                            Marco {milestone.required ? "obrigatorio" : "bonus"}
+                            Marco {milestone.required ? "obrigatório" : "bonus"}
                           </td>
                           <td className="border-y border-white/10 bg-white/[0.035] px-3 py-3 text-slate-300">
-                            Concluido
+                            Concluído
                           </td>
                           <td className="border-y border-white/10 bg-white/[0.035] px-3 py-3 text-slate-300">
-                            {achieved ? "Concluido" : "Pendente"}
+                            {achieved ? "Concluído" : "Pendente"}
                           </td>
                           <td className="border-y border-white/10 bg-white/[0.035] px-3 py-3">
                             <Badge tone={achieved ? "green" : "yellow"}>
-                              {achieved ? "concluido" : "em andamento"}
+                              {achieved ? "concluído" : "em andamento"}
                             </Badge>
                           </td>
                           <td className="rounded-r-2xl border-y border-r border-white/10 bg-white/[0.035] px-3 py-3 font-mono text-slate-400">
@@ -834,7 +876,7 @@ export default function TrainingMatrixPage() {
                 </table>
               </div>
             ) : (
-              <EmptyState label="Sem criterios para listar." />
+              <EmptyState label="Sem critérios para listar." />
             )}
           </Panel>
         </div>
@@ -842,13 +884,13 @@ export default function TrainingMatrixPage() {
         <div className="space-y-5">
           <ReadinessSummary isReady={ready} score={score} />
           <HistoryChart sessions={sessions} />
-          <Panel title="Sobre a prontidao">
+          <Panel title="Sobre a prontidão">
             <div className="flex gap-3 text-sm leading-6 text-slate-400">
               <Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" />
               <p>
-                A evolucao depende do atendimento aos criterios minimos do
-                modulo vigente: marcos obrigatorios, sessoes completas, sucesso,
-                distancia, eventos esperados e avaliacao do Instrutor K9.
+                A evolução depende do atendimento aos critérios mínimos do
+                módulo vigente: marcos obrigatórios, sessões completas, sucesso,
+                distância, eventos esperados e avaliação do Instrutor K9.
               </p>
             </div>
             <Link

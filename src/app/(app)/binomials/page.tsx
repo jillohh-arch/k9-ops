@@ -217,32 +217,32 @@ export default function BinomialsPage() {
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
         <EffectiveHeader
-          description="Vinculos duradouros entre condutores e K9, com coexistencia do mobile."
-          eyebrow="Composicao operacional"
-          title="Binomios"
+          description="Vínculos duradouros entre condutores e K9, com coexistência do mobile."
+          eyebrow="Composição operacional"
+          title="Binômios"
         />
         {canCreateBinomial ? (
           <Link
-            className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-sm font-black text-[#041018]"
+            className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200"
             href="/binomials/new"
           >
-            <Plus className="h-4 w-4" /> Novo binomio
+            <Plus className="h-4 w-4" /> Novo binômio
           </Link>
         ) : null}
       </div>
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <SummaryCard
-          detail="pares unicos consolidados"
+          detail="pares únicos consolidados"
           icon={Link2}
-          label="Binomios visiveis"
+          label="Binômios visíveis"
           tone="cyan"
           value={loading ? "..." : String(rows.length)}
         />
         <SummaryCard
           detail="documentos em binomials"
           icon={Dog}
-          label="Vinculos administrativos"
+          label="Vínculos administrativos"
           tone="green"
           value={loading ? "..." : String(adminCount)}
         />
@@ -254,9 +254,9 @@ export default function BinomialsPage() {
           value={loading ? "..." : String(inShift)}
         />
         <SummaryCard
-          detail={incomplete ? "K9 ou condutor nao localizado" : "duplas em formacao"}
+          detail={incomplete ? "K9 ou condutor não localizado" : "duplas em formação"}
           icon={incomplete ? AlertTriangle : GraduationCap}
-          label={incomplete ? "Incompletos" : "Em formacao"}
+          label={incomplete ? "Incompletos" : "Em formação"}
           tone={incomplete ? "violet" : "amber"}
           value={loading ? "..." : String(incomplete || formation)}
         />
@@ -265,18 +265,18 @@ export default function BinomialsPage() {
       <FilterBar
         onSearch={(value) => updateFilter(setSearch, value)}
         onViewMode={setViewMode}
-        placeholder="Buscar K9, condutor, RA, matricula ou viatura..."
+        placeholder="Buscar K9, condutor, RA, matrícula ou viatura..."
         search={search}
         viewMode={viewMode}
       >
         <FilterSelect
-          label="Status do binomio"
+          label="Status do binômio"
           onChange={(value) => updateFilter(setStatus, value)}
           options={[
             { label: "Status: Todos", value: "all" },
             { label: "Em turno", value: "on_shift" },
             { label: "Operacional", value: "operational" },
-            { label: "Em formacao", value: "formation" },
+            { label: "Em formação", value: "formation" },
             { label: "Vinculado", value: "linked" },
             { label: "Afastado", value: "away" },
             { label: "Encerrado", value: "ended" },
@@ -285,7 +285,7 @@ export default function BinomialsPage() {
           value={status}
         />
         <FilterSelect
-          label="Origem do vinculo"
+          label="Origem do vínculo"
           onChange={(value) => updateFilter(setOrigin, value)}
           options={[
             { label: "Origem: Todas", value: "all" },
@@ -306,7 +306,7 @@ export default function BinomialsPage() {
         />
       </FilterBar>
 
-      <DataState error={error} loading={loading} noun="os binomios" />
+      <DataState error={error} loading={loading} noun="os binômios" />
 
       {!loading && !error ? (
         visible.length ? (
@@ -324,7 +324,7 @@ export default function BinomialsPage() {
                   : stage === "operational"
                     ? { label: "Operacional", tone: "green" as const }
                     : stage === "formation"
-                      ? { label: "Em formacao", tone: "blue" as const }
+                      ? { label: "Em formação", tone: "blue" as const }
                       : stage === "away"
                         ? { label: "Afastado", tone: "amber" as const }
                         : stage === "ended"
@@ -347,9 +347,9 @@ export default function BinomialsPage() {
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.7)]" />
                       <h2 className="truncate text-xl font-black text-white">
                         <span className="text-cyan-300">
-                          {row.dog?.name ?? row.admin?.dogName ?? "K9 nao localizado"}
+                          {row.dog?.name ?? row.admin?.dogName ?? "K9 não localizado"}
                         </span>{" "}
-                        + {row.handler?.callsign ?? row.admin?.handlerName ?? "Condutor nao localizado"}
+                        + {row.handler?.callsign ?? row.admin?.handlerName ?? "Condutor não localizado"}
                       </h2>
                     </div>
                     <StatusPill label={stageView.label} tone={stageView.tone} />
@@ -372,7 +372,7 @@ export default function BinomialsPage() {
                           src={row.dog?.profileImageUrl ?? null}
                         />
                         <p className="mt-2 truncate text-center text-xs font-bold text-cyan-200">
-                          {row.dog?.name ?? "Nao localizado"}
+                          {row.dog?.name ?? "Não localizado"}
                         </p>
                       </div>
                       <div>
@@ -383,7 +383,7 @@ export default function BinomialsPage() {
                           src={row.handler?.photoUrl ?? null}
                         />
                         <p className="mt-2 truncate text-center text-xs font-bold text-slate-200">
-                          {row.handler?.callsign ?? "Nao localizado"}
+                          {row.handler?.callsign ?? "Não localizado"}
                         </p>
                       </div>
                     </div>
@@ -392,7 +392,7 @@ export default function BinomialsPage() {
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <div className="rounded-xl border border-white/7 bg-white/[0.025] p-3">
                           <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                            Identificacao
+                            Identificação
                           </p>
                           <p className="mt-2 font-mono text-xs text-slate-300">
                             K9 {row.dog?.registrationNumber ?? row.dog?.id ?? "--"}
@@ -403,7 +403,7 @@ export default function BinomialsPage() {
                         </div>
                         <div className="rounded-xl border border-white/7 bg-white/[0.025] p-3">
                           <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                            Vinculo
+                            Vínculo
                           </p>
                           <p className="mt-2 text-sm font-bold text-slate-200">
                             {row.admin?.type ?? (row.origin === "legacy" ? "Legado do K9" : "Turno")}
@@ -422,7 +422,7 @@ export default function BinomialsPage() {
                         </div>
                         <div className="rounded-xl border border-white/7 bg-white/[0.025] p-3">
                           <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                            Prontidao
+                            Prontidão
                           </p>
                           <p className="mt-2 font-mono text-sm font-black text-cyan-200">
                             {row.admin?.readinessScore == null
@@ -454,14 +454,14 @@ export default function BinomialsPage() {
                   </div>
                   <div className="flex gap-2 border-t border-white/8 p-3">
                     <Link
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-2.5 text-xs font-bold text-cyan-200"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                       href={`/binomials/${encodeURIComponent(row.id)}`}
                     >
                       <Eye className="h-4 w-4" /> Ver perfil
                     </Link>
                     {canEditBinomial ? (
                       <Link
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-bold text-slate-300"
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                         href={`/binomials/${encodeURIComponent(row.id)}/edit`}
                       >
                         <Pencil className="h-4 w-4" /> Editar
@@ -474,7 +474,7 @@ export default function BinomialsPage() {
           </section>
         ) : (
           <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-sm text-slate-500">
-            Nenhum binomio corresponde aos filtros selecionados.
+            Nenhum binômio corresponde aos filtros selecionados.
           </div>
         )
       ) : null}
@@ -482,7 +482,7 @@ export default function BinomialsPage() {
       {!loading && !error ? (
         <PageFooter
           currentPage={safePage}
-          itemLabel="binomios"
+          itemLabel="binômios"
           onPage={setPage}
           pageSize={pageSize}
           total={filtered.length}

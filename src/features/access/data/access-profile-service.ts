@@ -5,6 +5,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   type Unsubscribe,
 } from "firebase/firestore";
 
@@ -136,8 +137,8 @@ function normalizeAccessUser(id: string, data: Record<string, unknown>) {
       text(data, "training_role") === "instrutor_k9",
     photoUrl: text(data, "photoUrl", "image_url", "photo_url"),
     ra: id,
-    role: text(data, "cargo", "role", "funcao"),
-    unit: text(data, "unit", "unidade", "lotacao"),
+    role: text(data, "cargo", "role", "função"),
+    unit: text(data, "unit", "unidade", "lotação"),
   } satisfies AccessUser;
 }
 
@@ -145,8 +146,14 @@ export function subscribeAccessUsers(
   onData: (users: AccessUser[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
+  // QW-3: Filter at query level — prevents downloading inactive/archived
+  // user documents. The active field is the canonical flag used throughout
+  // the codebase (confirmed in normalizeAccessUser).
   return onSnapshot(
-    collection(db, USERS_COLLECTION),
+    query(
+      collection(db, USERS_COLLECTION),
+      where("active", "==", true),
+    ),
     (snapshot) => {
       onData(
         snapshot.docs
@@ -199,7 +206,7 @@ export async function duplicateAccessProfile(
   });
   const id = response.data.id;
   if (!id) {
-    throw new Error("Function nao retornou o identificador do perfil duplicado.");
+    throw new Error("Function não retornou o identificador do perfil duplicado.");
   }
   return id;
 }

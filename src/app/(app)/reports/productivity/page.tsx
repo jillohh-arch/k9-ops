@@ -1,5 +1,5 @@
-import { ReportDetailPage } from "@/features/reports/components/report-pages";
+import { ProductivityReport } from "@/features/reports/components/productivity-report";
 
 export default function ProductivityReportPage() {
-  return <ReportDetailPage reportId="productivity" />;
+  return <ProductivityReport />;
 }

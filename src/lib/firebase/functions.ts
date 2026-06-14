@@ -199,3 +199,13 @@ export const callRespondVehicleCrewInvitation = httpsCallable<
   { crewId: string; accepted: boolean; reason?: string },
   Record<string, unknown>
 >(functions, "respondVehicleCrewInvitation");
+
+export const callDecidePromotionRequest = httpsCallable<
+  {
+    requestId: string;
+    decision: "approved" | "rejected";
+    reason?: string;
+    note?: string;
+  },
+  { id?: string; status?: string }
+>(functions, "decidePromotionRequest");

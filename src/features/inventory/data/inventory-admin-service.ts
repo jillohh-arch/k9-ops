@@ -53,7 +53,7 @@ export const emptyInventoryItemFormValues: InventoryItemFormValues = {
   active: true,
   brand: "",
   categoryId: "alimentacao",
-  categoryName: "Alimentacao",
+  categoryName: "Alimentação",
   description: "",
   documentUrl: "",
   expirationDate: "",

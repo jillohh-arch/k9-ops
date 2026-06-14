@@ -1,11 +1,18 @@
 "use client";
 
-import { collection, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+  type Query,
+  type QueryConstraint,
+} from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  canonicalModality,
-  canonicalModalityLabel,
+  canônicalModality,
+  canônicalModalityLabel,
 } from "@/features/effective/lib/k9-modalities";
 import { db } from "@/lib/firebase/client";
 
@@ -190,10 +197,10 @@ function mapDog(record: RawRecord, specialties: K9Specialty[]): EffectiveDog {
       record.registration_number,
       record.rga,
     ),
-    breed: text(record.breed, record.raca),
+    breed: text(record.breed, record.raça),
     sex: text(record.sex, record.sexo),
     specialties,
-    status: text(record.status, record.situacao) ?? "Ativo",
+    status: text(record.status, record.situação) ?? "Ativo",
   };
 }
 
@@ -252,7 +259,7 @@ function mapVehicle(record: RawRecord): EffectiveVehicle {
   const label = text(record.label, record.vehicle_label) ?? [name, prefix].filter(Boolean).join(" ");
   return {
     active: booleanValue(record.active, true) && !isDeleted(record),
-    base: text(record.base, record.lotacao),
+    base: text(record.base, record.lotação),
     brand: text(record.brand, record.marca),
     crewSize: numberValue(record.crew_size ?? record.crewSize) ?? 1,
     fuel: text(record.fuel, record.combustivel),
@@ -267,7 +274,7 @@ function mapVehicle(record: RawRecord): EffectiveVehicle {
     photoUrl: text(record.photoUrl, record.photo_url, record.image_url),
     plate: text(record.plate, record.placa),
     prefix,
-    status: text(record.status, record.situacao) ?? (booleanValue(record.active, true) ? "Ativa" : "Inativa"),
+    status: text(record.status, record.situação) ?? (booleanValue(record.active, true) ? "Ativa" : "Inativa"),
     unit: text(record.unit, record.unidade, record.vehicle_unit),
     year: text(record.year, record.ano),
   };
@@ -296,7 +303,11 @@ function mapBinomial(record: RawRecord): EffectiveBinomial {
 function subscribeCollection(
   path: string,
   setter: React.Dispatch<React.SetStateAction<CollectionState>>,
+  constraints?: QueryConstraint[],
 ) {
+  const ref: Query = constraints
+    ? query(collection(db, path), ...constraints)
+    : collection(db, path);
   return onSnapshot(
     collection(db, path),
     (snapshot) => {
@@ -331,10 +342,19 @@ export function useEffectiveData() {
 
   useEffect(() => {
     const unsubscribes = [
-      subscribeCollection("binomials", setBinomialsState),
-      subscribeCollection("dogs", setDogsState),
-      subscribeCollection("users", setUsersState),
-      subscribeCollection("vehicles", setVehiclesState),
+      // QW-4: Filter at query level to avoid downloading soft-deleted records.
+      // The "active" field is the canonical soft-delete flag used throughout
+      // the codebase (confirmed in isDeleted / booleanValue helpers).
+      subscribeCollection("binomials", setBinomialsState, [
+        where("active", "==", true),
+      ]),
+      subscribeCollection("dogs", setDogsState, [where("active", "==", true)]),
+      subscribeCollection("users", setUsersState, [where("active", "==", true)]),
+      subscribeCollection("vehicles", setVehiclesState, [
+        where("active", "==", true),
+      ]),
+      // active_shifts is intentionally unfiltered here — isActiveShift()
+      // in the useMemo already handles status + deleted_at + active flag.
       subscribeCollection("active_shifts", setShiftsState),
     ];
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
@@ -372,7 +392,7 @@ export function useEffectiveData() {
               id: item.id,
               status:
                 text(data.status, data.state) ?? ("not_started" as const),
-              type: canonicalModality(
+              type: canônicalModality(
                 text(data.type, data.modality, item.id) ?? item.id,
               ),
             };
@@ -483,7 +503,7 @@ export function useEffectiveData() {
 }
 
 export function specialtyLabel(type: string) {
-  return canonicalModalityLabel(type);
+  return canônicalModalityLabel(type);
 }
 
 export function ageInYears(date: Date | null) {

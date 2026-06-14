@@ -62,10 +62,10 @@ function stagePresentation(stage: ReturnType<typeof dogStage>) {
     return { label: "Operacional", tone: "green" as const };
   }
   if (stage === "formation") {
-    return { label: "Em formacao", tone: "blue" as const };
+    return { label: "Em formação", tone: "blue" as const };
   }
   if (stage === "unavailable") {
-    return { label: "Fora de operacao", tone: "violet" as const };
+    return { label: "Fora de operação", tone: "violet" as const };
   }
   return { label: "Ativo", tone: "slate" as const };
 }
@@ -152,12 +152,12 @@ export default function K9Page() {
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <EffectiveHeader
-          description="Cadastro, formacao e situacao operacional da matilha."
+          description="Cadastro, formação e situação operacional da matilha."
           title="Efetivo K9"
         />
         {canCreateK9 ? (
           <Link
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-200/30 bg-cyan-300 px-5 py-3 text-sm font-black text-[#031018] shadow-[0_0_28px_rgba(34,211,238,0.16)] transition hover:bg-cyan-200"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] transition hover:bg-cyan-200"
             href={paths.k9New}
           >
             <Plus className="h-4 w-4" />
@@ -168,7 +168,7 @@ export default function K9Page() {
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         <SummaryCard
-          detail="total visivel na unidade"
+          detail="total visível na unidade"
           icon={Dog}
           label="K9 cadastrados"
           tone="cyan"
@@ -182,16 +182,16 @@ export default function K9Page() {
           value={loading ? "..." : String(operational)}
         />
         <SummaryCard
-          detail="com especialidade em formacao"
+          detail="com especialidade em formação"
           icon={GraduationCap}
-          label="Em formacao"
+          label="Em formação"
           tone="blue"
           value={loading ? "..." : String(formation)}
         />
         <SummaryCard
           detail="licenca, inativo ou aposentado"
           icon={AlertTriangle}
-          label="Fora de operacao"
+          label="Fora de operação"
           tone="violet"
           value={loading ? "..." : String(unavailable)}
         />
@@ -200,7 +200,7 @@ export default function K9Page() {
       <FilterBar
         onSearch={(value) => updateFilter(setSearch, value)}
         onViewMode={setViewMode}
-        placeholder="Buscar por nome, matricula, raca ou condutor..."
+        placeholder="Buscar por nome, matrícula, raça ou condutor..."
         search={search}
         viewMode={viewMode}
       >
@@ -210,9 +210,9 @@ export default function K9Page() {
           options={[
             { label: "Status: Todos", value: "all" },
             { label: "Operacional", value: "operational" },
-            { label: "Em formacao", value: "formation" },
+            { label: "Em formação", value: "formation" },
             { label: "Ativo", value: "active" },
-            { label: "Fora de operacao", value: "unavailable" },
+            { label: "Fora de operação", value: "unavailable" },
           ]}
           value={status}
         />
@@ -256,7 +256,7 @@ export default function K9Page() {
               const age = ageInYears(dog.dateOfBirth);
               const labels = dog.specialties.map(
                 (item) =>
-                  `${specialtyLabel(item.type)}${item.status === "in_formation" ? " - formacao" : ""}`,
+                  `${specialtyLabel(item.type)}${item.status === "in_formation" ? " - formação" : ""}`,
               );
 
               return (
@@ -298,9 +298,9 @@ export default function K9Page() {
                         <StatusPill label={stage.label} tone={stage.tone} />
                       </div>
                       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-                        <span>{dog.breed ?? "Raca nao informada"}</span>
-                        <span>{dog.sex ?? "Sexo nao informado"}</span>
-                        <span>{age == null ? "Idade nao informada" : `${age} anos`}</span>
+                        <span>{dog.breed ?? "Raça não informada"}</span>
+                        <span>{dog.sex ?? "Sexo não informado"}</span>
+                        <span>{age == null ? "Idade não informada" : `${age} anos`}</span>
                       </div>
                       <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                         <UserRound className="h-4 w-4 text-cyan-300/60" />
@@ -309,7 +309,7 @@ export default function K9Page() {
                           <strong className="text-slate-200">
                             {conductor?.callsign ??
                               dog.conductorRa ??
-                              "Nao vinculado"}
+                              "Não vinculado"}
                           </strong>
                         </span>
                       </div>

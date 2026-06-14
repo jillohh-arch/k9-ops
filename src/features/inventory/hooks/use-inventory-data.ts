@@ -79,15 +79,15 @@ const initialState: CollectionState = {
 export const fallbackInventoryCategories: InventoryCategory[] = [
   {
     active: true,
-    description: "Racao, petiscos e insumos alimentares.",
+    description: "Ração, petiscos e insumos alimentares.",
     id: "alimentacao",
-    name: "Alimentacao",
+    name: "Alimentação",
   },
   {
     active: true,
-    description: "Medicamentos, suplementos e materiais veterinarios.",
-    id: "saude",
-    name: "Saude",
+    description: "Medicamentos, suplementos e materiais veterinários.",
+    id: "saúde",
+    name: "Saúde",
   },
   {
     active: true,
@@ -103,7 +103,7 @@ export const fallbackInventoryCategories: InventoryCategory[] = [
   },
   {
     active: true,
-    description: "Produtos de higiene, limpeza e manutencao do canil.",
+    description: "Produtos de higiene, limpeza e manutenção do canil.",
     id: "limpeza",
     name: "Limpeza",
   },
@@ -229,7 +229,7 @@ function mapMovement(record: RawRecord): InventoryMovement {
     performedAt: dateValue(record.performed_at ?? record.created_at),
     performedByName: text(record.performed_by_name, record.performedByName),
     quantity: numberValue(record.quantity) ?? 0,
-    reason: text(record.reason) ?? "Movimentacao",
+    reason: text(record.reason) ?? "Movimentação",
     relatedUserName: text(record.related_user_name, record.relatedUserName),
     type: text(record.type) ?? "movimento",
     unit: text(record.unit) ?? "unidade",
@@ -366,7 +366,7 @@ export function inventoryMovementLabel(type: string) {
     descarte: "Descarte",
     entrada: "Entrada",
     perda: "Perda",
-    saida: "Saida",
+    saida: "Saída",
     vencimento: "Vencimento",
   };
   return labels[type] ?? type;

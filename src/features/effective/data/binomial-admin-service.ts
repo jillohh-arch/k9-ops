@@ -8,8 +8,8 @@ import {
 } from "firebase/storage";
 
 import {
-  canonicalK9Modalities,
-  canonicalModalityLabel,
+  canônicalK9Modalities,
+  canônicalModalityLabel,
 } from "@/features/effective/lib/k9-modalities";
 import { db, storage } from "@/lib/firebase/client";
 import {
@@ -119,7 +119,7 @@ export async function loadBinomialFormOptions(): Promise<BinomialFormOptions> {
       const data = item.data();
       const active = data.active !== false && data.deleted_at == null;
       const name = text(data, "name", "nome") || item.id;
-      const rga = text(data, "registrationNumber", "matricula", "rga");
+      const rga = text(data, "registrationNumber", "matrícula", "rga");
       return {
         active,
         label: `${name}${rga ? ` - RGA ${rga}` : ""}`,
@@ -148,7 +148,7 @@ export async function loadBinomialFormOptions(): Promise<BinomialFormOptions> {
   return {
     dogs,
     handlers,
-    specialties: canonicalK9Modalities.map((item) => ({
+    specialties: canônicalK9Modalities.map((item) => ({
       label: item.label,
       value: item.value,
     })),
@@ -164,7 +164,7 @@ export async function loadBinomialForEdit(id: string) {
       dogId: text(data, "dog_id", "dogId"),
       endAt: dateInput(data.end_at ?? data.endAt),
       handlerRa: text(data, "handler_ra", "handlerRa"),
-      notes: text(data, "notes", "observacoes"),
+      notes: text(data, "notes", "observações"),
       primary: bool(data.primary, true),
       primarySpecialty: text(data, "primary_specialty", "primarySpecialty") || "busca_captura",
       readinessScore: text(data, "readiness_score", "readinessScore") || "90",
@@ -226,5 +226,5 @@ export async function archiveBinomial(id: string, reason: string) {
 }
 
 export function specialtyLabel(value: string) {
-  return canonicalModalityLabel(value);
+  return canônicalModalityLabel(value);
 }

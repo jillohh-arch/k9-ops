@@ -281,7 +281,7 @@ function isActiveDog(record: RawRecord) {
   if (booleanValue(record.active ?? record.is_active ?? record.isActive, true) === false) {
     return false;
   }
-  const status = normalized(record.status ?? record.situacao);
+  const status = normalized(record.status ?? record.situação);
   return ![
     "aposentado",
     "arquivado",
@@ -309,10 +309,10 @@ function dogPhoto(record: RawRecord) {
 
 function dogIdealWeightRange(record: RawRecord) {
   const min = numberValue(
-    record.idealWeightMin ?? record.ideal_weight_min ?? record.peso_minimo,
+    record.idealWeightMin ?? record.ideal_weight_min ?? record.peso_mínimo,
   );
   const max = numberValue(
-    record.idealWeightMax ?? record.ideal_weight_max ?? record.peso_maximo,
+    record.idealWeightMax ?? record.ideal_weight_max ?? record.peso_máximo,
   );
   return min != null && max != null && min > 0 && max >= min
     ? { max, min }
@@ -386,8 +386,8 @@ function eventLabel(record: RawRecord) {
     antiparasitic: "Antiparasitario",
     consultation: "Consulta",
     exam: "Exame",
-    medication: "Medicacao",
-    other: "Evento de saude",
+    medication: "Medicação",
+    other: "Evento de saúde",
     surgery: "Cirurgia",
     symptom: "Sintoma",
     vaccination: "Vacina",
@@ -632,19 +632,19 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
 
       if (vaccine === "overdue") {
         issues.push({
-          detail: `dose vencida ha ${Math.abs(vaccineDays ?? 0)} dia(s)`,
+          detail: `dose vencida há ${Math.abs(vaccineDays ?? 0)} dia(s)`,
           label: "Vacina vencida",
           severity: "critical",
         });
       } else if (vaccine === "due_soon") {
         issues.push({
-          detail: `proxima dose em ${vaccineDays ?? 0} dia(s)`,
+          detail: `próxima dose em ${vaccineDays ?? 0} dia(s)`,
           label: "Vacina a vencer",
           severity: "warning",
         });
       } else if (vaccine === "missing") {
         issues.push({
-          detail: "nenhuma vacinacao localizada",
+          detail: "nenhuma vacinação localizada",
           label: "Sem registro de vacina",
           severity: "missing",
         });
@@ -664,7 +664,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
         });
       } else if (weight === "missing_range") {
         issues.push({
-          detail: "cadastre minimo e maximo ideais no perfil K9",
+          detail: "cadastre mínimo e máximo ideais no perfil K9",
           label: "Faixa ideal ausente",
           severity: "missing",
         });
@@ -674,7 +674,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
         issues.push({
           detail:
             examAgeDays >= 365
-              ? `ultimo exame ha ${examAgeDays} dias`
+              ? `último exame há ${examAgeDays} dias`
               : `revisar periodicidade; ${examAgeDays} dias`,
           label: examAgeDays >= 365 ? "Exame atrasado" : "Exame a revisar",
           severity: examAgeDays >= 365 ? "critical" : "warning",
@@ -696,7 +696,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
         latestWeightKg,
         photoUrl: dogPhoto(dog),
         ready: vaccine === "current" && weight === "in_range",
-        status: text(dog.status, dog.situacao) ?? "Ativo",
+        status: text(dog.status, dog.situação) ?? "Ativo",
         vaccine,
         weight,
       };
@@ -735,7 +735,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
               event.description,
             ) ?? type.replaceAll("_", " "),
           dogId,
-          dogName: dogId ? dogNameById.get(dogId) ?? dogId : "K9 nao informado",
+          dogName: dogId ? dogNameById.get(dogId) ?? dogId : "K9 não informado",
           dueAt,
           id: event._id,
           label: eventLabel(event),
@@ -761,7 +761,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
         return {
           date: documentDate(document),
           dogId,
-          dogName: dogId ? dogNameById.get(dogId) ?? dogId : "K9 nao informado",
+          dogName: dogId ? dogNameById.get(dogId) ?? dogId : "K9 não informado",
           id: document._id,
           title: text(document.title, document.name, document.nome) ?? "Documento",
           type: documentType(document),

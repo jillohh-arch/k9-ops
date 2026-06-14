@@ -53,10 +53,10 @@ const k9FormTabs: Array<{
   id: K9FormTab;
   label: string;
 }> = [
-  { id: "identity", label: "Identificacao" },
-  { id: "physical", label: "Saude e vinculo" },
+  { id: "identity", label: "Identificação" },
+  { id: "physical", label: "Saúde e vínculo" },
   { id: "specialties", label: "Modalidades" },
-  { id: "notes", label: "Observacoes" },
+  { id: "notes", label: "Observações" },
 ];
 
 function parseNumber(value: string) {
@@ -68,14 +68,14 @@ function validate(values: K9FormValues) {
   const errors: FieldErrors = {};
   if (!values.name.trim()) errors.name = "Informe o nome operacional.";
   if (!values.registrationNumber.trim()) {
-    errors.registrationNumber = "Informe a matricula/RGA.";
+    errors.registrationNumber = "Informe a matrícula/RGA.";
   }
-  if (!values.breed.trim()) errors.breed = "Informe a raca.";
+  if (!values.breed.trim()) errors.breed = "Informe a raça.";
   if (!values.birthDate) errors.birthDate = "Informe a data de nascimento.";
   if (!values.color.trim()) errors.color = "Informe a cor/pelagem.";
   if (!values.sex) errors.sex = "Informe o sexo.";
   if (!values.operationalStatus) {
-    errors.operationalStatus = "Informe a situacao cadastral.";
+    errors.operationalStatus = "Informe a situação cadastral.";
   }
 
   const weight = parseNumber(values.weight);
@@ -83,13 +83,13 @@ function validate(values: K9FormValues) {
   const max = parseNumber(values.idealWeightMax);
   if (weight == null || weight <= 0) errors.weight = "Informe o peso atual.";
   if (min == null || min <= 0) {
-    errors.idealWeightMin = "Informe o peso ideal minimo.";
+    errors.idealWeightMin = "Informe o peso ideal mínimo.";
   }
   if (max == null || max <= 0) {
-    errors.idealWeightMax = "Informe o peso ideal maximo.";
+    errors.idealWeightMax = "Informe o peso ideal máximo.";
   }
   if (min != null && max != null && min >= max) {
-    errors.idealWeightMax = "O maximo deve ser maior que o minimo.";
+    errors.idealWeightMax = "O máximo deve ser maior que o mínimo.";
   }
   if (values.birthDate) {
     const birth = new Date(`${values.birthDate}T12:00:00`);
@@ -201,7 +201,7 @@ export function K9AdminForm({
         setOptions(loadedOptions);
         if (mode === "edit") {
           if (!loadedDog) {
-            setErrors({ form: "K9 nao localizado para edicao." });
+            setErrors({ form: "K9 não localizado para edição." });
           } else {
             setValues(loadedDog.values);
             setPreviewUrl(loadedDog.values.profileImageUrl);
@@ -238,7 +238,7 @@ export function K9AdminForm({
     () => [
       {
         done: Boolean(values.name && values.registrationNumber && values.breed),
-        label: "Dados basicos",
+        label: "Dados básicos",
       },
       {
         done: Boolean(
@@ -279,7 +279,7 @@ export function K9AdminForm({
     if (file.size > 5 * 1024 * 1024) {
       setErrors((current) => ({
         ...current,
-        form: "A foto deve ter no maximo 5 MB.",
+        form: "A foto deve ter no máximo 5 MB.",
       }));
       return;
     }
@@ -304,8 +304,8 @@ export function K9AdminForm({
       setErrors({
         form:
           mode === "create"
-            ? "Seu perfil nao permite cadastrar K9."
-            : "Seu perfil nao permite editar K9.",
+            ? "Seu perfil não permite cadastrar K9."
+            : "Seu perfil não permite editar K9.",
       });
       return;
     }
@@ -335,7 +335,7 @@ export function K9AdminForm({
 
   async function handleArchive() {
     if (!canArchiveK9) {
-      setErrors({ form: "Seu perfil nao permite arquivar K9." });
+      setErrors({ form: "Seu perfil não permite arquivar K9." });
       setArchiveOpen(false);
       return;
     }
@@ -381,7 +381,7 @@ export function K9AdminForm({
             Voltar
           </button>
           <h1 className="mt-3 text-3xl font-black tracking-tight text-white">
-            {mode === "create" ? "Cadastrar K9" : "Cadastro / Edicao de K9"}
+            {mode === "create" ? "Cadastrar K9" : "Cadastro / Edição de K9"}
           </h1>
           <p className="mt-2 text-sm text-slate-400">
             Dados administrativos compartilhados com o aplicativo mobile.
@@ -389,7 +389,7 @@ export function K9AdminForm({
         </div>
         {mode === "edit" && canArchiveK9 ? (
           <button
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-300/20 bg-red-300/[0.06] px-4 py-2.5 text-xs font-bold text-red-200 transition hover:bg-red-300/10"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-2.5 text-xs font-bold text-red-200 transition hover:bg-red-400/[0.18]"
             onClick={() => setArchiveOpen(true)}
             type="button"
           >
@@ -433,7 +433,7 @@ export function K9AdminForm({
             active={activeFormTab === "identity"}
             icon={IdCard}
             index={1}
-            title="Dados basicos"
+            title="Dados básicos"
           >
             <div className="grid gap-5 lg:grid-cols-[190px_1fr]">
               <div>
@@ -479,7 +479,7 @@ export function K9AdminForm({
                 </Field>
                 <Field
                   error={errors.registrationNumber}
-                  label="Matricula / RGA"
+                  label="Matrícula / RGA"
                   required
                 >
                   <input
@@ -491,7 +491,7 @@ export function K9AdminForm({
                     value={values.registrationNumber}
                   />
                 </Field>
-                <Field error={errors.breed} label="Raca" required>
+                <Field error={errors.breed} label="Raça" required>
                   <input
                     className={inputClass}
                     onChange={(event) => setField("breed", event.target.value)}
@@ -542,7 +542,7 @@ export function K9AdminForm({
                     onChange={(event) =>
                       setField("microchip", event.target.value)
                     }
-                    placeholder="Numero do microchip"
+                    placeholder="Número do microchip"
                     value={values.microchip}
                   />
                 </Field>
@@ -553,7 +553,7 @@ export function K9AdminForm({
                     value={values.size}
                   >
                     <option className="bg-[#0b1628]" value="">
-                      Nao informado
+                      Não informado
                     </option>
                     <option className="bg-[#0b1628]" value="Pequeno">
                       Pequeno
@@ -574,7 +574,7 @@ export function K9AdminForm({
             active={activeFormTab === "physical"}
             icon={Scale}
             index={2}
-            title="Dados fisicos e vinculo"
+            title="Dados físicos e vínculo"
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <Field error={errors.weight} label="Peso atual (kg)" required>
@@ -591,7 +591,7 @@ export function K9AdminForm({
               </Field>
               <Field
                 error={errors.idealWeightMin}
-                label="Peso ideal minimo (kg)"
+                label="Peso ideal mínimo (kg)"
                 required
               >
                 <input
@@ -608,7 +608,7 @@ export function K9AdminForm({
               </Field>
               <Field
                 error={errors.idealWeightMax}
-                label="Peso ideal maximo (kg)"
+                label="Peso ideal máximo (kg)"
                 required
               >
                 <input
@@ -625,7 +625,7 @@ export function K9AdminForm({
               </Field>
               <Field
                 error={errors.operationalStatus}
-                label="Situacao cadastral"
+                label="Situação cadastral"
                 required
               >
                 <select
@@ -668,7 +668,7 @@ export function K9AdminForm({
                   ))}
                 </select>
               </Field>
-              <Field label="Condicao corporal">
+              <Field label="Condição corporal">
                 <input
                   className={inputClass}
                   onChange={(event) =>
@@ -734,13 +734,13 @@ export function K9AdminForm({
               </div>
             ) : (
               <p className="rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-500">
-                Nenhum curriculo foi encontrado em training_programs. O K9
+                Nenhum currículo foi encontrado em training_programs. O K9
                 ainda pode ser salvo e as modalidades vinculadas depois.
               </p>
             )}
             <p className="mt-3 text-[11px] text-slate-500">
-              Deteccao de armas, entorpecentes e outras linhas pertencem a
-              modalidade unica Deteccao. Modalidades com progressao ficam
+              Detecção de armas, entorpecentes e outras linhas pertencem a
+              modalidade única Detecção. Modalidades com progressao ficam
               protegidas e continuam controladas pelo fluxo de treinamento.
             </p>
           </FormSection>
@@ -749,14 +749,14 @@ export function K9AdminForm({
             active={activeFormTab === "notes"}
             icon={HeartPulse}
             index={4}
-            title="Observacoes"
+            title="Observações"
           >
-            <Field label="Observacoes gerais e sanitarias">
+            <Field label="Observações gerais e sanitárias">
               <textarea
                 className="min-h-28 w-full resize-y rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35"
                 maxLength={800}
                 onChange={(event) => setField("notes", event.target.value)}
-                placeholder="Historico, comportamento, restricoes e observacoes relevantes."
+                placeholder="Histórico, comportamento, restrições e observações relevantes."
                 value={values.notes}
               />
               <span className="mt-1 block text-right font-mono text-[10px] text-slate-600">
@@ -767,14 +767,14 @@ export function K9AdminForm({
 
           <div className="flex flex-col-reverse gap-3 border-t border-white/8 px-5 py-5 sm:flex-row sm:justify-end">
             <button
-              className="rounded-xl border border-white/10 px-5 py-3 text-sm font-bold text-slate-300 transition hover:bg-white/[0.04]"
+              className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-5 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-300/[0.12]"
               onClick={() => router.back()}
               type="button"
             >
               Cancelar
             </button>
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-200/35 bg-cyan-300 px-6 py-3 text-sm font-black text-[#031018] shadow-[0_0_30px_rgba(34,211,238,0.2)] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-[0_0_30px_rgba(34,211,238,0.2)] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={saving || !profile || !canSaveK9}
               type="submit"
             >
@@ -787,7 +787,7 @@ export function K9AdminForm({
                 ? "Salvando..."
                 : mode === "create"
                   ? "Salvar K9"
-                  : "Salvar alteracoes"}
+                  : "Salvar alterações"}
             </button>
           </div>
         </div>
@@ -817,7 +817,7 @@ export function K9AdminForm({
               {values.name || "Novo K9"}
             </p>
             <p className="mt-1 text-center font-mono text-xs text-slate-500">
-              {values.registrationNumber || "Matricula pendente"}
+              {values.registrationNumber || "Matrícula pendente"}
             </p>
             <div className="mt-5 space-y-3">
               {completedChecks.map((item) => (
@@ -848,7 +848,7 @@ export function K9AdminForm({
             <div className="mt-4 space-y-4 text-xs text-slate-400">
               <p className="flex gap-3">
                 <IdCard className="h-4 w-4 shrink-0 text-cyan-300" />
-                A matricula/RGA e validada contra duplicidade.
+                A matrícula/RGA e validada contra duplicidade.
               </p>
               <p className="flex gap-3">
                 <Scale className="h-4 w-4 shrink-0 text-cyan-300" />
@@ -856,7 +856,7 @@ export function K9AdminForm({
               </p>
               <p className="flex gap-3">
                 <UserRound className="h-4 w-4 shrink-0 text-cyan-300" />
-                Toda gravacao inclui autoria e entrada no audit_trail.
+                Toda gravação inclui autoria e entrada no audit_trail.
               </p>
               <p className="flex gap-3">
                 <Archive className="h-4 w-4 shrink-0 text-cyan-300" />
@@ -883,7 +883,7 @@ export function K9AdminForm({
                   Arquivar cadastro do K9
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  O registro deixa a lista ativa, mas todo o historico permanece.
+                  O registro deixa a lista ativa, mas todo o histórico permanece.
                 </p>
               </div>
             </div>
@@ -897,14 +897,14 @@ export function K9AdminForm({
             </Field>
             <div className="mt-5 flex justify-end gap-3">
               <button
-                className="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-bold text-slate-300"
+                className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
                 onClick={() => setArchiveOpen(false)}
                 type="button"
               >
                 Cancelar
               </button>
               <button
-                className="inline-flex items-center gap-2 rounded-xl bg-red-400 px-4 py-2.5 text-xs font-black text-[#1b0707] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-2.5 text-xs font-bold text-red-200 hover:bg-red-400/[0.18] disabled:opacity-50"
                 disabled={archiving || !archiveReason.trim()}
                 onClick={handleArchive}
                 type="button"

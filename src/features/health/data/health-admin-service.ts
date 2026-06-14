@@ -79,7 +79,7 @@ function validateAttachment(file: File) {
     throw new Error("Use imagem, PDF, DOC ou DOCX.");
   }
   if (file.size > maximumAttachmentSize) {
-    throw new Error("O arquivo deve ter no maximo 20 MB.");
+    throw new Error("O arquivo deve ter no máximo 20 MB.");
   }
   return contentType;
 }

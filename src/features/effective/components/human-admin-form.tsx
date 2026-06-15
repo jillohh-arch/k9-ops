@@ -60,18 +60,17 @@ const humanFormTabs: Array<{
   { id: "notes", label: "Observações" },
 ];
 
-const officialProfileOrder = [
-  "condutor",
+const oficialProfileOrder = [
+  "operador_k9",
   "instrutor_k9",
-  "subinspetor_inspetor",
-  "almoxarifado",
+  "gestor",
   "administrador",
 ];
 
 function orderedProfiles(profiles: AccessProfile[]) {
   return [...profiles].sort((left, right) => {
-    const leftIndex = officialProfileOrder.indexOf(left.id);
-    const rightIndex = officialProfileOrder.indexOf(right.id);
+    const leftIndex = oficialProfileOrder.indexOf(left.id);
+    const rightIndex = oficialProfileOrder.indexOf(right.id);
     if (leftIndex >= 0 || rightIndex >= 0) {
       return (
         (leftIndex >= 0 ? leftIndex : Number.MAX_SAFE_INTEGER) -
@@ -98,8 +97,8 @@ function isInstructorProfile(profile: Pick<AccessProfile, "id" | "role_keys">) {
 function profileAccessModes(profile: Pick<AccessProfile, "id" | "role_keys">) {
   const roles = profileRoleSet(profile);
   const mobile =
-    roles.has("condutor") ||
-    roles.has("handler") ||
+    roles.has("operador_k9") ||
+    roles.has("guarda_k9") ||
     roles.has("mobile_user") ||
     roles.has("instrutor_k9") ||
     roles.has("instrutor") ||

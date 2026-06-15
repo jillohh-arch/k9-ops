@@ -79,7 +79,7 @@ export const humanSpecialtyOptions = [
 export const emptyHumanFormValues: HumanFormValues = {
   accessLevel: "Condutor",
   accessProfile: "Condutor",
-  accessProfileId: "condutor",
+  accessProfileId: "operador_k9",
   active: true,
   admissionDate: "",
   birthDate: "",
@@ -128,7 +128,7 @@ export async function loadHumanForEdit(ra: string) {
     accessProfile:
       text(data, "accessProfile", "access_profile") || "Operacional",
     accessProfileId:
-      text(data, "access_profile_id", "accessProfileId") || "condutor",
+      text(data, "access_profile_id", "accessProfileId") || "operador_k9",
     active:
       data.active !== false &&
       data.deleted_at == null &&

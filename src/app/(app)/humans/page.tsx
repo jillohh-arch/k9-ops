@@ -45,10 +45,10 @@ function searchText(value: unknown) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function isConductor(user: EffectiveUser, linkedDogs: number) {
+function isOperador(user: EffectiveUser, linkedDogs: number) {
   return (
     linkedDogs > 0 ||
-    searchText(user.accessLevel).includes("condutor") ||
+    searchText(user.accessLevel).includes("operador") ||
     searchText(user.accessLevel).includes("adestrador")
   );
 }
@@ -134,7 +134,7 @@ export default function HumansPage() {
   const active = users.filter((user) => user.active).length;
   const instructors = users.filter((user) => user.isK9Instructor).length;
   const conductors = users.filter((user) =>
-    isConductor(user, dogsByHandler.get(user.ra)?.length ?? 0),
+    isOperador(user, dogsByHandler.get(user.ra)?.length ?? 0),
   ).length;
   const canCreateHuman = can("humans", "create");
   const canEditHuman = can("humans", "edit");

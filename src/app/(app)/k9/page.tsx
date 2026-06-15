@@ -200,7 +200,7 @@ export default function K9Page() {
       <FilterBar
         onSearch={(value) => updateFilter(setSearch, value)}
         onViewMode={setViewMode}
-        placeholder="Buscar por nome, matrícula, raça ou condutor..."
+        placeholder="Buscar por nome, matrícula, raça ou operador..."
         search={search}
         viewMode={viewMode}
       >
@@ -226,10 +226,10 @@ export default function K9Page() {
           value={specialty}
         />
         <FilterSelect
-          label="Condutor"
+          label="Operador"
           onChange={(value) => updateFilter(setHandler, value)}
           options={[
-            { label: "Condutor: Todos", value: "all" },
+            { label: "Operador: Todos", value: "all" },
             ...handlerOptions,
           ]}
           value={handler}
@@ -305,7 +305,7 @@ export default function K9Page() {
                       <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                         <UserRound className="h-4 w-4 text-cyan-300/60" />
                         <span>
-                          Condutor:{" "}
+                          Operador:{" "}
                           <strong className="text-slate-200">
                             {conductor?.callsign ??
                               dog.conductorRa ??

@@ -797,7 +797,7 @@ export function useOperationalCenterData(
           text(shift.handlerId, shift.handler_id, shift.ra, shift.conductor_ra) ??
           "";
         const dog = dogName(dogMap.get(dogId)) ?? "K9";
-        const handler = userName(userMap.get(handlerRa)) ?? "Condutor";
+        const handler = userName(userMap.get(handlerRa)) ?? "Operador";
 
         return {
           at: dateValue(shift.startedAt ?? shift.started_at ?? shift.created_at),

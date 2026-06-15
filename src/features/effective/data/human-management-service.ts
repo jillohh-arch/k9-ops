@@ -13,7 +13,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export type UserRole = "instrutor_k9" | "condutor" | "administrador" | "almoxarifado";
+export type UserRole = "instrutor_k9" | "operador_k9" | "gestor" | "administrador";
 
 export type DeactivationPayload = {
   ra: string;

@@ -138,7 +138,7 @@
       "status": "active",
       "level": "operacional",
       "tone": "blue",
-      "role_keys": ["operador_k9", "operador", "guarda_k9", "condutor"],
+      "role_keys": ["operador_k9", "operador", "guarda_k9"],
       "module_tags": ["Mobile", "Operações", "K9", "Viatura", "Treinos", "Ocorrências", "Saúde"],
       "scope": "global",
       "permissions": {

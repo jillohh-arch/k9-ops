@@ -208,7 +208,7 @@ function mapUser(record: RawRecord): EffectiveUser {
   const ra = text(record.ra, record.id, record._id) ?? record._id;
   return {
     accessLevel:
-      text(record.accessLevel, record.access_level, record.role) ?? "Condutor",
+      text(record.accessLevel, record.access_level, record.role) ?? "Operador",
     active: booleanValue(record.active, true) && !isDeleted(record),
     callsign:
       text(

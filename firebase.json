@@ -3,6 +3,13 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "shift-reminders",
+      "runtime": "nodejs22"
+    }
+  ],
   "hosting": {
     "site": "canil-gcm",
     "source": ".",

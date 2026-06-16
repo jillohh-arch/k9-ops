@@ -127,6 +127,12 @@
       "label": "Meu Perfil",
       "path": "/me",
       "category": "Pessoal"
+    },
+    {
+      "id": "shifts",
+      "label": "Plantões",
+      "path": "/shifts",
+      "category": "Gestão"
     }
   ],
   "profiles": [
@@ -151,6 +157,7 @@
         "health": ["view", "create", "edit"],
         "inventory": ["view"],
         "reports": ["view"],
+        "shifts": ["view", "create", "edit"],
         "me": ["view", "edit"]
       }
     },
@@ -177,6 +184,7 @@
         "inventory": ["view"],
         "reports": ["view", "export"],
         "audit": ["view"],
+        "shifts": ["view", "create", "edit"],
         "me": ["view", "edit"]
       }
     },
@@ -204,6 +212,7 @@
         "inventory": ["view", "export"],
         "reports": ["view", "export", "audit"],
         "audit": ["view", "export", "audit"],
+        "shifts": ["view", "create", "edit", "archive", "export"],
         "me": ["view", "edit"]
       }
     },
@@ -233,6 +242,7 @@
         "audit": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "access": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "settings": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "shifts": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "me": ["view", "edit"]
       }
     }

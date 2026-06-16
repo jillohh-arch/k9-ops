@@ -1385,6 +1385,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /shift_groups/{groupId} {
+      allow read: if signedIn();
+      allow create: if isAdmin() || hasAccessPermission('shifts', 'create');
+      allow update: if isAdmin()
+        || hasAccessPermission('shifts', 'edit')
+        || hasAccessPermission('shifts', 'archive');
+      allow delete: if false;
+    }
+
+    match /user_shift_assignments/{assignmentId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        || hasAccessPermission('shifts', 'edit');
+      allow delete: if false;
+    }
+
     match /shift_logs/{shiftId} {
       allow read: if signedIn();
       allow create: if isValidShiftLogCreate();

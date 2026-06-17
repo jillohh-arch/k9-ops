@@ -12,6 +12,7 @@ import {
   GraduationCap,
   HeartPulse,
   ListChecks,
+  RefreshCw,
   Scale,
   Shield,
   ShieldCheck,
@@ -1950,8 +1951,18 @@ export default function DashboardPage() {
                 </div>
               ) : healthError ? (
                 <div className="mt-4 rounded-2xl border border-amber-300/15 bg-amber-300/[0.04] p-5 text-sm text-amber-100/80">
-                  Algumas informações de saúde não estão disponíveis para este
-                  perfil no momento. O restante do dashboard continua válido.
+                  <p>
+                    Algumas informações de saúde não estão disponíveis para este
+                    perfil no momento. O restante do dashboard continua válido.
+                  </p>
+                  <button
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-amber-300/20 bg-amber-300/[0.08] px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-300/[0.15]"
+                    onClick={() => window.location.reload()}
+                    type="button"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Tentar novamente
+                  </button>
                 </div>
               ) : healthMetrics.attention.length > 0 ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">

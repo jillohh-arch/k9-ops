@@ -628,9 +628,9 @@ function RecommendationCard({ recommendation }: { recommendation: Recommendation
       <div className="relative">
         <p className="text-xs font-black uppercase tracking-widest text-slate-400">Recomendação</p>
         <div className="mt-3 flex items-start gap-3">
-          <span className="text-3xl leading-none text-cyan-300">"</span>
+          <span className="text-3xl leading-none text-cyan-300">&ldquo;</span>
           <p className="flex-1 text-base font-semibold leading-relaxed text-white">{recommendation.text}</p>
-          <span className="text-3xl leading-none text-cyan-300">"</span>
+          <span className="text-3xl leading-none text-cyan-300">&rdquo;</span>
         </div>
       </div>
     </div>

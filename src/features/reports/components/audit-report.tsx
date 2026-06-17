@@ -359,10 +359,12 @@ export function AuditReport() {
     { label: "Export", value: 23 },
   ], []);
 
+  const [mountTime] = useState(() => Date.now());
+
   const recentEvents: AuditEvent[] = useMemo(() => [
     {
       id: "1",
-      timestamp: new Date(Date.now() - 1000 * 60 * 5),
+      timestamp: new Date(mountTime - 1000 * 60 * 5),
       user: "Sgt. Oliveira",
       userRa: "12345",
       action: "Aprovou promoção",
@@ -372,7 +374,7 @@ export function AuditReport() {
     },
     {
       id: "2",
-      timestamp: new Date(Date.now() - 1000 * 60 * 15),
+      timestamp: new Date(mountTime - 1000 * 60 * 15),
       user: "Cb. Santos",
       userRa: "23456",
       action: "Registrou ocorrência",
@@ -381,7 +383,7 @@ export function AuditReport() {
     },
     {
       id: "3",
-      timestamp: new Date(Date.now() - 1000 * 60 * 30),
+      timestamp: new Date(mountTime - 1000 * 60 * 30),
       user: "Sdt. Pereira",
       userRa: "34567",
       action: "Atualizou prontuário",
@@ -391,28 +393,28 @@ export function AuditReport() {
     },
     {
       id: "4",
-      timestamp: new Date(Date.now() - 1000 * 60 * 60),
+      timestamp: new Date(mountTime - 1000 * 60 * 60),
       user: "Sgt. Oliveira",
       userRa: "12345",
       action: "Cadastrou binômio",
       module: "Efetivo",
       detail: "Binômio Thor + Sdt. Pereira",
     },
-  ], []);
+  ], [mountTime]);
 
   const topUsers: UserActivity[] = useMemo(() => [
-    { user: "Sgt. Oliveira", userRa: "12345", actions: 45, lastAction: new Date(Date.now() - 1000 * 60 * 5) },
-    { user: "Cb. Santos", userRa: "23456", actions: 38, lastAction: new Date(Date.now() - 1000 * 60 * 15) },
-    { user: "Sdt. Pereira", userRa: "34567", actions: 29, lastAction: new Date(Date.now() - 1000 * 60 * 30) },
-    { user: "Sd. Costa", userRa: "45678", actions: 22, lastAction: new Date(Date.now() - 1000 * 60 * 60) },
-  ], []);
+    { user: "Sgt. Oliveira", userRa: "12345", actions: 45, lastAction: new Date(mountTime - 1000 * 60 * 5) },
+    { user: "Cb. Santos", userRa: "23456", actions: 38, lastAction: new Date(mountTime - 1000 * 60 * 15) },
+    { user: "Sdt. Pereira", userRa: "34567", actions: 29, lastAction: new Date(mountTime - 1000 * 60 * 30) },
+    { user: "Sd. Costa", userRa: "45678", actions: 22, lastAction: new Date(mountTime - 1000 * 60 * 60) },
+  ], [mountTime]);
 
   const integrityRecords: IntegrityRecord[] = useMemo(() => [
-    { id: "1", document: "Ocorrência #2024-0892", status: "verified", lastCheck: new Date(Date.now() - 1000 * 60 * 10), signedBy: "Sgt. Oliveira" },
-    { id: "2", document: "Treino Detecção - 15/06", status: "verified", lastCheck: new Date(Date.now() - 1000 * 60 * 30), signedBy: "Sgt. Oliveira" },
-    { id: "3", document: "Prontuário K9 Max", status: "pending", lastCheck: new Date(Date.now() - 1000 * 60 * 120) },
-    { id: "4", document: "Baixa de Estoque #45", status: "modified", lastCheck: new Date(Date.now() - 1000 * 60 * 180) },
-  ], []);
+    { id: "1", document: "Ocorrência #2024-0892", status: "verified", lastCheck: new Date(mountTime - 1000 * 60 * 10), signedBy: "Sgt. Oliveira" },
+    { id: "2", document: "Treino Detecção - 15/06", status: "verified", lastCheck: new Date(mountTime - 1000 * 60 * 30), signedBy: "Sgt. Oliveira" },
+    { id: "3", document: "Prontuário K9 Max", status: "pending", lastCheck: new Date(mountTime - 1000 * 60 * 120) },
+    { id: "4", document: "Baixa de Estoque #45", status: "modified", lastCheck: new Date(mountTime - 1000 * 60 * 180) },
+  ], [mountTime]);
 
   const recommendations = useMemo(() => [
     { icon: ShieldAlert, priority: "high" as const, text: "Revisar 3 documentos com status Pendente" },

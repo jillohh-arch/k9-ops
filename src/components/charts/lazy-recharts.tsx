@@ -3,6 +3,9 @@
 import dynamic from "next/dynamic";
 import type { ComponentType } from "react";
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- generic chart props passthrough
+type ChartProps = Record<string, unknown>;
+
 /**
  * Lazy-loaded Recharts components with SSR disabled.
  *
@@ -34,83 +37,83 @@ function ChartSkeleton() {
 export const ResponsiveContainer = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.ResponsiveContainer })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 // --- Charts ---
 export const AreaChart = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.AreaChart })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const BarChart = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.BarChart })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const LineChart = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.LineChart })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const PieChart = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.PieChart })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 // --- Series ---
 export const Area = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.Area })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const Bar = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.Bar })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const Line = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.Line })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const Pie = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.Pie })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 // --- Axes & Helpers ---
 export const XAxis = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.XAxis })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const YAxis = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.YAxis })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const CartesianGrid = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.CartesianGrid })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const Tooltip = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.Tooltip })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const Legend = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.Legend })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 export const Cell = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.Cell })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;
 
 // --- Reference elements ---
 export const ReferenceArea = dynamic(
   () => import("recharts").then((mod) => ({ default: mod.ReferenceArea })),
   { loading: () => <ChartSkeleton />, ssr: false },
-) as unknown as ComponentType<any>;
+) as unknown as ComponentType<ChartProps>;

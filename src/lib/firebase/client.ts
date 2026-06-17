@@ -1,9 +1,9 @@
 import { getAnalytics, isSupported, type Analytics } from "firebase/analytics";
-import { getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getFunctions } from "firebase/functions";
-import { getStorage } from "firebase/storage";
+import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getFunctions, type Functions } from "firebase/functions";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -15,16 +15,61 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-export const firebaseApp =
-  getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+function getApp(): FirebaseApp {
+  if (getApps().length > 0) return getApps()[0];
+  return initializeApp(firebaseConfig);
+}
 
-export const auth = getAuth(firebaseApp);
-export const db = getFirestore(firebaseApp);
-export const storage = getStorage(firebaseApp);
-export const functions = getFunctions(
-  firebaseApp,
-  process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION ?? "southamerica-east1",
-);
+// Lazy singletons — only initialize when actually accessed (client-side).
+// This prevents Firebase from throwing during SSR/prerender when env vars
+// are not available.
+let _app: FirebaseApp | null = null;
+let _auth: Auth | null = null;
+let _db: Firestore | null = null;
+let _storage: FirebaseStorage | null = null;
+let _functions: Functions | null = null;
+
+export const firebaseApp: FirebaseApp = new Proxy({} as FirebaseApp, {
+  get(_, prop) {
+    _app ??= getApp();
+    return Reflect.get(_app, prop);
+  },
+});
+
+export const auth: Auth = new Proxy({} as Auth, {
+  get(_, prop) {
+    _app ??= getApp();
+    _auth ??= getAuth(_app);
+    return Reflect.get(_auth, prop);
+  },
+});
+
+export const db: Firestore = new Proxy({} as Firestore, {
+  get(_, prop) {
+    _app ??= getApp();
+    _db ??= getFirestore(_app);
+    return Reflect.get(_db, prop);
+  },
+});
+
+export const storage: FirebaseStorage = new Proxy({} as FirebaseStorage, {
+  get(_, prop) {
+    _app ??= getApp();
+    _storage ??= getStorage(_app);
+    return Reflect.get(_storage, prop);
+  },
+});
+
+export const functions: Functions = new Proxy({} as Functions, {
+  get(_, prop) {
+    _app ??= getApp();
+    _functions ??= getFunctions(
+      _app,
+      process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION ?? "southamerica-east1",
+    );
+    return Reflect.get(_functions, prop);
+  },
+});
 
 let analyticsPromise: Promise<Analytics | null> | null = null;
 
@@ -34,7 +79,7 @@ export function getFirebaseAnalytics() {
   }
 
   analyticsPromise ??= isSupported()
-    .then((supported) => (supported ? getAnalytics(firebaseApp) : null))
+    .then((supported) => (supported ? getAnalytics(getApp()) : null))
     .catch(() => null);
 
   return analyticsPromise;

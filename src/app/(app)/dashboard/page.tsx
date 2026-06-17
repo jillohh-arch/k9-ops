@@ -835,6 +835,11 @@ export default function DashboardPage() {
     // QW-6: Replaced N+1 (2 listeners per dog) with 2 collectionGroup queries.
     // 2 listeners regardless of dog count vs. 2*N listeners previously.
     // Filter by dogId in memory using a Set for O(1) lookups.
+    //
+    // TODO: Para escalar além de ~50 cães, denormalizar `dogId` nos documentos
+    // de health_events/weight_records e usar `where("dogId", "in", chunk)` com
+    // batches de 30 IDs (limite do Firestore). Isso elimina a leitura completa
+    // da collectionGroup e reduz custo de billing significativamente.
     const dogIdSet = new Set(dogIds);
     const healthByDog = new Map<string, DashboardRecord[]>();
     const weightsByDog = new Map<string, DashboardRecord[]>();

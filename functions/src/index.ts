@@ -380,7 +380,7 @@ export const shiftReminders = onSchedule(
             const tokens = tokenMap.get(userId) ?? [];
             const overdueMinutes = Math.round(minutesSinceEnd);
             const title = "Turno em atraso";
-            const body = `${group.name} deveria ter encerrado ha ${overdueMinutes} minutos. Finalize ou registre a justificativa.`;
+            const body = `${group.name} deveria ter encerrado há ${overdueMinutes} minutos. Finalize ou registre a justificativa.`;
 
             const sent = await sendShiftNotification(tokens, title, body, {
               type: "shift_overdue",

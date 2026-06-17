@@ -1843,8 +1843,8 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <p className="mt-2 max-w-md text-xs leading-5 text-slate-400">
-                      Critério: vacinação vigente e último peso de
-                      weight_records dentro da faixa ideal cadastrada.
+                      Critério: vacinação vigente e último registro de peso
+                      dentro da faixa ideal cadastrada.
                     </p>
                   </div>
                   <p className="font-mono text-3xl font-black text-emerald-300">
@@ -1944,8 +1944,9 @@ export default function DashboardPage() {
                   Carregando prontuários...
                 </div>
               ) : healthError ? (
-                <div className="mt-4 rounded-2xl border border-red-300/15 bg-red-300/[0.04] p-5 text-sm text-red-200/80">
-                  Não foi possível carregar os dados de saúde: {healthError}
+                <div className="mt-4 rounded-2xl border border-amber-300/15 bg-amber-300/[0.04] p-5 text-sm text-amber-100/80">
+                  Algumas informações de saúde não estão disponíveis para este
+                  perfil no momento. O restante do dashboard continua válido.
                 </div>
               ) : healthMetrics.attention.length > 0 ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">

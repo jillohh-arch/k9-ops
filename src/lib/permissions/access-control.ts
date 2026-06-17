@@ -56,6 +56,7 @@ type AccessProfileSeed = {
   slug: string;
   status: "active" | "inactive";
   tone: string;
+  ui_hidden?: boolean;
 };
 
 type AccessPolicySeed = {
@@ -95,6 +96,60 @@ export const defaultAccessProfiles: AccessProfile[] =
     permissions: normalizePermissionMap(profile.permissions),
     seed_version: typedPolicy.version,
   }));
+
+export const canonicalAccessProfileOrder = [
+  "operador_k9",
+  "gestor",
+  "almoxarifado",
+  "administrador",
+] as const;
+
+export function isVisibleAccessProfile(
+  profile: Pick<AccessProfile, "id" | "ui_hidden">,
+) {
+  return (
+    profile.ui_hidden !== true &&
+    canonicalAccessProfileOrder.includes(
+      profile.id as (typeof canonicalAccessProfileOrder)[number],
+    )
+  );
+}
+
+export function sortAccessProfiles(profiles: AccessProfile[]) {
+  return [...profiles].sort((left, right) => {
+    const leftIndex = canonicalAccessProfileOrder.indexOf(
+      left.id as (typeof canonicalAccessProfileOrder)[number],
+    );
+    const rightIndex = canonicalAccessProfileOrder.indexOf(
+      right.id as (typeof canonicalAccessProfileOrder)[number],
+    );
+
+    if (leftIndex >= 0 || rightIndex >= 0) {
+      return (
+        (leftIndex >= 0 ? leftIndex : Number.MAX_SAFE_INTEGER) -
+        (rightIndex >= 0 ? rightIndex : Number.MAX_SAFE_INTEGER)
+      );
+    }
+
+    return left.name.localeCompare(right.name, "pt-BR");
+  });
+}
+
+export function mergeAccessProfilesWithDefaults(profiles: AccessProfile[]) {
+  const merged = new Map<string, AccessProfile>(
+    defaultAccessProfiles.map((profile) => [profile.id, profile]),
+  );
+
+  for (const profile of profiles) {
+    merged.set(profile.id, profile);
+  }
+
+  return Array.from(merged.values());
+}
+
+export function visibleAccessProfiles(profiles: AccessProfile[]) {
+  return sortAccessProfiles(profiles.filter(isVisibleAccessProfile));
+}
 
 export function getDefaultAccessProfile(id: string | null | undefined) {
   if (!id) return null;
@@ -148,16 +203,22 @@ export function getProfileIdFromLegacyValue(value: string | null | undefined) {
     administrador: "administrador",
     admin: "administrador",
     admin_master: "administrador",
+    almoxarifado: "almoxarifado",
     comando: "gestor",
     comando_canil: "gestor",
+    condutor: "operador_k9",
     coordenador: "gestor",
+    estoque: "almoxarifado",
     guarda_k9: "operador_k9",
     gestor: "gestor",
     gestor_canil: "gestor",
+    inventory_manager: "almoxarifado",
     inspetor: "gestor",
+    operacional: "operador_k9",
     operador: "operador_k9",
     operador_k9: "operador_k9",
     subinspetor: "gestor",
+    subinspetor_inspetor: "gestor",
     instrutor: "instrutor_k9",
     instrutor_k9: "instrutor_k9",
     adestrador: "instrutor_k9",

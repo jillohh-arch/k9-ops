@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "actions": [
     {
       "id": "view",
@@ -138,13 +138,13 @@
   "profiles": [
     {
       "id": "operador_k9",
-      "name": "Operador K9",
+      "name": "Operador",
       "slug": "operador_k9",
       "description": "Guarda designado para trabalho operacional com o cão. Seleciona K9, assume viatura e serviço, registra treinos, ocorrências e zela pela saúde do cão em campo.",
       "status": "active",
       "level": "operacional",
       "tone": "blue",
-      "role_keys": ["operador_k9", "operador", "guarda_k9"],
+      "role_keys": ["operador_k9", "operador", "condutor", "guarda_k9", "handler", "mobile_user"],
       "module_tags": ["Mobile", "Operações", "K9", "Viatura", "Treinos", "Ocorrências", "Saúde"],
       "scope": "global",
       "permissions": {
@@ -165,11 +165,12 @@
       "id": "instrutor_k9",
       "name": "Instrutor K9",
       "slug": "instrutor_k9",
-      "description": "Guarda formado na especialidade (detecção, busca e captura, guarda e proteção). Avalia, aprova treinos e certifica que o cão está pronto para o serviço policial.",
+      "description": "Perfil legado mantido para compatibilidade. No cadastro atual, Instrutor K9 deve ser tratado como capacidade do Operador.",
       "status": "active",
       "level": "técnico",
       "tone": "cyan",
       "role_keys": ["instrutor_k9", "instrutor", "adestrador", "adestrador_k9"],
+      "ui_hidden": true,
       "module_tags": ["Formação", "Avaliação", "Aprovação", "Especialidades", "Mobile"],
       "scope": "global",
       "permissions": {
@@ -185,6 +186,24 @@
         "reports": ["view", "export"],
         "audit": ["view"],
         "shifts": ["view", "create", "edit"],
+        "me": ["view", "edit"]
+      }
+    },
+    {
+      "id": "almoxarifado",
+      "name": "Almoxarifado",
+      "slug": "almoxarifado",
+      "description": "Responsável por consulta, cadastro e movimentação de estoque, materiais, insumos e equipamentos do Canil.",
+      "status": "active",
+      "level": "logística",
+      "tone": "orange",
+      "role_keys": ["almoxarifado", "inventory_manager", "estoque"],
+      "module_tags": ["Estoque", "Materiais", "Relatórios"],
+      "scope": "global",
+      "permissions": {
+        "dashboard": ["view"],
+        "inventory": ["view", "create", "edit", "archive", "export", "audit"],
+        "reports": ["view", "export"],
         "me": ["view", "edit"]
       }
     },

@@ -56,6 +56,7 @@ export function normalizeAccessProfile(
     slug: String(raw.slug ?? id),
     status: raw.status === "inactive" ? "inactive" : "active",
     tone: String(raw.tone ?? "cyan"),
+    ui_hidden: raw.ui_hidden === true,
   };
 }
 
@@ -186,6 +187,7 @@ function accessProfileForFunction(profile: AccessProfile) {
     slug: profile.slug,
     status: profile.status,
     tone: profile.tone,
+    ui_hidden: profile.ui_hidden === true,
   };
 }
 

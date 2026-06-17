@@ -77,8 +77,8 @@ export const humanSpecialtyOptions = [
 ] as const;
 
 export const emptyHumanFormValues: HumanFormValues = {
-  accessLevel: "Condutor",
-  accessProfile: "Condutor",
+  accessLevel: "Operador",
+  accessProfile: "Operador",
   accessProfileId: "operador_k9",
   active: true,
   admissionDate: "",
@@ -123,12 +123,17 @@ export async function loadHumanForEdit(ra: string) {
   const snapshot = await getDoc(doc(db, "users", ra));
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
+  const rawAccessProfileId = text(data, "access_profile_id", "accessProfileId");
+  const legacyInstructorProfile = rawAccessProfileId === "instrutor_k9";
   return {
-    accessLevel: text(data, "accessLevel", "access_level") || "Condutor",
+    accessLevel: text(data, "accessLevel", "access_level") || "Operador",
     accessProfile:
-      text(data, "accessProfile", "access_profile") || "Operacional",
-    accessProfileId:
-      text(data, "access_profile_id", "accessProfileId") || "operador_k9",
+      legacyInstructorProfile
+        ? "Operador"
+        : text(data, "accessProfile", "access_profile") || "Operador",
+    accessProfileId: legacyInstructorProfile
+      ? "operador_k9"
+      : rawAccessProfileId || "operador_k9",
     active:
       data.active !== false &&
       data.deleted_at == null &&
@@ -146,6 +151,7 @@ export async function loadHumanForEdit(ra: string) {
       "institutionalEmail",
     ),
     isK9Instructor:
+      legacyInstructorProfile ||
       data.is_k9_instructor === true ||
       text(data, "training_role") === "instrutor_k9",
     notes: text(data, "notes", "observações"),
@@ -193,7 +199,7 @@ export async function saveHuman(
   const photoUrl = photoFile
     ? await uploadHumanPhoto(values.ra, photoFile)
     : values.photoUrl;
-  const isK9Instructor = values.accessProfileId === "instrutor_k9";
+  const isK9Instructor = values.isK9Instructor;
   const result = await callAdminUpsertHuman({
     mode,
     ra: values.ra,

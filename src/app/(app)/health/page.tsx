@@ -32,6 +32,7 @@ import {
   type HealthEventSummary,
   type HealthTone,
 } from "@/features/health/hooks/use-health-data";
+import { humanizeSourceErrors } from "@/lib/errors/user-facing-errors";
 import { paths } from "@/lib/routes/paths";
 import { cn } from "@/lib/utils";
 
@@ -890,7 +891,7 @@ export default function HealthPage() {
             <div>
               <p className="font-black">Algumas leituras foram bloqueadas.</p>
               <p className="mt-1 text-amber-100/75">
-                {data.errors.join(" | ")}
+                {humanizeSourceErrors(data.errors).join(" | ")}
               </p>
             </div>
           </div>

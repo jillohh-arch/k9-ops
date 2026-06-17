@@ -2,49 +2,24 @@
 
 import {
   AlertCircle,
-  Archive,
-  ArrowRight,
   Award,
-  BarChart3,
-  CalendarDays,
-  Check,
-  ClipboardList,
-  Copy,
+  Boxes,
+  CheckCircle2,
   Crown,
-  Download,
-  Eye,
-  FileText,
-  Filter,
-  HeartPulse,
   KeyRound,
-  LayoutGrid,
-  Lock,
-  PawPrint,
-  Plus,
+  LoaderCircle,
   RefreshCw,
-  Save,
   Search,
-  Settings,
-  Shield,
-  ShieldAlert,
   ShieldCheck,
-  Star,
   User,
-  UserCheck,
-  UserCog,
-  UserPlus,
   Users,
-  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import Image from "next/image";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
   assignUserAccessProfile,
-  duplicateAccessProfile,
-  saveAccessProfile,
   seedDefaultAccessProfiles,
   type AccessUser,
 } from "@/features/access/data/access-profile-service";
@@ -54,1016 +29,667 @@ import { useAuth } from "@/features/auth/providers/auth-provider";
 import {
   accessActions,
   accessModules,
-  countActivePermissions,
+  accessPolicyVersion,
   countModulesWithAccess,
   defaultAccessProfiles,
+  getProfileIdFromLegacyValue,
+  mergeAccessProfilesWithDefaults,
+  visibleAccessProfiles,
   type AccessAction,
   type AccessModuleId,
-  type AccessPermissionMap,
   type AccessProfile,
 } from "@/lib/permissions/access-control";
 import { cn } from "@/lib/utils";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+type ProfileTone = {
+  border: string;
+  bg: string;
+  icon: string;
+  text: string;
+};
 
-type AccessTab = "overview" | "permissions" | "users";
+const profileIcons: Record<string, LucideIcon> = {
+  administrador: Crown,
+  almoxarifado: Boxes,
+  gestor: ShieldCheck,
+  operador_k9: User,
+};
 
-// ─── Design Tokens ───────────────────────────────────────────────────────────
-
-const toneMap: Record<string, { border: string; bg: string; text: string; glow: string; icon: string }> = {
-  violet: {
-    border: "border-violet-400/30",
-    bg: "bg-violet-500/10",
-    text: "text-violet-200",
-    glow: "shadow-[0_0_40px_rgba(139,92,246,0.15)]",
-    icon: "bg-violet-400/20 text-violet-300",
-  },
-  cyan: {
-    border: "border-cyan-400/30",
-    bg: "bg-cyan-500/10",
-    text: "text-cyan-200",
-    glow: "shadow-[0_0_40px_rgba(34,211,238,0.15)]",
-    icon: "bg-cyan-400/20 text-cyan-300",
-  },
+const toneMap: Record<string, ProfileTone> = {
   amber: {
-    border: "border-amber-400/30",
-    bg: "bg-amber-500/10",
-    text: "text-amber-200",
-    glow: "shadow-[0_0_40px_rgba(251,191,36,0.15)]",
-    icon: "bg-amber-400/20 text-amber-300",
+    bg: "bg-amber-400/10",
+    border: "border-amber-300/25",
+    icon: "text-amber-200",
+    text: "text-amber-100",
   },
   blue: {
-    border: "border-blue-400/30",
-    bg: "bg-blue-500/10",
-    text: "text-blue-200",
-    glow: "shadow-[0_0_40px_rgba(59,130,246,0.15)]",
-    icon: "bg-blue-400/20 text-blue-300",
+    bg: "bg-blue-400/10",
+    border: "border-blue-300/25",
+    icon: "text-blue-200",
+    text: "text-blue-100",
+  },
+  cyan: {
+    bg: "bg-cyan-400/10",
+    border: "border-cyan-300/25",
+    icon: "text-cyan-200",
+    text: "text-cyan-100",
+  },
+  orange: {
+    bg: "bg-orange-400/10",
+    border: "border-orange-300/25",
+    icon: "text-orange-200",
+    text: "text-orange-100",
+  },
+  violet: {
+    bg: "bg-violet-400/10",
+    border: "border-violet-300/25",
+    icon: "text-violet-200",
+    text: "text-violet-100",
   },
 };
 
-function getToneTokens(tone: string) {
-  return toneMap[tone] ?? toneMap.cyan;
-}
-
-const levelColors: Record<string, string> = {
-  máximo: "bg-violet-400/20 text-violet-200 border-violet-400/30",
-  gestão: "bg-amber-400/20 text-amber-200 border-amber-400/30",
-  técnico: "bg-cyan-400/20 text-cyan-200 border-cyan-400/30",
-  operacional: "bg-blue-400/20 text-blue-200 border-blue-400/30",
-  logística: "bg-orange-400/20 text-orange-200 border-orange-400/30",
-  restrito: "bg-slate-400/20 text-slate-200 border-slate-400/30",
-  leitura: "bg-slate-400/20 text-slate-200 border-slate-400/30",
+const levelLabels: Record<string, string> = {
+  gestão: "Gestão",
+  logística: "Logística",
+  máximo: "Administrador",
+  operacional: "Operacional",
+  técnico: "Técnico",
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const inputClass =
-  "h-11 w-full rounded-xl border border-white/10 bg-white/[0.035] px-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35 focus:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-55";
-
-const textareaClass =
-  "min-h-20 w-full rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35 focus:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-55";
-
-const toneOptions = ["violet", "cyan", "amber", "blue"];
-
-const accessTabs: Array<{
-  description: string;
-  id: AccessTab;
-  label: string;
-}> = [
-  { description: "visão geral dos perfis", id: "overview", label: "Central" },
-  { description: "módulos e permissões", id: "permissions", label: "Editar perfil" },
-  { description: "vincular usuários", id: "users", label: "Atribuição" },
-];
-
-const roleKeyLabels: Record<string, string> = {
-  adestrador: "Adestrador",
-  adestrador_k9: "Adestrador K9",
-  admin: "Administrador",
-  administrador: "Administrador",
-  comando: "Comando",
-  comando_canil: "Comando Canil",
-  coordenador: "Coordenador",
-  guarda_k9: "Guarda K9",
-  gestor: "Gestor",
-  gestor_canil: "Gestor do Canil",
-  inspetor: "Inspetor",
-  instrutor: "Instrutor",
-  instrutor_k9: "Instrutor K9",
-  operador: "Operador",
-  operador_k9: "Operador K9",
-  subinspetor: "Subinspetor",
-  ti: "TI",
-};
-
-function formatNumber(n: number) {
-  return Intl.NumberFormat("pt-BR").format(n);
+function getTone(profile: AccessProfile) {
+  return toneMap[profile.tone] ?? toneMap.cyan;
 }
 
-function commaListToArray(value: string): string[] {
-  return value
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean);
+function formatNumber(value: number) {
+  return Intl.NumberFormat("pt-BR").format(value);
 }
 
-function arrayToCommaList(value: string[]) {
-  return value.join(", ");
+function rawUserProfileId(user: AccessUser) {
+  return (
+    user.accessProfileId ??
+    getProfileIdFromLegacyValue(user.accessProfile ?? user.role)
+  );
 }
 
-function moduleLabel(moduleId: AccessModuleId) {
-  return accessModules.find((module) => module.id === moduleId)?.label ?? moduleId;
+function visibleUserProfileId(user: AccessUser) {
+  const profileId = rawUserProfileId(user);
+  if (profileId === "instrutor_k9") return "operador_k9";
+  return profileId;
 }
 
-function cloneProfile(profile: AccessProfile): AccessProfile {
-  return {
-    ...profile,
-    module_tags: [...profile.module_tags],
-    permissions: Object.fromEntries(
-      Object.entries(profile.permissions).map(([moduleId, actions]) => [
-        moduleId,
-        { ...(actions ?? {}) },
-      ]),
-    ) as AccessPermissionMap,
-    role_keys: [...profile.role_keys],
-  };
+function hasNumericRa(user: AccessUser) {
+  return /^\d{4,12}$/.test(user.ra.trim());
 }
 
-function newProfileDraft(): AccessProfile {
-  return {
-    description: "",
-    id: "novo_perfil",
-    level: "restrito",
-    module_tags: [],
-    name: "Novo perfil",
-    permissions: {},
-    role_keys: [],
-    scope: "global",
-    seed_version: 3,
-    slug: "novo_perfil",
-    status: "active",
-    tone: "cyan",
-  };
+function usersForProfile(users: AccessUser[], profileId: string) {
+  return users.filter((user) => visibleUserProfileId(user) === profileId);
 }
 
-function moduleLevel(profile: AccessProfile, moduleId: AccessModuleId): ModuleAccessLevel {
+function modulePermissionLevel(
+  profile: AccessProfile,
+  moduleId: AccessModuleId,
+) {
   const permissions = profile.permissions[moduleId] ?? {};
   const enabled = accessActions
     .map((action) => action.id)
     .filter((action) => permissions[action] === true);
 
-  if (!enabled.length) return "none";
-  if (enabled.length === accessActions.length) return "total";
+  if (!enabled.length) return null;
+  if (enabled.length === accessActions.length) return "Acesso total";
   if (
     ["view", "create", "edit", "export", "approve", "audit"].every(
       (action) => permissions[action as AccessAction] === true,
     )
   ) {
-    return "gestão";
+    return "Gestão";
   }
   if (
     ["view", "create", "edit"].every(
       (action) => permissions[action as AccessAction] === true,
     )
   ) {
-    return "operacional";
+    return "Operacional";
   }
-  return "consulta";
+  return "Consulta";
 }
 
-function setModuleAccessLevel(
-  profile: AccessProfile,
-  moduleId: AccessModuleId,
-  level: ModuleAccessLevel,
-) {
-  return {
-    ...profile,
-    permissions: {
-      ...profile.permissions,
-      [moduleId]: Object.fromEntries(
-        accessActions.map((action) => [
-          action.id,
-          levelActions[level].includes(action.id),
-        ]),
-      ) as Partial<Record<AccessAction, boolean>>,
-    },
-  };
+function moduleSummaries(profile: AccessProfile) {
+  return accessModules
+    .map((module) => ({
+      ...module,
+      level: modulePermissionLevel(profile, module.id),
+    }))
+    .filter((module) => module.level != null);
 }
 
-function togglePermission(
-  profile: AccessProfile,
-  moduleId: AccessModuleId,
-  action: AccessAction,
-) {
-  const current = profile.permissions[moduleId]?.[action] === true;
-  return {
-    ...profile,
-    permissions: {
-      ...profile.permissions,
-      [moduleId]: {
-        ...(profile.permissions[moduleId] ?? {}),
-        [action]: !current,
-      },
-    },
-  };
+function profileNeedsSync(profile: AccessProfile, remoteIds: Set<string>) {
+  return !remoteIds.has(profile.id) || profile.seed_version < accessPolicyVersion;
 }
 
-function hasPermission(
-  profile: AccessProfile,
-  moduleId: AccessModuleId,
-  action: AccessAction,
-) {
-  return profile.permissions[moduleId]?.[action] === true;
-}
-
-function usersForProfile(users: AccessUser[], profileId: string) {
-  return users.filter((user) => user.accessProfileId === profileId);
-}
-
-function sensitiveCount(profile: AccessProfile) {
-  return Object.values(profile.permissions).reduce(
-    (total, permissions) =>
-      total +
-      Number(permissions?.archive === true) +
-      Number(permissions?.approve === true) +
-      Number(permissions?.audit === true) +
-      Number(permissions?.export === true),
-    0,
-  );
-}
-
-function criticalPermissionCount(profiles: AccessProfile[]) {
-  return profiles.reduce((total, profile) => total + sensitiveCount(profile), 0);
-}
-
-// ─── Icons por Perfil ────────────────────────────────────────────────────────
-
-const profileIcons: Record<string, LucideIcon> = {
-  administrador: Crown,
-  operador_k9: User,
-  instrutor_k9: PawPrint,
-  gestor: ShieldCheck,
-};
-
-type ModuleAccessLevel = "none" | "consulta" | "operacional" | "gestão" | "total";
-
-const levelActions: Record<ModuleAccessLevel, AccessAction[]> = {
-  consulta: ["view"],
-  gestão: ["view", "create", "edit", "export", "approve", "audit"],
-  none: [],
-  operacional: ["view", "create", "edit", "approve"],
-  total: accessActions.map((action) => action.id),
-};
-
-function ProfileIcon({ profile, size = 56 }: { profile: AccessProfile; size?: number }) {
-  const Icon = profileIcons[profile.id] ?? Shield;
-  const tokens = getToneTokens(profile.tone);
+function ProfileIcon({ profile }: { profile: AccessProfile }) {
+  const tone = getTone(profile);
+  const Icon = profileIcons[profile.id] ?? ShieldCheck;
 
   return (
     <span
       className={cn(
-        "flex items-center justify-center rounded-2xl border",
-        tokens.border,
-        tokens.bg,
-        tokens.icon,
+        "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border shadow-[0_0_30px_rgba(77,208,225,0.12)]",
+        tone.border,
+        tone.bg,
+        tone.icon,
       )}
-      style={{ width: size, height: size }}
     >
-      <Icon className="text-current" style={{ width: size * 0.45, height: size * 0.45 }} />
+      <Icon className="h-6 w-6" />
     </span>
   );
 }
 
-// ─── Badge de Nível ──────────────────────────────────────────────────────────
-
-function LevelBadge({ level }: { level: string }) {
-  const colorClass = levelColors[level] ?? levelColors.restrito;
-  return (
-    <span className={cn("rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em]", colorClass)}>
-      {level}
-    </span>
-  );
-}
-
-// ─── Cards de Perfil (Visual Redesenhado) ────────────────────────────────────
-
-function ProfileCard({
-  isSelected,
-  onAssign,
-  onEdit,
-  onSelect,
-  profile,
-  userCount,
+function MetricCard({
+  detail,
+  icon: Icon,
+  label,
+  value,
 }: {
-  isSelected: boolean;
-  onAssign: () => void;
-  onEdit: () => void;
-  onSelect: () => void;
-  profile: AccessProfile;
-  userCount: number;
+  detail: string;
+  icon: LucideIcon;
+  label: string;
+  value: string;
 }) {
-  const tokens = getToneTokens(profile.tone);
-  const Icon = profileIcons[profile.id] ?? Shield;
-
   return (
-    <article
-      className={cn(
-        "group relative overflow-hidden rounded-3xl border bg-gradient-to-br from-slate-950 to-slate-900 p-5 transition-all duration-300",
-        isSelected
-          ? cn(tokens.border, tokens.glow, "scale-[1.02]")
-          : "border-white/10 hover:border-white/20",
-      )}
-    >
-      {/* Background glow */}
-      {isSelected && (
-        <div className={cn("absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-20 blur-3xl", tokens.bg)} />
-      )}
-
-      <div className="relative">
-        {/* Header: Icon + Name + Level */}
-        <div className="flex items-start gap-4">
-          <ProfileIcon profile={profile} size={56} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="text-lg font-black text-white leading-tight">{profile.name}</h3>
-              <LevelBadge level={profile.level} />
-            </div>
-            <p className="mt-1 text-xs text-slate-400 line-clamp-2 leading-relaxed">
-              {profile.description || "Sem descrição"}
-            </p>
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-center">
-            <p className="font-mono text-2xl font-black text-white">{userCount}</p>
-            <p className="mt-0.5 text-[10px] uppercase tracking-wider text-slate-500">usuários</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-center">
-            <p className="font-mono text-2xl font-black text-white">
-              {countModulesWithAccess(profile)}
-            </p>
-            <p className="mt-0.5 text-[10px] uppercase tracking-wider text-slate-500">módulos</p>
-          </div>
-        </div>
-
-        {/* Role Keys */}
-        {profile.role_keys.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {profile.role_keys.slice(0, 3).map((key) => (
-              <span
-                key={key}
-                className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-slate-400"
-              >
-                {roleKeyLabels[key] ?? key}
-              </span>
-            ))}
-            {profile.role_keys.length > 3 && (
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-slate-500">
-                +{profile.role_keys.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/10 pt-4">
-          <button
-            className={cn(
-              "flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-xs font-semibold transition",
-              isSelected
-                ? cn(tokens.border, tokens.bg, tokens.text)
-                : "border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200",
-            )}
-            onClick={onSelect}
-            type="button"
-          >
-            <Eye className="h-3.5 w-3.5" />
-            Ver
-          </button>
-          <button
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 px-2 py-2.5 text-xs font-semibold text-slate-400 transition hover:border-cyan-400/30 hover:text-cyan-200"
-            onClick={onEdit}
-            type="button"
-          >
-            <UserCog className="h-3.5 w-3.5" />
-            Editar
-          </button>
-          <button
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 px-2 py-2.5 text-xs font-semibold text-slate-400 transition hover:border-emerald-400/30 hover:text-emerald-200"
-            onClick={onAssign}
-            type="button"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Atribuir
-          </button>
+    <article className="rounded-2xl border border-cyan-200/12 bg-surface-card/82 p-4">
+      <div className="flex items-center gap-4">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
+          <Icon className="h-6 w-6" />
+        </span>
+        <div>
+          <p className="text-xs text-slate-500">{label}</p>
+          <p className="mt-1 font-mono text-2xl font-black text-white">{value}</p>
+          <p className="mt-1 text-[11px] text-slate-500">{detail}</p>
         </div>
       </div>
     </article>
   );
 }
 
-// ─── Tabs ────────────────────────────────────────────────────────────────────
-
-function TabButton({
-  active,
-  description,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  description: string;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={cn(
-        "rounded-2xl border px-5 py-3 text-left transition-all",
-        active
-          ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.1)]"
-          : "border-white/10 bg-white/[0.02] text-slate-400 hover:border-white/20 hover:text-slate-200",
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      <span className="block text-sm font-bold">{label}</span>
-      <span className="mt-0.5 block text-[11px] text-slate-500">{description}</span>
-    </button>
-  );
-}
-
-// ─── Section Card ─────────────────────────────────────────────────────────────
-
 function SectionCard({
-  action,
   children,
   className,
-  icon,
   subtitle,
   title,
 }: {
-  action?: ReactNode;
-  children: ReactNode;
+  children: React.ReactNode;
   className?: string;
-  icon?: ReactNode;
   subtitle?: string;
   title: string;
 }) {
   return (
     <section
       className={cn(
-        "rounded-[1.75rem] border border-cyan-200/12 bg-slate-950/72 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.28)]",
+        "rounded-[1.75rem] border border-cyan-200/12 bg-slate-950/72 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.24)]",
         className,
       )}
     >
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          {icon ? (
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-              {icon}
-            </span>
-          ) : null}
-          <div>
-            <h2 className="text-lg font-black text-white">{title}</h2>
-            {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
-          </div>
-        </div>
-        {action}
+      <div className="mb-5">
+        <h2 className="text-lg font-black text-white">{title}</h2>
+        {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
       </div>
       {children}
     </section>
   );
 }
 
-// ─── Metric Card ─────────────────────────────────────────────────────────────
-
-function MetricCard({
-  detail,
-  icon: Icon,
-  label,
-  tone,
-  value,
+function ProfileCard({
+  active,
+  missingRemote,
+  onSelect,
+  profile,
+  userCount,
 }: {
-  detail: string;
-  icon: LucideIcon;
-  label: string;
-  tone: string;
-  value: string;
+  active: boolean;
+  missingRemote: boolean;
+  onSelect: () => void;
+  profile: AccessProfile;
+  userCount: number;
 }) {
-  const tokens = getToneTokens(tone);
+  const tone = getTone(profile);
+
   return (
-    <article className={cn("relative min-h-36 overflow-hidden rounded-2xl border p-5", tokens.border, tokens.bg)}>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_86%_18%,rgba(255,255,255,0.1),transparent_30%)]" />
-      <div className="relative flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-slate-200">{label}</p>
-          <p className="mt-3 font-mono text-4xl font-black text-white">{value}</p>
-          <p className="mt-1.5 text-sm text-slate-400">{detail}</p>
+    <button
+      className={cn(
+        "w-full rounded-3xl border bg-gradient-to-br from-slate-950 to-slate-900 p-5 text-left transition",
+        active ? cn(tone.border, "shadow-[0_0_34px_rgba(0,188,212,0.16)]") : "border-white/10 hover:border-white/20",
+      )}
+      onClick={onSelect}
+      type="button"
+    >
+      <div className="flex items-start gap-4">
+        <ProfileIcon profile={profile} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-black text-white">{profile.name}</h3>
+            <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]", tone.border, tone.bg, tone.text)}>
+              {levelLabels[profile.level] ?? profile.level}
+            </span>
+            {missingRemote ? (
+              <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-amber-100">
+                sincronizar
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">
+            {profile.description}
+          </p>
         </div>
-        <span className={cn("flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10", tokens.icon)}>
-          <Icon className="h-6 w-6" />
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+        <span>
+          <span className="block text-xs text-slate-500">Usuários</span>
+          <span className="font-mono text-xl font-black text-white">
+            {formatNumber(userCount)}
+          </span>
+        </span>
+        <span>
+          <span className="block text-xs text-slate-500">Módulos</span>
+          <span className="font-mono text-xl font-black text-white">
+            {countModulesWithAccess(profile)}
+          </span>
         </span>
       </div>
-    </article>
+    </button>
   );
 }
 
-// ─── Permissions Matrix ────────────────────────────────────────────────────────
-
-function PermissionMatrix({
-  profile,
-  onToggle,
+function UserRow({
+  blocked,
+  selected,
+  user,
 }: {
-  profile: AccessProfile;
-  onToggle: (profile: AccessProfile) => void;
+  blocked?: boolean;
+  selected?: boolean;
+  user: AccessUser;
 }) {
-  const modulesByCategory = useMemo(() => {
-    const map = new Map<string, typeof accessModules>();
-    for (const mod of accessModules) {
-      const cat = mod.category;
-      if (!map.has(cat)) map.set(cat, []);
-      map.get(cat)!.push(mod);
-    }
-    return map;
-  }, []);
+  const numericRa = hasNumericRa(user);
 
   return (
-    <div className="space-y-6">
-      {Array.from(modulesByCategory.entries()).map(([category, modules]) => (
-        <div key={category}>
-          <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-500">{category}</h3>
-          <div className="space-y-2">
-            {modules.map((mod) => {
-              const perms = profile.permissions[mod.id] ?? {};
-              const enabledCount = Object.values(perms).filter(Boolean).length;
-              const totalCount = accessActions.length;
-
-              return (
-                <div
-                  key={mod.id}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 transition hover:bg-white/[0.04]"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-slate-200">{mod.label}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {accessActions.map((action) => {
-                      const isEnabled = perms[action.id] === true;
-                      return (
-                        <button
-                          key={action.id}
-                          className={cn(
-                            "flex h-7 w-7 items-center justify-center rounded-lg border text-xs transition",
-                            isEnabled
-                              ? "border-emerald-400/40 bg-emerald-400/20 text-emerald-300"
-                              : "border-white/10 bg-white/[0.02] text-slate-600 hover:border-white/20",
-                          )}
-                          onClick={() =>
-                            onToggle(
-                              togglePermission(profile, mod.id, action.id),
-                            )
-                          }
-                          title={action.label}
-                          type="button"
-                        >
-                          {isEnabled ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
-                        </button>
-                      );
-                    })}
-                    <span className="ml-2 text-xs text-slate-500">
-                      {enabledCount}/{totalCount}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-2xl border p-3",
+        selected
+          ? "border-cyan-300/30 bg-cyan-300/10"
+          : blocked
+            ? "border-amber-300/20 bg-amber-300/10"
+          : "border-white/10 bg-black/18",
+      )}
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-300/10 text-sm font-black text-cyan-100">
+        {(user.callsign || user.fullName || user.ra).slice(0, 1).toUpperCase()}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold text-white">
+          {user.callsign || user.fullName || user.ra}
+        </span>
+        <span className="block truncate text-xs text-slate-500">
+          {numericRa ? `RA ${user.ra}` : "Cadastro sem RA numérico"}
+          {user.isK9Instructor ? " · Instrutor K9" : ""}
+        </span>
+      </span>
+      {blocked ? (
+        <AlertCircle className="h-5 w-5 text-amber-200" />
+      ) : null}
+      {selected ? <CheckCircle2 className="h-5 w-5 text-cyan-200" /> : null}
     </div>
   );
 }
-
-// ─── User Assignment List ────────────────────────────────────────────────────
-
-function UserAssignmentList({
-  profile,
-  users,
-}: {
-  profile: AccessProfile;
-  users: AccessUser[];
-}) {
-  const profileUsers = usersForProfile(users, profile.id);
-  const tokens = getToneTokens(profile.tone);
-
-  if (profileUsers.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center">
-        <Users className="mx-auto h-10 w-10 text-slate-600" />
-        <p className="mt-3 text-sm text-slate-400">Nenhum usuário com este perfil</p>
-        <p className="mt-1 text-xs text-slate-500">Atribua usuários abaixo</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {profileUsers.map((user) => (
-        <div
-          key={user.ra}
-          className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-sm font-bold text-slate-400">
-            {user.callsign?.[0]?.toUpperCase() ?? "?"}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white truncate">{user.callsign}</p>
-            <p className="text-xs text-slate-500">{user.ra} · {user.role ?? "Sem cargo"}</p>
-          </div>
-          <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider", tokens.border, tokens.text)}>
-            {profile.name}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 
 export function AccessProfilesPage() {
   const { profile: authProfile } = useAuth();
   const { profiles, loading: profilesLoading } = useAccessProfiles();
   const { users, loading: usersLoading } = useAccessUsers();
-
-  const [activeTab, setActiveTab] = useState<AccessTab>("overview");
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
-  const [draftProfile, setDraftProfile] = useState<AccessProfile | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState("operador_k9");
   const [searchQuery, setSearchQuery] = useState("");
+  const [assigningRa, setAssigningRa] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const selectedProfile = useMemo(
-    () =>
-      profiles.find((p) => p.id === selectedProfileId) ??
-      defaultAccessProfiles.find((p) => p.id === selectedProfileId) ??
-      null,
-    [profiles, selectedProfileId],
+  const mergedProfiles = useMemo(
+    () => mergeAccessProfilesWithDefaults(profiles),
+    [profiles],
   );
+  const displayProfiles = useMemo(
+    () => visibleAccessProfiles(mergedProfiles),
+    [mergedProfiles],
+  );
+  const remoteProfileIds = useMemo(
+    () => new Set(profiles.map((profile) => profile.id)),
+    [profiles],
+  );
+  const selectedProfile =
+    displayProfiles.find((profile) => profile.id === selectedProfileId) ??
+    displayProfiles[0];
+  const selectedProfileUsers = selectedProfile
+    ? usersForProfile(users, selectedProfile.id)
+    : [];
+  const instructorCount = users.filter((user) => user.isK9Instructor).length;
+  const usersWithoutVisibleProfile = users.filter((user) => {
+    const profileId = visibleUserProfileId(user);
+    return !profileId || !displayProfiles.some((profile) => profile.id === profileId);
+  });
+  const legacyProfileUsers = users.filter((user) =>
+    ["instrutor_k9", "subinspetor_inspetor"].includes(rawUserProfileId(user) ?? ""),
+  );
+  const profilesToSync = defaultAccessProfiles.filter((profile) =>
+    profileNeedsSync(
+      profiles.find((remote) => remote.id === profile.id) ?? profile,
+      remoteProfileIds,
+    ),
+  );
+  const filteredUsers = users
+    .filter((user) =>
+      [user.callsign, user.fullName, user.ra, user.accessProfile, user.role]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(searchQuery.trim().toLowerCase()),
+    )
+    .slice(0, 12);
 
-  const displayProfile = draftProfile ?? selectedProfile;
-
-  const filteredProfiles = useMemo(() => {
-    const all = [...defaultAccessProfiles, ...profiles.filter((p) => p.seed_version !== 2)];
-    if (!searchQuery) return all;
-    const q = searchQuery.toLowerCase();
-    return all.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q),
-    );
-  }, [profiles, searchQuery]);
-
-  const stats = useMemo(() => {
-    const totalProfiles = profiles.length + defaultAccessProfiles.length;
-    const totalUsers = users.length;
-    const activeUsers = users.filter((u) => u.active).length;
-    const instructorCount = users.filter(
-      (u) => u.isK9Instructor || u.accessProfileId === "instrutor_k9",
-    ).length;
-    return { totalProfiles, totalUsers, activeUsers, instructorCount };
-  }, [profiles, users]);
-
-  const handleSelectProfile = (profile: AccessProfile) => {
-    setSelectedProfileId(profile.id);
-    setDraftProfile(null);
-    setActiveTab("overview");
-  };
-
-  const handleEditProfile = (profile: AccessProfile) => {
-    setSelectedProfileId(profile.id);
-    setDraftProfile(cloneProfile(profile));
-    setActiveTab("permissions");
-  };
-
-  const handleTogglePermission = (updated: AccessProfile) => {
-    setDraftProfile(updated);
-  };
-
-  const handleSaveProfile = async () => {
-    if (!draftProfile) return;
-    setSaving(true);
-    setSaveError(null);
-    setSaveSuccess(false);
-    try {
-      await saveAccessProfile({
-        ...draftProfile,
-        actorRa: authProfile?.ra ?? null,
-      });
-      setSaveSuccess(true);
-      setDraftProfile(null);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Erro ao salvar");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAssignUser = async (user: AccessUser) => {
-    if (!selectedProfile) return;
-    try {
-      await assignUserAccessProfile(user, selectedProfile, authProfile?.ra ?? null);
-    } catch (err) {
-      console.error("Erro ao atribuir:", err);
-    }
-  };
-
-  const handleSyncProfiles = async () => {
+  async function handleSyncProfiles() {
     setSyncing(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
     try {
       const result = await seedDefaultAccessProfiles(authProfile?.ra ?? null);
-      console.log("Perfis sincronizados:", result);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
-      console.error("Erro ao sincronizar:", err);
+      const changed =
+        (result.created?.length ?? 0) + (result.updated?.length ?? 0);
+      setStatusMessage(
+        changed > 0
+          ? `${changed} perfil(is) sincronizado(s) com a política atual.`
+          : "Perfis oficiais já estavam sincronizados.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível sincronizar os perfis.",
+      );
     } finally {
       setSyncing(false);
     }
-  };
+  }
 
-  const isEditing = draftProfile !== null;
-  const tokens = displayProfile ? getToneTokens(displayProfile.tone) : getToneTokens("cyan");
+  async function handleAssignUser(user: AccessUser) {
+    if (!selectedProfile) return;
+    if (!remoteProfileIds.has(selectedProfile.id)) {
+      setErrorMessage("Sincronize os perfis oficiais antes de atribuir este perfil.");
+      return;
+    }
+
+    setAssigningRa(user.ra);
+    setErrorMessage(null);
+    setStatusMessage(null);
+    try {
+      await assignUserAccessProfile(user, selectedProfile, authProfile?.ra ?? null);
+      setStatusMessage(`${user.callsign || user.ra} agora usa o perfil ${selectedProfile.name}.`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atribuir o perfil.",
+      );
+    } finally {
+      setAssigningRa(null);
+    }
+  }
+
+  if (profilesLoading || usersLoading) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center">
+        <LoaderCircle className="h-8 w-8 animate-spin text-cyan-200" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white">Perfis de Acesso</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Gerencie quem pode acessar o quê no sistema K9 Ops
+          <p className="text-xs font-black uppercase tracking-[0.34em] text-cyan-300">
+            Governança
+          </p>
+          <h1 className="mt-2 text-3xl font-black text-white">Acessos</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+            Controle os perfis oficiais do K9 Ops, atribua usuários e acompanhe
+            capacidades especiais sem expor a estrutura técnica do sistema.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {syncing && (
-            <span className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-semibold text-cyan-200">
-              Sincronizando...
-            </span>
-          )}
-          {saveSuccess && (
-            <span className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-semibold text-emerald-200">
-              Sincronizado com sucesso!
-            </span>
-          )}
-          <button
-            className="flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-400/20 disabled:opacity-50"
-            disabled={syncing}
-            onClick={handleSyncProfiles}
-            type="button"
-          >
-            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
-            Sincronizar Perfis
-          </button>
+        <Button disabled={syncing} onClick={handleSyncProfiles} variant="secondary">
+          <RefreshCw className={cn("mr-2 h-4 w-4", syncing && "animate-spin")} />
+          Sincronizar perfis
+        </Button>
+      </div>
+
+      {profilesToSync.length ? (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 text-amber-200" />
+            <div>
+              <p className="font-bold text-amber-100">
+                Há perfis oficiais aguardando sincronização.
+              </p>
+              <p className="mt-1 text-sm text-amber-100/70">
+                Isso mantém o Firestore alinhado com a política atual de acesso.
+              </p>
+            </div>
+          </div>
+          <span className="rounded-full border border-amber-300/25 px-3 py-1 text-xs font-black text-amber-100">
+            {profilesToSync.length} pendência(s)
+          </span>
         </div>
-      </div>
+      ) : null}
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard detail="perfis configurados" icon={KeyRound} label="Total de Perfis" tone="violet" value={String(stats.totalProfiles)} />
-        <MetricCard detail="usuários ativos" icon={Users} label="Usuários" tone="cyan" value={String(stats.activeUsers)} />
-        <MetricCard detail="instrutores K9" icon={Award} label="Instrutores" tone="amber" value={String(stats.instructorCount)} />
-        <MetricCard detail="ações sensíveis" icon={ShieldAlert} label="Permissões Críticas" tone="blue" value={String(criticalPermissionCount(profiles))} />
-      </div>
+      {statusMessage ? (
+        <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100">
+          {statusMessage}
+        </div>
+      ) : null}
+      {errorMessage ? (
+        <div className="rounded-2xl border border-red-300/20 bg-red-300/10 p-4 text-sm font-semibold text-red-100">
+          {errorMessage}
+        </div>
+      ) : null}
 
-      {/* Main Layout */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
-        {/* Left: Profile Cards */}
-        <div className="space-y-4">
-          {/* Search + Tabs */}
-          <div className="space-y-3">
+      <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+        <MetricCard
+          detail="perfis institucionais"
+          icon={KeyRound}
+          label="Perfis oficiais"
+          value={formatNumber(displayProfiles.length)}
+        />
+        <MetricCard
+          detail="usuários ativos no cadastro"
+          icon={Users}
+          label="Usuários"
+          value={formatNumber(users.length)}
+        />
+        <MetricCard
+          detail="capacidade especial"
+          icon={Award}
+          label="Instrutores K9"
+          value={formatNumber(instructorCount)}
+        />
+        <MetricCard
+          detail="cadastros a revisar"
+          icon={AlertCircle}
+          label="Pendências"
+          value={formatNumber(usersWithoutVisibleProfile.length + legacyProfileUsers.length)}
+        />
+      </section>
+
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_440px]">
+        <div className="space-y-6">
+          <SectionCard
+            title="Perfis oficiais"
+            subtitle="A tela mostra apenas os perfis que devem ser atribuídos aos usuários."
+          >
+            <div className="grid gap-4 xl:grid-cols-2">
+              {displayProfiles.map((profile) => (
+                <ProfileCard
+                  active={profile.id === selectedProfile?.id}
+                  key={profile.id}
+                  missingRemote={!remoteProfileIds.has(profile.id)}
+                  onSelect={() => setSelectedProfileId(profile.id)}
+                  profile={profile}
+                  userCount={usersForProfile(users, profile.id).length}
+                />
+              ))}
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Capacidades especiais"
+            subtitle="Capacidades complementam o perfil do usuário; não são perfis separados."
+          >
+            <div className="grid gap-4 xl:grid-cols-2">
+              <article className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-200">
+                    <Award className="h-6 w-6" />
+                  </span>
+                  <div>
+                    <p className="font-black text-white">Instrutor K9</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">
+                      Permite avaliar evolução de treino e aprovar progressão.
+                      É marcado no cadastro do agente.
+                    </p>
+                    <p className="mt-3 font-mono text-2xl font-black text-white">
+                      {formatNumber(instructorCount)}
+                    </p>
+                  </div>
+                </div>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-black/18 p-4">
+                <p className="font-black text-white">Cadastros a revisar</p>
+                <p className="mt-1 text-sm leading-6 text-slate-400">
+                  Usuários sem perfil oficial ou com perfil legado aparecem aqui
+                  para correção segura.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
+                    {usersWithoutVisibleProfile.length} sem perfil oficial
+                  </span>
+                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
+                    {legacyProfileUsers.length} legado(s)
+                  </span>
+                </div>
+              </article>
+            </div>
+          </SectionCard>
+        </div>
+
+        <aside className="space-y-6">
+          {selectedProfile ? (
+            <SectionCard title={selectedProfile.name} subtitle="Resumo do acesso liberado.">
+              <div className="flex items-start gap-4">
+                <ProfileIcon profile={selectedProfile} />
+                <div>
+                  <p className="text-sm leading-6 text-slate-400">
+                    {selectedProfile.description}
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <span className="rounded-2xl border border-white/10 bg-black/18 p-3">
+                      <span className="block text-xs text-slate-500">Usuários</span>
+                      <span className="font-mono text-xl font-black text-white">
+                        {formatNumber(selectedProfileUsers.length)}
+                      </span>
+                    </span>
+                    <span className="rounded-2xl border border-white/10 bg-black/18 p-3">
+                      <span className="block text-xs text-slate-500">Módulos</span>
+                      <span className="font-mono text-xl font-black text-white">
+                        {formatNumber(countModulesWithAccess(selectedProfile))}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-2">
+                {moduleSummaries(selectedProfile).map((module) => (
+                  <div
+                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] px-3 py-2"
+                    key={module.id}
+                  >
+                    <span className="text-sm font-semibold text-white">{module.label}</span>
+                    <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[11px] font-bold text-cyan-100">
+                      {module.level}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
+
+          <SectionCard
+            title="Usuários vinculados"
+            subtitle="Quem já está dentro do perfil selecionado."
+          >
+            <div className="space-y-3">
+              {selectedProfileUsers.slice(0, 6).map((user) => (
+                <UserRow key={user.ra} selected user={user} />
+              ))}
+              {!selectedProfileUsers.length ? (
+                <p className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">
+                  Nenhum usuário vinculado a este perfil.
+                </p>
+              ) : null}
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Atribuir perfil"
+            subtitle="Selecione um usuário para aplicar o perfil ativo."
+          >
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
                 className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.035] pl-10 pr-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35"
-                placeholder="Buscar perfil..."
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar por nome ou RA..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-          </div>
-
-          {/* Profile Grid */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            {filteredProfiles.map((profile) => (
-              <ProfileCard
-                key={profile.id}
-                isSelected={selectedProfileId === profile.id}
-                profile={profile}
-                userCount={usersForProfile(users, profile.id).length}
-                onAssign={() => {
-                  setSelectedProfileId(profile.id);
-                  setActiveTab("users");
-                }}
-                onEdit={() => handleEditProfile(profile)}
-                onSelect={() => handleSelectProfile(profile)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Right: Detail Panel */}
-        <div>
-          {!displayProfile ? (
-            <div className="flex h-full min-h-96 flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center">
-              <KeyRound className="h-14 w-14 text-slate-600" />
-              <p className="mt-4 text-base font-semibold text-slate-400">
-                Selecione um perfil
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Clique em um perfil ao lado para ver os detalhes
-              </p>
+            <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-1">
+              {filteredUsers.map((user) => {
+                const alreadySelected =
+                  selectedProfile != null &&
+                  visibleUserProfileId(user) === selectedProfile.id;
+                const blocked = !hasNumericRa(user);
+                return (
+                  <button
+                    className="w-full text-left disabled:cursor-not-allowed disabled:opacity-55"
+                    disabled={alreadySelected || blocked || assigningRa === user.ra}
+                    key={user.ra}
+                    onClick={() => handleAssignUser(user)}
+                    title={
+                      blocked
+                        ? "Cadastre o RA numérico do usuário antes de alterar o perfil."
+                        : undefined
+                    }
+                    type="button"
+                  >
+                    <UserRow blocked={blocked} selected={alreadySelected} user={user} />
+                  </button>
+                );
+              })}
+              {!filteredUsers.length ? (
+                <p className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">
+                  Nenhum usuário localizado.
+                </p>
+              ) : null}
             </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Profile Header */}
-              <div className={cn("rounded-3xl border bg-gradient-to-br from-slate-950 to-slate-900 p-6", tokens.border)}>
-                <div className="flex items-start gap-4">
-                  <ProfileIcon profile={displayProfile} size={72} />
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h2 className="text-xl font-black text-white">{displayProfile.name}</h2>
-                        <p className="mt-1 text-sm text-slate-400">{displayProfile.id}</p>
-                      </div>
-                      <LevelBadge level={displayProfile.level} />
-                    </div>
-                    <p className="mt-3 text-sm text-slate-300 leading-relaxed">
-                      {displayProfile.description || "Sem descrição"}
-                    </p>
-                    {displayProfile.role_keys.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {displayProfile.role_keys.map((key) => (
-                          <span
-                            key={key}
-                            className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-slate-400"
-                          >
-                            {roleKeyLabels[key] ?? key}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Quick Stats */}
-                <div className="mt-5 grid grid-cols-3 gap-3 border-t border-white/10 pt-5">
-                  <div className="text-center">
-                    <p className="font-mono text-2xl font-black text-white">
-                      {usersForProfile(users, displayProfile.id).length}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-500">usuários</p>
-                  </div>
-                  <div className="text-center border-x border-white/10">
-                    <p className="font-mono text-2xl font-black text-white">
-                      {countModulesWithAccess(displayProfile)}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-500">módulos</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="font-mono text-2xl font-black text-white">
-                      {countActivePermissions(displayProfile)}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-500">permissões</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex gap-2">
-                {accessTabs.map((tab) => (
-                  <TabButton
-                    key={tab.id}
-                    active={activeTab === tab.id}
-                    description={tab.description}
-                    label={tab.label}
-                    onClick={() => setActiveTab(tab.id)}
-                  />
-                ))}
-              </div>
-
-              {/* Tab Content */}
-              <div className={cn("rounded-3xl border border-white/10 bg-slate-950/50 p-6", tokens.border)}>
-                {activeTab === "overview" && (
-                  <PermissionMatrix
-                    profile={displayProfile}
-                    onToggle={() => {}}
-                  />
-                )}
-
-                {activeTab === "permissions" && (
-                  <div className="space-y-4">
-                    {isEditing && (
-                      <div className="flex items-center justify-between rounded-xl border border-amber-400/30 bg-amber-400/10 p-4">
-                        <div className="flex items-center gap-3">
-                          <AlertCircle className="h-5 w-5 text-amber-400" />
-                          <span className="text-sm text-amber-200">Modo de edição ativo</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => setDraftProfile(null)}
-                            variant="ghost"
-                          >
-                            Cancelar
-                          </Button>
-                          <Button
-                            onClick={handleSaveProfile}
-                            disabled={saving}
-                            variant="primary"
-                          >
-                            {saving ? "Salvando..." : "Salvar"}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {saveSuccess && (
-                      <div className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4">
-                        <Check className="h-5 w-5 text-emerald-400" />
-                        <span className="text-sm text-emerald-200">Perfil salvo com sucesso!</span>
-                      </div>
-                    )}
-
-                    {saveError && (
-                      <div className="flex items-center gap-3 rounded-xl border border-red-400/30 bg-red-400/10 p-4">
-                        <AlertCircle className="h-5 w-5 text-red-400" />
-                        <span className="text-sm text-red-200">{saveError}</span>
-                      </div>
-                    )}
-
-                    <PermissionMatrix
-                      profile={draftProfile ?? displayProfile}
-                      onToggle={isEditing ? handleTogglePermission : () => {}}
-                    />
-
-                    {!isEditing && (
-                      <Button
-                        onClick={() => handleEditProfile(displayProfile)}
-                        variant="primary"
-                        className="w-full"
-                      >
-                        <UserCog className="mr-2 h-4 w-4" />
-                        Editar Permissões
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {activeTab === "users" && (
-                  <div className="space-y-4">
-                    <UserAssignmentList profile={displayProfile} users={users} />
-
-                    <div className="border-t border-white/10 pt-4">
-                      <p className="mb-3 text-sm font-semibold text-slate-300">Atribuir outro usuário</p>
-                      <div className="max-h-64 space-y-2 overflow-y-auto">
-                        {users
-                          .filter((u) => u.accessProfileId !== displayProfile.id)
-                          .slice(0, 10)
-                          .map((user) => (
-                            <div
-                              key={user.ra}
-                              className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] p-3"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-slate-400">
-                                  {user.callsign?.[0]?.toUpperCase() ?? "?"}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-white">{user.callsign}</p>
-                                  <p className="text-xs text-slate-500">{user.ra}</p>
-                                </div>
-                              </div>
-                              <Button
-                                onClick={() => handleAssignUser(user)}
-                                variant="ghost"
-                              >
-                                Atribuir
-                              </Button>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+          </SectionCard>
+        </aside>
       </div>
     </div>
   );

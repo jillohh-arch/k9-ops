@@ -34,6 +34,7 @@ import {
   type TrainingSessionSummary,
   type TrainingTone,
 } from "@/features/training/hooks/use-training-data";
+import { humanizeSourceErrors } from "@/lib/errors/user-facing-errors";
 import { paths } from "@/lib/routes/paths";
 import { cn } from "@/lib/utils";
 
@@ -659,8 +660,9 @@ export default function TrainingMatrixPage() {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-[2rem] border border-cyan-200/12 bg-[#081320]/82 p-5 shadow-[0_26px_90px_rgba(0,0,0,0.24)]">
-        <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+      <header className="relative overflow-hidden rounded-[2rem] border border-cyan-200/12 bg-[radial-gradient(circle_at_18%_10%,rgba(34,211,238,0.18),transparent_34%),linear-gradient(135deg,rgba(8,19,32,0.96),rgba(4,10,20,0.92))] p-6 shadow-[0_26px_90px_rgba(0,0,0,0.24)]">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-cyan-300/10 blur-3xl" />
+        <div className="relative flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">
               Treinamentos
@@ -669,22 +671,31 @@ export default function TrainingMatrixPage() {
               Prontidão K9
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              Avaliação de evolução por modalidade com base nas métricas
-              curriculares, sessões e progresso canonico.
+              Leitura gerencial da evolução por modalidade, cruzando currículo,
+              sessões registradas, progresso canônico e pendências de avaliação.
             </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Badge tone="cyan">{training.dogs.length} K9 avaliados</Badge>
+              <Badge tone="yellow">
+                {training.metrics.pendingPromotions} evolução(ões) pendente(s)
+              </Badge>
+              <Badge tone="green">
+                {training.metrics.operationalDogs} operacionais
+              </Badge>
+            </div>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
               className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
               href={paths.training}
             >
-              voltar aos treinos
+              Voltar aos treinos
             </Link>
             <Link
               className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:bg-cyan-300/[0.12]"
               href={paths.trainingCurriculums}
             >
-              currículos
+              Currículos
             </Link>
           </div>
         </div>
@@ -696,20 +707,26 @@ export default function TrainingMatrixPage() {
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
             <div>
               <p className="font-black">Algumas leituras foram bloqueadas.</p>
-              <p className="mt-1 text-amber-100/75">{errors.join(" | ")}</p>
+              <p className="mt-1 text-amber-100/75">
+                {humanizeSourceErrors(errors).join(" | ")}
+              </p>
             </div>
           </div>
         </div>
       ) : null}
 
-      <section className="grid gap-4 rounded-[1.75rem] border border-cyan-200/12 bg-slate-950/72 p-5 md:grid-cols-[1fr_1fr] xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="flex items-center gap-4">
-          <span className="flex h-20 w-20 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
-            <Dog className="h-10 w-10" />
-          </span>
-          <div>
+      <section className="grid gap-4 rounded-[1.75rem] border border-cyan-200/12 bg-[linear-gradient(135deg,rgba(15,23,42,0.86),rgba(8,19,32,0.72))] p-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
+          <div className="flex items-center gap-4">
+            <span className="flex h-20 w-20 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-300/10 text-cyan-100 shadow-[0_0_34px_rgba(34,211,238,0.18)]">
+              <Dog className="h-10 w-10" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                K9 selecionado
+              </p>
             <select
-              className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-2xl font-black text-white outline-none"
+              className="mt-2 max-w-full rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-2xl font-black text-white outline-none"
               onChange={(event) => setSelectedDogId(event.target.value)}
               value={selectedDog?.dogId ?? ""}
             >
@@ -722,9 +739,29 @@ export default function TrainingMatrixPage() {
             <p className="mt-2 text-sm text-slate-400">
               {selectedDog?.status ?? "Nenhum K9 carregado"}
             </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {[
+              ["Sessões", selectedDog?.sessionCount ?? 0],
+              ["Operacionais", selectedDog?.operationalCount ?? 0],
+              ["Em formação", selectedDog?.inFormationCount ?? 0],
+            ].map(([label, value]) => (
+              <div
+                className="rounded-2xl border border-white/8 bg-black/16 p-3"
+                key={label}
+              >
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                  {label}
+                </p>
+                <p className="mt-1 font-mono text-2xl font-black text-white">
+                  {value}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
-        <div>
+        <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
           <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
             Modalidade
           </p>
@@ -752,6 +789,25 @@ export default function TrainingMatrixPage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {[
+              ["Módulo", currentModule?.title ?? "Sem módulo"],
+              ["Currículo", program?.version ?? "--"],
+              ["Status", cell.statusLabel],
+            ].map(([label, value]) => (
+              <div
+                className="rounded-2xl border border-white/8 bg-black/16 p-3"
+                key={label}
+              >
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                  {label}
+                </p>
+                <p className="mt-1 truncate text-sm font-black text-white">
+                  {value}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>

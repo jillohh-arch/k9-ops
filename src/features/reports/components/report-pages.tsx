@@ -44,6 +44,7 @@ import {
   type ReportTone,
 } from "@/features/reports/lib/report-catalog";
 import { getExportableData } from "@/features/reports/lib/get-exportable-data";
+import { humanizeSourceErrors } from "@/lib/errors/user-facing-errors";
 import { cn } from "@/lib/utils";
 
 const toneClasses: Record<ReportTone, string> = {
@@ -905,8 +906,12 @@ export function ReportsHubPage() {
 
       {data.errors.length > 0 ? (
         <Panel title="Fontes parcialmente indisponíveis">
-          <ul className="space-y-1 font-mono text-xs text-amber-100">
-            {data.errors.slice(0, 5).map((error) => (
+          <p className="mb-3 text-sm leading-6 text-amber-100/80">
+            Alguns dados não puderam ser consultados com o perfil atual. Os
+            relatórios continuam disponíveis, mas podem aparecer incompletos.
+          </p>
+          <ul className="space-y-1 text-xs text-amber-100">
+            {humanizeSourceErrors(data.errors).slice(0, 5).map((error) => (
               <li key={error}>{error}</li>
             ))}
           </ul>

@@ -6,7 +6,6 @@ import {
   Archive,
   ArrowLeft,
   BadgeCheck,
-  Building2,
   Camera,
   Check,
   CircleAlert,
@@ -36,9 +35,9 @@ import {
   saveHuman,
   type HumanFormValues,
 } from "@/features/effective/data/human-admin-service";
-import { useShiftGroups } from "@/features/effective/hooks/use-shift-groups";
 import {
-  defaultAccessProfiles,
+  mergeAccessProfilesWithDefaults,
+  visibleAccessProfiles,
   type AccessProfile,
 } from "@/lib/permissions/access-control";
 import { paths } from "@/lib/routes/paths";
@@ -62,8 +61,8 @@ const humanFormTabs: Array<{
 
 const oficialProfileOrder = [
   "operador_k9",
-  "instrutor_k9",
   "gestor",
+  "almoxarifado",
   "administrador",
 ];
 
@@ -81,32 +80,6 @@ function orderedProfiles(profiles: AccessProfile[]) {
   });
 }
 
-function profileRoleSet(profile: Pick<AccessProfile, "id" | "role_keys">) {
-  return new Set([profile.id, ...profile.role_keys].map((item) => item.trim()));
-}
-
-function isInstructorProfile(profile: Pick<AccessProfile, "id" | "role_keys">) {
-  const roles = profileRoleSet(profile);
-  return (
-    roles.has("instrutor_k9") ||
-    roles.has("instrutor") ||
-    roles.has("adestrador")
-  );
-}
-
-function profileAccessModes(profile: Pick<AccessProfile, "id" | "role_keys">) {
-  const roles = profileRoleSet(profile);
-  const mobile =
-    roles.has("operador_k9") ||
-    roles.has("guarda_k9") ||
-    roles.has("mobile_user") ||
-    roles.has("instrutor_k9") ||
-    roles.has("instrutor") ||
-    roles.has("admin") ||
-    roles.has("administrador");
-  return mobile ? ["Web", "Mobile"] : ["Web"];
-}
-
 function validate(values: HumanFormValues) {
   const errors: FormErrors = {};
   if (!/^\d{4,12}$/.test(values.ra)) {
@@ -114,11 +87,9 @@ function validate(values: HumanFormValues) {
   }
   if (!values.fullName.trim()) errors.fullName = "Informe o nome completo.";
   if (!values.callsign.trim()) errors.callsign = "Informe o nome de guerra.";
-  if (!values.unit.trim()) errors.unit = "Informe a lotação.";
   if (!values.accessProfileId.trim()) {
     errors.accessProfileId = "Selecione o perfil de acesso.";
   }
-  if (!values.status.trim()) errors.status = "Informe o status.";
   return errors;
 }
 
@@ -184,7 +155,6 @@ export function HumanAdminForm({
   const router = useRouter();
   const { can } = useAccessControl();
   const { profiles: accessProfiles } = useAccessProfiles();
-  const { groups: shiftGroups } = useShiftGroups();
   const fileInput = useRef<HTMLInputElement>(null);
   const [values, setValues] = useState<HumanFormValues>(emptyHumanFormValues);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -205,8 +175,10 @@ export function HumanAdminForm({
   const profileOptions = useMemo(
     () =>
       orderedProfiles(
-        (accessProfiles.length ? accessProfiles : defaultAccessProfiles).filter(
-          (profile) => profile.status === "active",
+        visibleAccessProfiles(
+          mergeAccessProfilesWithDefaults(accessProfiles).filter(
+            (profile) => profile.status === "active",
+          ),
         ),
       ),
     [accessProfiles],
@@ -252,9 +224,9 @@ export function HumanAdminForm({
   const checklist = useMemo(
     () => [
       Boolean(values.fullName && values.callsign && values.ra),
-      Boolean(values.unit && values.status),
+      Boolean(values.rank || values.admissionDate || values.institutionalEmail),
       Boolean(values.accessProfileId && values.accessProfile),
-      Boolean(values.role || values.rank || values.team),
+      true,
       Boolean(values.specialties.length),
     ],
     [values],
@@ -302,7 +274,6 @@ export function HumanAdminForm({
       accessLevel: selected.name,
       accessProfile: selected.name,
       accessProfileId: selected.id,
-      isK9Instructor: isInstructorProfile(selected),
     }));
     setErrors((current) => ({
       ...current,
@@ -525,20 +496,6 @@ export function HumanAdminForm({
             title="2. Dados funcionais"
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <Field label="Perfil de acesso aplicado">
-                <input
-                  className={cn(inputClass, "opacity-70")}
-                  disabled
-                  value={values.accessProfile || "Selecione em Acesso"}
-                />
-              </Field>
-              <Field label="Cargo / função administrativa">
-                <input
-                  className={inputClass}
-                  onChange={(event) => setField("role", event.target.value)}
-                  value={values.role}
-                />
-              </Field>
               <Field label="Posto / Graduação">
                 <input
                   className={inputClass}
@@ -546,21 +503,7 @@ export function HumanAdminForm({
                   value={values.rank}
                 />
               </Field>
-              <Field error={errors.unit} label="Lotação" required>
-                <input
-                  className={inputClass}
-                  onChange={(event) => setField("unit", event.target.value)}
-                  value={values.unit}
-                />
-              </Field>
-              <Field label="Equipe">
-                <input
-                  className={inputClass}
-                  onChange={(event) => setField("team", event.target.value)}
-                  value={values.team}
-                />
-              </Field>
-              <Field label="Data de ingresso">
+              <Field label="Data de ingresso no canil">
                 <input
                   className={inputClass}
                   onChange={(event) =>
@@ -579,52 +522,6 @@ export function HumanAdminForm({
                   type="email"
                   value={values.institutionalEmail}
                 />
-              </Field>
-              <Field label="Escala / Jornada">
-                <input
-                  className={inputClass}
-                  onChange={(event) =>
-                    setField("shiftLabel", event.target.value)
-                  }
-                  value={values.shiftLabel}
-                />
-              </Field>
-              <Field error={errors.status} label="Status" required>
-                <select
-                  className={`${inputClass} appearance-none`}
-                  onChange={(event) => {
-                    const status = event.target.value;
-                    setField("status", status);
-                    setField("active", status !== "Inativo");
-                  }}
-                  value={values.status}
-                >
-                  {["Ativo", "Em apoio", "Afastado", "Ferias", "Inativo"].map(
-                    (item) => (
-                      <option className="bg-[#0b1628]" key={item}>
-                        {item}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </Field>
-              <Field label="Plantão">
-                <select
-                  className={`${inputClass} appearance-none`}
-                  onChange={(event) => {
-                    setField("shiftGroupId", event.target.value);
-                  }}
-                  value={values.shiftGroupId}
-                >
-                  <option className="bg-[#0b1628]" value="">
-                    Selecione o plantão...
-                  </option>
-                  {shiftGroups.map((group) => (
-                    <option className="bg-[#0b1628]" key={group.id} value={group.id}>
-                      {group.name} ({String(group.expectedStartHour).padStart(2, "0")}:00 - {String(group.expectedEndHour).padStart(2, "0")}:00)
-                    </option>
-                  ))}
-                </select>
               </Field>
             </div>
           </Section>
@@ -664,27 +561,52 @@ export function HumanAdminForm({
                     </p>
                     <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
                       {selectedAccessProfile?.description ??
-                        "Escolha um perfil para definir acesso web, mobile e claims."}
+                        "Escolha o perfil institucional do agente no sistema."}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {selectedAccessProfile
-                      ? profileAccessModes(selectedAccessProfile).map((mode) => (
-                          <span
-                            className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-100"
-                            key={mode}
-                          >
-                            {mode}
-                          </span>
-                        ))
-                      : null}
+                    <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-100">
+                      Web
+                    </span>
+                    {values.accessProfileId === "operador_k9" ? (
+                      <span className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-100">
+                        Mobile
+                      </span>
+                    ) : null}
                   </div>
                 </div>
-                <p className="mt-4 text-[11px] leading-5 text-slate-500">
-                  Este campo e a fonte de verdade do acesso. Ao salvar, a
-                  Function atualiza custom claims, espelho em users/RA e exige
-                  novo login para o token refletir o novo perfil.
-                </p>
+                <button
+                  className={cn(
+                    "mt-5 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition",
+                    values.isK9Instructor
+                      ? "border-amber-300/35 bg-amber-300/10 text-amber-100"
+                      : "border-white/10 bg-white/[0.025] text-slate-400",
+                  )}
+                  onClick={() =>
+                    setField("isK9Instructor", !values.isK9Instructor)
+                  }
+                  type="button"
+                >
+                  <span
+                    className={cn(
+                      "flex h-6 w-6 items-center justify-center rounded-lg border",
+                      values.isK9Instructor
+                        ? "border-amber-300 bg-amber-300 text-[#061018]"
+                        : "border-white/15",
+                    )}
+                  >
+                    {values.isK9Instructor ? <Check className="h-4 w-4" /> : null}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-black text-white">
+                      Instrutor K9
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-400">
+                      Autoriza avaliação de evolução e validação técnica de
+                      treinamentos, sem criar um perfil separado.
+                    </span>
+                  </span>
+                </button>
               </div>
             </div>
             <div className="mt-6 border-t border-white/8 pt-5">
@@ -777,9 +699,9 @@ export function HumanAdminForm({
                     {
                       [
                         "Identificação",
-                        "Situação funcional",
+                        "Dados funcionais",
                         "Perfil de acesso",
-                        "Lotação e função",
+                        "Cadastro simplificado",
                         "Capacitações",
                       ][index]
                     }

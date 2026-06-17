@@ -74,6 +74,33 @@ function resolveProfileId(profile: AuthProfile | null) {
   return "operador_k9";
 }
 
+function applyK9InstructorCapability(
+  profile: AccessProfile,
+  authProfile: AuthProfile | null,
+): AccessProfile {
+  if (!authProfile?.isK9Instructor || profile.id === "instrutor_k9") {
+    return profile;
+  }
+
+  return {
+    ...profile,
+    permissions: {
+      ...profile.permissions,
+      training: {
+        ...(profile.permissions.training ?? {}),
+        approve: true,
+        view: true,
+      },
+      training_matrix: {
+        ...(profile.permissions.training_matrix ?? {}),
+        approve: true,
+        view: true,
+      },
+    },
+    role_keys: Array.from(new Set([...profile.role_keys, "instrutor_k9"])),
+  };
+}
+
 export function AccessControlProvider({ children }: { children: ReactNode }) {
   const { profile: authProfile, status: authStatus } = useAuth();
   const [remoteProfile, setRemoteProfile] = useState<AccessProfile | null>(null);
@@ -107,7 +134,10 @@ export function AccessControlProvider({ children }: { children: ReactNode }) {
     );
   }, [authStatus, profileId]);
 
-  const activeProfile = remoteProfile ?? localProfile;
+  const activeProfile = applyK9InstructorCapability(
+    remoteProfile ?? localProfile,
+    authProfile,
+  );
 
   const value = useMemo<AccessControlContextValue>(
     () => ({

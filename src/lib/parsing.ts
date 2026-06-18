@@ -10,8 +10,9 @@
  * Useful for search filters.
  */
 export function normalizeText(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value
+  const text = String(value ?? "");
+  if (text.length === 0) return "";
+  return text
     .trim()
     .toLowerCase()
     .normalize("NFD")

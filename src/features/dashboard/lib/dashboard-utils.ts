@@ -3,6 +3,10 @@
  * for testability and reuse.
  */
 
+import { normalizeText } from "@/lib/parsing";
+
+export { normalizeText };
+
 export type DashboardRecord = Record<string, unknown> & { _id: string };
 
 export type DashboardCollectionState = {
@@ -24,14 +28,6 @@ export const emptyDrugStats: DrugStats = {
 
 export function emptyDashboardCollection(): DashboardCollectionState {
   return { error: null, loading: true, records: [] };
-}
-
-export function normalizeText(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
 }
 
 export function parseNumber(value: unknown) {
@@ -168,7 +164,7 @@ export function drugEntryGrams(entry: Record<string, unknown>) {
   const rawText = normalizeText(
     entry.quantity ?? entry.quantidade ?? entry.weight ?? entry.peso ?? "",
   );
-  const grams = parseNumber(rawText || entry.quantity ?? entry.quantidade ?? entry.weight ?? entry.peso);
+  const grams = parseNumber(rawText || (entry.quantity ?? entry.quantidade ?? entry.weight ?? entry.peso));
   const unit = normalizeText(entry.unit ?? entry.unidade);
   if (rawText.includes("kg") || unit === "kg" || unit.includes("quilo")) {
     return grams * 1000;

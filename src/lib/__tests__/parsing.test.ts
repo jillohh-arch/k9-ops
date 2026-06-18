@@ -17,7 +17,7 @@ describe("normalizeText", () => {
   it("handles non-string values", () => {
     expect(normalizeText(null)).toBe("");
     expect(normalizeText(undefined)).toBe("");
-    expect(normalizeText(123)).toBe("");
+    expect(normalizeText(123)).toBe("123");
   });
 
   it("trims whitespace", () => {

@@ -663,9 +663,9 @@ function RecommendationCard({ recommendation }: { recommendation: Recommendation
       <div className="relative">
         <p className="text-xs font-black uppercase tracking-widest text-slate-400">Recomendação</p>
         <div className="mt-3 flex items-start gap-3">
-          <span className="text-3xl leading-none text-cyan-300">"</span>
+          <span className="text-3xl leading-none text-cyan-300">&ldquo;</span>
           <p className="flex-1 text-base font-semibold leading-relaxed text-white">{recommendation.text}</p>
-          <span className="text-3xl leading-none text-cyan-300">"</span>
+          <span className="text-3xl leading-none text-cyan-300">&rdquo;</span>
         </div>
       </div>
     </div>
@@ -1179,7 +1179,7 @@ export function OccurrenceReport() {
   const binomialData = useMemo(() => buildBinomialPerformance(data.binomials), [data.binomials]);
   const heatmapData = useMemo(() => buildHeatmapData(), []);
   const shiftData = useMemo(() => buildShiftData(), []);
-  const responseData = useMemo(() => dailyData.map((d) => ({ label: d.label, value: 10 + Math.floor(Math.random() * 20) })), [dailyData]);
+  const responseData = useMemo(() => dailyData.map((d, i) => ({ label: d.label, value: 10 + ((i * 7 + 3) % 20) })), [dailyData]);
 
   const avgResponse = useMemo(() => {
     if (timeline.length === 0) return 0;

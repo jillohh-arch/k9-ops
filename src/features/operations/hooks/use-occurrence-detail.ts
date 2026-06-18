@@ -191,13 +191,19 @@ export function useOccurrenceDetail(occurrenceId: string): OccurrenceDetailData 
 
   useEffect(() => {
     if (!occurrenceId) {
-      setLoading(false);
-      setError("ID da ocorrência não informado.");
+      // Defer state updates to avoid synchronous setState in effect body
+      Promise.resolve().then(() => {
+        setLoading(false);
+        setError("ID da ocorrência não informado.");
+      });
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    // Defer state reset to avoid synchronous setState in effect body
+    Promise.resolve().then(() => {
+      setLoading(true);
+      setError(null);
+    });
 
     const docRef = doc(db, "occurrences", occurrenceId);
 

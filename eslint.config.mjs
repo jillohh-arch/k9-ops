@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     ".firebase/**",
     "firebase-debug.log*",
     "next-env.d.ts",
+    // Compiled JS (CJS) outputs — not part of the Next.js app
+    "functions/**",
+    "tools/**",
   ]),
 ]);
 

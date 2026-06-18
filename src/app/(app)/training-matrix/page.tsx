@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Crosshair,
   Dog,
+  FilterX,
   Flag,
   GraduationCap,
   Info,
@@ -714,6 +715,22 @@ export default function TrainingMatrixPage() {
           </div>
         </div>
       ) : null}
+
+      {(selectedDogId !== null || selectedModalityValue !== "busca_captura") && (
+        <div className="flex justify-end">
+          <button
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:bg-white/[0.07] hover:text-white"
+            onClick={() => {
+              setSelectedDogId(null);
+              setSelectedModalityValue("busca_captura");
+            }}
+            type="button"
+          >
+            <FilterX className="h-3.5 w-3.5" />
+            Limpar filtros
+          </button>
+        </div>
+      )}
 
       <section className="grid gap-4 rounded-[1.75rem] border border-cyan-200/12 bg-[linear-gradient(135deg,rgba(15,23,42,0.86),rgba(8,19,32,0.72))] p-5 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">

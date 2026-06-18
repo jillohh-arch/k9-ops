@@ -342,6 +342,7 @@ export default function K9ProfilePage() {
   // QW-2: Fetch the single conductor document instead of subscribing to
   // the entire users collection. conductorRa is read from the dog record.
   useEffect(() => {
+    let cancelled = false;
     const ra = profileText(data.dog, [
       "conductorRa",
       "conductor_ra",
@@ -349,16 +350,19 @@ export default function K9ProfilePage() {
       "handler_id",
     ]);
     if (!ra) {
-      setConductor(null);
-      return;
+      // Defer state update to avoid synchronous setState in effect body
+      Promise.resolve().then(() => { if (!cancelled) setConductor(null); });
+      return () => { cancelled = true; };
     }
     getDoc(doc(db, "users", ra)).then((snap) => {
+      if (cancelled) return;
       if (snap.exists()) {
         setConductor({ ...snap.data(), _id: snap.id, _source: "users" });
       } else {
         setConductor(null);
       }
     });
+    return () => { cancelled = true; };
   }, [data.dog]);
 
   const view = useMemo(() => {

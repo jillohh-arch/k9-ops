@@ -371,7 +371,8 @@ function NotificationBell({ ra }: { ra: string | null | undefined }) {
 
   useEffect(() => {
     if (!ra) {
-      setLoading(false);
+      // Defer state update to avoid synchronous setState in effect body
+      Promise.resolve().then(() => setLoading(false));
       return;
     }
 

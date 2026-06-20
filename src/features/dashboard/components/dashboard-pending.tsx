@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { LucideIcon } from "lucide-react";
 import {
   Clock3,
@@ -30,8 +31,15 @@ export function DashboardPending({ items }: DashboardPendingProps) {
   return (
     <article className="rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
       <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-300/20 bg-amber-300/10 text-amber-200">
-          <RefreshCw className="h-5 w-5" />
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center">
+          <Image
+            src="/assets/icones/pendencias.png"
+            alt="Pendências e ações"
+            width={48}
+            height={48}
+            className="h-10 w-10 object-contain"
+            unoptimized
+          />
         </span>
         <div>
           <h2 className="text-lg font-bold text-white">

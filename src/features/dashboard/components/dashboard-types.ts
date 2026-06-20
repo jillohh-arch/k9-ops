@@ -122,6 +122,12 @@ export interface IntegrityMetrics {
 
 /* ─── Shift today ─── */
 
+export interface ActiveCrewData {
+  vehiclePrefix: string;
+  gcms: string[];
+  dogName: string;
+}
+
 export interface ShiftTodayGroup {
   group: {
     id: string;
@@ -130,7 +136,11 @@ export interface ShiftTodayGroup {
     expectedStartHour?: string;
     expectedEndHour?: string;
   };
-  members: string[];
+  members: Array<{
+    name: string;
+    callsign: string;
+    photoUrl?: string;
+  }>;
   startHour?: string;
   endHour?: string;
 }

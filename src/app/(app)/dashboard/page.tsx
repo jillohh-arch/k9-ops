@@ -307,16 +307,61 @@ export default function DashboardPage() {
       const memberIds = shiftAssignments.filter((a) => a.shiftGroupId === group.id && a.active).map((a) => a.userId);
       const members = memberIds.map((uid) => {
         const user = users.find((u) => u._id === uid || (u as Record<string, unknown>).ra === uid || (u as Record<string, unknown>).uid === uid);
-        return user ? recordText(user as Record<string, unknown>, ["warName", "war_name", "displayName", "display_name", "name", "nome"]) || uid : uid;
-      }).sort((a, b) => a.localeCompare(b));
+        return {
+          name: user ? recordText(user as Record<string, unknown>, ["name", "nome", "displayName", "display_name"]) || uid : uid,
+          callsign: user ? recordText(user as Record<string, unknown>, ["warName", "war_name", "callSign", "callsign"]) || recordText(user as Record<string, unknown>, ["displayName", "display_name", "name", "nome"]) || uid : uid,
+          photoUrl: user ? recordText(user as Record<string, unknown>, ["photoUrl", "photo_url", "image_url", "profileImageUrl", "profile_image_url"]) || undefined : undefined,
+        };
+      }).sort((a, b) => a.callsign.localeCompare(b.callsign));
       return {
         group: { id: group.id, name: group.name, color: (group as Record<string, unknown>).color as string | undefined },
         members,
-        startHour: String(group.expectedStartHour),
-        endHour: String(group.expectedEndHour),
+        startHour: String(group.expectedStartHour).padStart(2, "0") + ":00h",
+        endHour: String(group.expectedEndHour).padStart(2, "0") + ":00h",
       };
     });
   }, [shiftGroups, shiftAssignments, dashboardCollections.users.records]);
+
+  const activeCrew = useMemo(() => {
+    const activeVehicleCrews = dashboardCollections.vehicleCrews.records.filter(isActiveVehicleCrew);
+    if (activeVehicleCrews.length === 0) return null;
+
+    const currentCrew = activeVehicleCrews[0];
+    const prefix = vehicleIdentity(currentCrew) || "Viatura K9";
+
+    let dogNameStr = "K9 não escalado";
+    const dogId = currentCrew.dogId ?? currentCrew.service_dog_id;
+    if (hasValue(dogId)) {
+      const dogRecord = dashboardCollections.dogs.records.find((d) => d._id === dogId);
+      if (dogRecord) {
+        dogNameStr = dogName(dogRecord);
+      }
+    }
+
+    const handlerIds: string[] = [];
+    const titularId = currentCrew.titular_handler_id ?? currentCrew.handler_id ?? currentCrew.handlerId;
+    if (hasValue(titularId)) handlerIds.push(String(titularId));
+
+    if (Array.isArray(currentCrew.handlers)) {
+      currentCrew.handlers.forEach((h) => handlerIds.push(String(h)));
+    } else if (Array.isArray(currentCrew.handlerIds)) {
+      currentCrew.handlerIds.forEach((h) => handlerIds.push(String(h)));
+    }
+
+    const uniqueHandlers = Array.from(new Set(handlerIds.filter(Boolean)));
+    const users = visibleRecords(dashboardCollections.users.records);
+
+    const gcms = uniqueHandlers.map((uid) => {
+      const user = users.find((u) => u._id === uid || (u as Record<string, unknown>).ra === uid || (u as Record<string, unknown>).uid === uid);
+      return user ? recordText(user as Record<string, unknown>, ["warName", "war_name", "callSign", "callsign"]) || recordText(user as Record<string, unknown>, ["displayName", "display_name", "name", "nome"]) || uid : uid;
+    }).sort((a, b) => a.localeCompare(b));
+
+    return {
+      vehiclePrefix: prefix,
+      dogName: dogNameStr,
+      gcms,
+    };
+  }, [dashboardCollections.vehicleCrews.records, dashboardCollections.dogs.records, dashboardCollections.users.records]);
 
   const pendingItems: PendingItem[] = [
     { label: "Aguardando assinaturas", value: pendingMetrics.awaitingSignatureOccurrences, detail: "ocorrencias em rodada de assinatura", icon: FileSignature, tone: "amber", loading: occurrences.loading, error: occurrences.error },
@@ -334,7 +379,7 @@ export default function DashboardPage() {
 
       <DashboardMetrics cards={summaryCards} />
 
-      <DashboardShiftToday onDutyToday={onDutyToday} />
+      <DashboardShiftToday onDutyToday={onDutyToday} activeCrew={activeCrew} />
 
       <section className="grid items-start gap-4 2xl:grid-cols-[1.25fr_0.75fr]">
         <DashboardOccurrences

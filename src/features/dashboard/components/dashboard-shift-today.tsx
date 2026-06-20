@@ -1,9 +1,10 @@
 import { ShieldCheck } from "lucide-react";
 
-import type { ShiftTodayGroup } from "./dashboard-types";
+import type { ShiftTodayGroup, ActiveCrewData } from "./dashboard-types";
 
 export interface DashboardShiftTodayProps {
   onDutyToday: ShiftTodayGroup[];
+  activeCrew?: ActiveCrewData | null;
 }
 
 export function DashboardShiftToday({ onDutyToday }: DashboardShiftTodayProps) {

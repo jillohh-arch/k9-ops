@@ -81,17 +81,19 @@ export function LoadingScreen({
 
       {/* Center content */}
       <div className="relative flex flex-col items-center gap-8">
-        {/* Logo */}
-        <div className="relative flex h-28 w-28 items-center justify-center">
-          <div className="absolute inset-0 animate-[spin_8s_linear_infinite] rounded-full border border-cyan-400/20 border-t-cyan-400/60" />
-          <div className="absolute inset-2 animate-[spin_6s_linear_infinite_reverse] rounded-full border border-cyan-400/10 border-b-cyan-400/40" />
+        {/* K9 hologram */}
+        <div className="relative flex h-44 w-44 items-center justify-center sm:h-52 sm:w-52">
+          <div className="absolute inset-1 animate-[spin_10s_linear_infinite] rounded-full border border-cyan-400/20 border-t-cyan-400/60" />
+          <div className="absolute inset-6 animate-[spin_7s_linear_infinite_reverse] rounded-full border border-cyan-400/10 border-b-cyan-400/40" />
+          <div className="absolute inset-0 rounded-full bg-cyan-400/[0.06] blur-2xl" />
           <Image
-            src="/icons/icon-192x192.png"
             alt="K9 Ops"
-            width={72}
-            height={72}
-            className="relative z-10 drop-shadow-[0_0_12px_rgba(34,211,238,0.4)]"
+            className="relative z-10 object-contain drop-shadow-[0_0_28px_rgba(34,211,238,0.45)]"
+            fill
             priority
+            sizes="208px"
+            src="/assets/cao_loading.png"
+            unoptimized
           />
         </div>
 

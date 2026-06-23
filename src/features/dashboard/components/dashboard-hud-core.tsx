@@ -70,10 +70,8 @@ export function DashboardHudCore({
   const ringCircumference = 2 * Math.PI * ringRadius;
   const outerRadius = size * OUTER_RING_RATIO;
   const outerStroke = size * OUTER_RING_STROKE;
-  const outerCircumference = 2 * Math.PI * outerRadius;
   const innerRadius = size * INNER_RING_RATIO;
   const innerStroke = size * INNER_RING_STROKE;
-  const innerCircumference = 2 * Math.PI * innerRadius;
 
   const caption = categoriesCaption ?? `${categoryCount} categorias`;
 

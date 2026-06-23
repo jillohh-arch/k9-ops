@@ -14,7 +14,7 @@
  * disconnected and any pending `requestAnimationFrame` is cancelled.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -203,36 +203,56 @@ export function DashboardHudConnections({
  * a card by calling `registerSource(id)` and passing the resulting
  * ref-setter to their card element. The hook returns the live map plus
  * a function that captures the core node.
+ *
+ * The `registerSource` factory returns a STABLE callback per id (cached
+ * via a ref) so React does not loop infinitely when parents re-render
+ * and pass a fresh closure as a ref.
  */
 export function useHudElementRegistry() {
   const [cardNodes, setCardNodes] = useState<Map<string, HTMLElement>>(new Map());
   const [coreNode, setCoreNode] = useState<HTMLElement | null>(null);
 
-  // `setCardNodes` returns a fresh map on each change so React detects
-  // updates; we never mutate in place.
-  const registerSource = (id: string) => (node: HTMLElement | null) => {
-    setCardNodes((current) => {
-      const has = current.get(id);
-      if ((node == null) === (has == null) && has === node) {
-        return current;
-      }
-      const next = new Map(current);
-      if (node) next.set(id, node);
-      else next.delete(id);
-      return next;
-    });
-  };
+  // Stable, mutable callback registry keyed by source id. Each entry is
+  // a stable function that updates the React state exactly once. We
+  // hand out the same callback across re-renders.
+  const callbacksRef = useRef<Map<string, (node: HTMLElement | null) => void>>(
+    new Map(),
+  );
 
-  const registerCore = (node: HTMLElement | null) => {
+  const getRegister = useCallback(
+    (id: string) => {
+      const existing = callbacksRef.current.get(id);
+      if (existing) return existing;
+      const setter = (node: HTMLElement | null) => {
+        setCardNodes((current) => {
+          const has = current.get(id);
+          if (has === node) return current;
+          const next = new Map(current);
+          if (node) next.set(id, node);
+          else next.delete(id);
+          return next;
+        });
+      };
+      callbacksRef.current.set(id, setter);
+      return setter;
+    },
+    [],
+  );
+
+  const registerSource = useCallback(
+    (id: string) => getRegister(id),
+    [getRegister],
+  );
+
+  const registerCore = useCallback((node: HTMLElement | null) => {
     setCoreNode(node);
-  };
+  }, []);
 
   // Cleanup: when the component unmounts the registry is garbage
   // collected automatically by React.
   useEffect(() => {
     return () => {
-      setCardNodes(new Map());
-      setCoreNode(null);
+      callbacksRef.current.clear();
     };
   }, []);
 

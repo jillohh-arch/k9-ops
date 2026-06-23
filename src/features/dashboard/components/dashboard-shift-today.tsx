@@ -44,13 +44,13 @@ export function DashboardShiftToday({ onDutyToday }: DashboardShiftTodayProps) {
             </div>
             {members.length > 0 ? (
               <ul className="mt-3 space-y-1.5">
-                {members.map((name) => (
+                {members.map((member) => (
                   <li
                     className="flex items-center gap-2 text-sm text-slate-300"
-                    key={name}
+                    key={member.callsign}
                   >
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
-                    {name}
+                    {member.callsign}
                   </li>
                 ))}
               </ul>

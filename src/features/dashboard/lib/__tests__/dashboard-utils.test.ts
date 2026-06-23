@@ -1,20 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  normalizeText,
-  parseNumber,
-  parseBoolean,
-  hasValue,
-  isSoftDeleted,
-  visibleRecords,
-  recordText,
-  drugEntryGrams,
-  formatWeight,
-  formatPercent,
-  formatCount,
-  drugCategory,
+  buildDrugDisplayItems,
   detectUserProfile,
+  drugCategory,
+  drugEntryGrams,
+  emptyDrugStats,
+  formatCount,
+  formatPercent,
+  formatWeight,
+  hasValue,
+  HUD_PRIMARY_SLOTS,
+  isSoftDeleted,
+  normalizeText,
+  parseBoolean,
+  parseNumber,
+  recordText,
+  visibleRecords,
   type DashboardRecord,
+  type DrugDisplayItem,
 } from "../dashboard-utils";
 
 describe("normalizeText", () => {
@@ -309,5 +313,141 @@ describe("detectUserProfile", () => {
     expect(
       detectUserProfile({ roles: ["gestor"], isK9Instructor: true }),
     ).toBe("gestor");
+  });
+});
+
+describe("buildDrugDisplayItems", () => {
+  it("returns an empty summary when no grams are present", () => {
+    const result = buildDrugDisplayItems({ drugStats: emptyDrugStats });
+
+    expect(result.items).toHaveLength(0);
+    expect(result.totalGrams).toBe(0);
+    expect(result.categoryCount).toBe(0);
+    expect(result.hasOverflow).toBe(false);
+    expect(result.overflowCount).toBe(0);
+  });
+
+  it("exposes a single category with full percentage", () => {
+    const result = buildDrugDisplayItems({
+      drugStats: { ...emptyDrugStats, maconha: 250 },
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.id).toBe("maconha");
+    expect(result.items[0]?.name).toBe("Maconha");
+    expect(result.items[0]?.percent).toBeCloseTo(100, 5);
+    expect(result.totalGrams).toBe(250);
+    expect(result.categoryCount).toBe(1);
+    expect(result.hasOverflow).toBe(false);
+  });
+
+  it("splits percentages across two categories", () => {
+    const result = buildDrugDisplayItems({
+      drugStats: { ...emptyDrugStats, maconha: 300, cocaina: 700 },
+    });
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.id)).toEqual(["cocaina", "maconha"]);
+    const maconha = result.items.find((item) => item.id === "maconha");
+    const cocaina = result.items.find((item) => item.id === "cocaina");
+    expect(maconha?.percent).toBeCloseTo(30, 5);
+    expect(cocaina?.percent).toBeCloseTo(70, 5);
+    // Percentages must add up to 100% within rounding tolerance.
+    const sum = result.items.reduce((acc, item) => acc + item.percent, 0);
+    expect(sum).toBeCloseTo(100, 1);
+  });
+
+  it("keeps the top three categories visible when more are present", () => {
+    const result = buildDrugDisplayItems({
+      drugStats: {
+        ...emptyDrugStats,
+        maconha: 100,
+        cocaina: 200,
+        crack: 300,
+        ecstasy: 400,
+        outros: 500,
+      },
+    });
+
+    expect(result.items).toHaveLength(HUD_PRIMARY_SLOTS + 1);
+    expect(result.items[0]?.id).toBe("outros");
+    expect(result.items[1]?.id).toBe("ecstasy");
+    expect(result.items[2]?.id).toBe("crack");
+    expect(result.items[3]?.isAggregate).toBe(true);
+    expect(result.items[3]?.name).toBe("+2 categorias");
+    expect(result.categoryCount).toBe(5);
+    expect(result.hasOverflow).toBe(true);
+    expect(result.overflowCount).toBe(2);
+    // The aggregate item should sum the grams of the tail categories.
+    expect(result.items[3]?.grams).toBe(100 + 200);
+  });
+
+  it("keeps percentages consistent when categories overflow", () => {
+    const result = buildDrugDisplayItems({
+      drugStats: {
+        ...emptyDrugStats,
+        maconha: 100,
+        cocaina: 200,
+        crack: 300,
+        ecstasy: 400,
+      },
+    });
+
+    const sum = result.items.reduce((acc, item) => acc + item.percent, 0);
+    expect(sum).toBeCloseTo(100, 1);
+    expect(result.totalGrams).toBe(1000);
+  });
+
+  it("sorts ties by the original category order", () => {
+    const result = buildDrugDisplayItems({
+      drugStats: {
+        ...emptyDrugStats,
+        maconha: 100,
+        cocaina: 100,
+        crack: 100,
+        ecstasy: 0,
+        outros: 100,
+      },
+    });
+
+    // With four non-zero categories the helper keeps the first three
+    // (resolved by grams tie, then by canonical order) as primary items
+    // and aggregates the tail into "+N categorias".
+    expect(result.items.map((item) => item.id)).toEqual([
+      "maconha",
+      "cocaina",
+      "crack",
+      "aggregate",
+    ]);
+    expect(result.hasOverflow).toBe(true);
+    expect(result.overflowCount).toBe(1);
+  });
+
+  it("treats a zero total as zero percent for every item", () => {
+    // All categories active but grams are zero — degenerate input that
+    // the dashboard cannot really produce, but the helper should be
+    // robust against it.
+    const result = buildDrugDisplayItems({
+      drugStats: {
+        maconha: 0,
+        cocaina: 0,
+        crack: 0,
+        ecstasy: 0,
+        outros: 0,
+      },
+    });
+
+    expect(result.items).toHaveLength(0);
+    expect(result.totalGrams).toBe(0);
+  });
+
+  it("respects the explicit categoryOrder override", () => {
+    const result = buildDrugDisplayItems({
+      categoryOrder: ["crack", "maconha"],
+      drugStats: { ...emptyDrugStats, maconha: 100, crack: 100 },
+    });
+
+    // With equal grams the tie-breaker uses the supplied order.
+    expect(result.items.map((item) => item.id)).toEqual(["crack", "maconha"]);
   });
 });

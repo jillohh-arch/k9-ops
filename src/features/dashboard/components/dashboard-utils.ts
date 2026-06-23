@@ -12,6 +12,9 @@ import type {
   PendingMetrics,
   SummaryCardData,
 } from "./dashboard-types";
+
+export type { DrugStats };
+
 import type { DashboardPeriodDays } from "@/features/dashboard/providers/dashboard-period-provider";
 
 /* ─── Text helpers ─── */
@@ -490,7 +493,100 @@ export function vehicleIdentity(record: Record<string, unknown>) {
 
 /* ─── Tone classes ─── */
 
-export function toneClasses(tone: string) {
+/**
+ * Canonical tone palette used across dashboard components.
+ *
+ * The class maps below use literal Tailwind class names (no dynamic
+ * interpolation) so the Tailwind 4 content scanner picks them up in
+ * production builds. Whenever you need to compose a new look from one
+ * of these tones, prefer adding a new entry here over building class
+ * strings with template literals.
+ */
+
+export type DashboardTone = "amber" | "blue" | "cyan" | "emerald" | "red" | "violet";
+
+export const dashboardTones = [
+  "amber",
+  "blue",
+  "cyan",
+  "emerald",
+  "red",
+  "violet",
+] as const satisfies readonly DashboardTone[];
+
+const cardBorderByTone: Record<DashboardTone, string> = {
+  amber: "border-amber-300/20",
+  blue: "border-blue-300/20",
+  cyan: "border-cyan-300/20",
+  emerald: "border-emerald-300/20",
+  red: "border-red-300/20",
+  violet: "border-violet-300/20",
+};
+
+const cardGlyphBgByTone: Record<DashboardTone, string> = {
+  amber: "bg-amber-300/10",
+  blue: "bg-blue-300/10",
+  cyan: "bg-cyan-300/10",
+  emerald: "bg-emerald-300/10",
+  red: "bg-red-300/10",
+  violet: "bg-violet-300/10",
+};
+
+const cardGlyphTextByTone: Record<DashboardTone, string> = {
+  amber: "text-amber-200",
+  blue: "text-blue-200",
+  cyan: "text-cyan-200",
+  emerald: "text-emerald-200",
+  red: "text-red-200",
+  violet: "text-violet-200",
+};
+
+const cardGlyphBorderByTone: Record<DashboardTone, string> = {
+  amber: "border-amber-300/30",
+  blue: "border-blue-300/30",
+  cyan: "border-cyan-300/30",
+  emerald: "border-emerald-300/30",
+  red: "border-red-300/30",
+  violet: "border-violet-300/30",
+};
+
+const segmentFillByTone: Record<DashboardTone, string> = {
+  amber: "bg-amber-300",
+  blue: "bg-blue-300",
+  cyan: "bg-cyan-300",
+  emerald: "bg-emerald-300",
+  red: "bg-red-300",
+  violet: "bg-violet-300",
+};
+
+const connectionStrokeByTone: Record<DashboardTone, string> = {
+  amber: "stroke-amber-300/70",
+  blue: "stroke-blue-300/70",
+  cyan: "stroke-cyan-300/70",
+  emerald: "stroke-emerald-300/70",
+  red: "stroke-red-300/70",
+  violet: "stroke-violet-300/70",
+};
+
+const ringStrokeByTone: Record<DashboardTone, string> = {
+  amber: "stroke-amber-300",
+  blue: "stroke-blue-300",
+  cyan: "stroke-cyan-300",
+  emerald: "stroke-emerald-300",
+  red: "stroke-red-300",
+  violet: "stroke-violet-300",
+};
+
+const gradientStopByTone: Record<DashboardTone, { from: string; to: string }> = {
+  amber: { from: "#fcd34d", to: "#22d3ee" },
+  blue: { from: "#60a5fa", to: "#22d3ee" },
+  cyan: { from: "#22d3ee", to: "#22d3ee" },
+  emerald: { from: "#34d399", to: "#22d3ee" },
+  red: { from: "#f87171", to: "#22d3ee" },
+  violet: { from: "#a78bfa", to: "#22d3ee" },
+};
+
+export const toneClasses = (tone: string) => {
   const tones: Record<string, string> = {
     amber: "border-amber-300/25 bg-amber-300/10 text-amber-200",
     blue: "border-blue-300/25 bg-blue-300/10 text-blue-200",
@@ -501,6 +597,49 @@ export function toneClasses(tone: string) {
   };
 
   return tones[tone] ?? tones.cyan;
+};
+
+/**
+ * Resolve a tone key for any of the HUD sub-components. Falls back to
+ * "cyan" so the visual always carries the brand colour when an
+ * unknown token is supplied.
+ */
+export function dashboardTone(tone: string | undefined | null): DashboardTone {
+  return (dashboardTones as readonly string[]).includes(tone ?? "")
+    ? (tone as DashboardTone)
+    : "cyan";
+}
+
+export function cardBorderClass(tone: string) {
+  return cardBorderByTone[dashboardTone(tone)];
+}
+
+export function cardGlyphBgClass(tone: string) {
+  return cardGlyphBgByTone[dashboardTone(tone)];
+}
+
+export function cardGlyphTextClass(tone: string) {
+  return cardGlyphTextByTone[dashboardTone(tone)];
+}
+
+export function cardGlyphBorderClass(tone: string) {
+  return cardGlyphBorderByTone[dashboardTone(tone)];
+}
+
+export function segmentFillClass(tone: string) {
+  return segmentFillByTone[dashboardTone(tone)];
+}
+
+export function connectionStrokeClass(tone: string) {
+  return connectionStrokeByTone[dashboardTone(tone)];
+}
+
+export function ringStrokeClass(tone: string) {
+  return ringStrokeByTone[dashboardTone(tone)];
+}
+
+export function gradientStop(tone: string) {
+  return gradientStopByTone[dashboardTone(tone)];
 }
 
 /* ─── Profile Detection ─── */
@@ -599,6 +738,161 @@ export const emptyDrugStats = {
   ecstasy: 0,
   outros: 0,
 } as const;
+
+/* ─── Drug HUD display helpers ─── */
+
+/**
+ * Tone associated with each drug category. Defined here so the HUD view
+ * never has to know about business categories — only tones.
+ */
+const drugCategoryTone: Record<DrugCategory, DashboardTone> = {
+  maconha: "emerald",
+  cocaina: "blue",
+  crack: "violet",
+  ecstasy: "amber",
+  outros: "cyan",
+};
+
+const drugTilesByCategory: Record<DrugCategory, { glyph: string; label: string }> =
+  drugTiles.reduce(
+    (acc, tile) => {
+      acc[tile.category] = { glyph: tile.glyph, label: tile.label };
+      return acc;
+    },
+    {} as Record<DrugCategory, { glyph: string; label: string }>,
+  );
+
+/**
+ * Ordered list of drug categories as they should appear in the HUD.
+ * The first three slots map to the main visual composition; the
+ * remainder are aggregated under a "+N categorias" badge.
+ */
+export const HUD_PRIMARY_SLOTS = 3;
+
+export interface DrugDisplayItem {
+  /** Stable id — either the category or a synthetic id for aggregates. */
+  id: string;
+  /** Display name (already localised). */
+  name: string;
+  /** Substance abbreviation used inside the glyph badge. */
+  glyph: string;
+  /** Amount in grams (the canonical unit for this dataset). */
+  grams: number;
+  /** Percentage relative to the total (0..100). */
+  percent: number;
+  /** Tone key — always one of {@link DashboardTone}. */
+  tone: DashboardTone;
+  /** True when this item represents an aggregate of remaining categories. */
+  isAggregate: boolean;
+}
+
+export interface DrugDisplaySummary {
+  items: DrugDisplayItem[];
+  /** Number of underlying categories that fed into the items list. */
+  categoryCount: number;
+  /** Sum of grams from the primary + aggregate items. */
+  totalGrams: number;
+  /** True when more than HUD_PRIMARY_SLOTS categories are present. */
+  hasOverflow: boolean;
+  /** Number of categories collapsed into the aggregate item (0 if none). */
+  overflowCount: number;
+}
+
+interface BuildDrugDisplayInput {
+  drugStats: DrugStats;
+  /** Optional override list of categories. When provided, restricts the
+   *  iteration to those present in the dashboard's `visibleDrugTiles`.
+   *  When omitted, ALL categories present in `drugStats` are evaluated. */
+  categoryOrder?: readonly DrugCategory[];
+}
+
+/**
+ * Builds the canonical list of items rendered by the HUD section.
+ *
+ * The dashboard page already computes `drugStats` and `totalDrugGrams`
+ * from occurrences. This helper does not recompute those totals — it
+ * only shapes the data for the HUD view, deciding which categories
+ * appear as primary cards and which are aggregated.
+ *
+ * Behaviour:
+ *  - Sorts categories by grams desc (ties broken by display order).
+ *  - Keeps the top three as primary items.
+ *  - Aggregates the remaining grams into a single "+N categorias"
+ *    item so the layout stays balanced even with many categories.
+ *  - Returns `totalGrams: 0` and `items: []` when no grams exist.
+ */
+export function buildDrugDisplayItems(
+  input: BuildDrugDisplayInput,
+): DrugDisplaySummary {
+  const { drugStats, categoryOrder } = input;
+
+  const allCategories = (
+    categoryOrder ?? (Object.keys(drugStats) as DrugCategory[])
+  ).filter((category): category is DrugCategory => category in drugStats);
+
+  const nonZero = allCategories.filter((category) => drugStats[category] > 0);
+
+  const ordered = [...nonZero].sort((a, b) => {
+    const diff = drugStats[b] - drugStats[a];
+    if (diff !== 0) return diff;
+    return allCategories.indexOf(a) - allCategories.indexOf(b);
+  });
+
+  const primaryCategories = ordered.slice(0, HUD_PRIMARY_SLOTS);
+  const overflowCategories = ordered.slice(HUD_PRIMARY_SLOTS);
+
+  const primaryItems: DrugDisplayItem[] = primaryCategories.map((category) => {
+    const grams = drugStats[category];
+    return {
+      grams,
+      glyph: drugTilesByCategory[category].glyph,
+      id: category,
+      isAggregate: false,
+      name: drugTilesByCategory[category].label,
+      percent: 0, // recalculated below once the total is known
+      tone: drugCategoryTone[category],
+    };
+  });
+
+  let overflowItem: DrugDisplayItem | null = null;
+  if (overflowCategories.length > 0) {
+    const overflowGrams = overflowCategories.reduce(
+      (sum, category) => sum + drugStats[category],
+      0,
+    );
+    overflowItem = {
+      grams: overflowGrams,
+      glyph: "+",
+      id: "aggregate",
+      isAggregate: true,
+      name: `+${overflowCategories.length} categorias`,
+      percent: 0,
+      tone: "cyan",
+    };
+  }
+
+  const totalGrams =
+    primaryItems.reduce((sum, item) => sum + item.grams, 0) +
+    (overflowItem?.grams ?? 0);
+
+  const assignPercent = (item: DrugDisplayItem): DrugDisplayItem => ({
+    ...item,
+    percent: totalGrams > 0 ? (item.grams / totalGrams) * 100 : 0,
+  });
+
+  const items: DrugDisplayItem[] = [
+    ...primaryItems.map(assignPercent),
+    ...(overflowItem ? [assignPercent(overflowItem)] : []),
+  ];
+
+  return {
+    categoryCount: ordered.length,
+    hasOverflow: overflowCategories.length > 0,
+    items,
+    overflowCount: overflowCategories.length,
+    totalGrams,
+  };
+}
 
 /* ─── Dashboard collection factory ─── */
 

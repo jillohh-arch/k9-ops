@@ -233,3 +233,118 @@ export function detectUserProfile(options: {
   if (isInstructor) return "instrutor";
   return "operador";
 }
+
+/* ─── Drug HUD display helpers (kept here for direct test access) ─── */
+
+export const HUD_PRIMARY_SLOTS = 3;
+
+export type DrugDisplayTone = "amber" | "blue" | "cyan" | "emerald" | "red" | "violet";
+
+export interface DrugDisplayItem {
+  id: string;
+  name: string;
+  glyph: string;
+  grams: number;
+  percent: number;
+  tone: DrugDisplayTone;
+  isAggregate: boolean;
+}
+
+export interface DrugDisplaySummary {
+  items: DrugDisplayItem[];
+  categoryCount: number;
+  totalGrams: number;
+  hasOverflow: boolean;
+  overflowCount: number;
+}
+
+const drugDisplayLabels: Record<DrugCategory, { label: string; glyph: string }> = {
+  maconha: { label: "Maconha", glyph: "ma" },
+  cocaina: { label: "Cocaina", glyph: "co" },
+  crack: { label: "Crack", glyph: "cr" },
+  ecstasy: { label: "Ecstasy", glyph: "ex" },
+  outros: { label: "Outros", glyph: "ot" },
+};
+
+const drugDisplayTones: Record<DrugCategory, DrugDisplayTone> = {
+  maconha: "emerald",
+  cocaina: "blue",
+  crack: "violet",
+  ecstasy: "amber",
+  outros: "cyan",
+};
+
+interface BuildDrugDisplayInput {
+  drugStats: DrugStats;
+  categoryOrder?: readonly DrugCategory[];
+}
+
+export function buildDrugDisplayItems(
+  input: BuildDrugDisplayInput,
+): DrugDisplaySummary {
+  const { drugStats, categoryOrder } = input;
+  const order = categoryOrder ?? (Object.keys(drugStats) as DrugCategory[]);
+  const allCategories = order.filter(
+    (category): category is DrugCategory => category in drugStats,
+  );
+  const nonZero = allCategories.filter((category) => drugStats[category] > 0);
+
+  const ordered = [...nonZero].sort((a, b) => {
+    const diff = drugStats[b] - drugStats[a];
+    if (diff !== 0) return diff;
+    return allCategories.indexOf(a) - allCategories.indexOf(b);
+  });
+
+  const primaryCategories = ordered.slice(0, HUD_PRIMARY_SLOTS);
+  const overflowCategories = ordered.slice(HUD_PRIMARY_SLOTS);
+
+  const primaryItems: DrugDisplayItem[] = primaryCategories.map((category) => {
+    const grams = drugStats[category];
+    return {
+      grams,
+      glyph: drugDisplayLabels[category].glyph,
+      id: category,
+      isAggregate: false,
+      name: drugDisplayLabels[category].label,
+      percent: 0,
+      tone: drugDisplayTones[category],
+    };
+  });
+
+  let overflowItem: DrugDisplayItem | null = null;
+  if (overflowCategories.length > 0) {
+    const overflowGrams = overflowCategories.reduce(
+      (sum, category) => sum + drugStats[category],
+      0,
+    );
+    overflowItem = {
+      grams: overflowGrams,
+      glyph: "+",
+      id: "aggregate",
+      isAggregate: true,
+      name: `+${overflowCategories.length} categorias`,
+      percent: 0,
+      tone: "cyan",
+    };
+  }
+
+  const totalGrams =
+    primaryItems.reduce((sum, item) => sum + item.grams, 0) +
+    (overflowItem?.grams ?? 0);
+
+  const assignPercent = (item: DrugDisplayItem): DrugDisplayItem => ({
+    ...item,
+    percent: totalGrams > 0 ? (item.grams / totalGrams) * 100 : 0,
+  });
+
+  return {
+    categoryCount: ordered.length,
+    hasOverflow: overflowCategories.length > 0,
+    items: [
+      ...primaryItems.map(assignPercent),
+      ...(overflowItem ? [assignPercent(overflowItem)] : []),
+    ],
+    overflowCount: overflowCategories.length,
+    totalGrams,
+  };
+}

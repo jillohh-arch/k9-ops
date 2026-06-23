@@ -251,8 +251,9 @@ export function useHudElementRegistry() {
   // Cleanup: when the component unmounts the registry is garbage
   // collected automatically by React.
   useEffect(() => {
+    const registry = callbacksRef.current;
     return () => {
-      callbacksRef.current.clear();
+      registry.clear();
     };
   }, []);
 

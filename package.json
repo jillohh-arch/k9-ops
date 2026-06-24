@@ -15,19 +15,25 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "@react-three/postprocessing": "^3.0.4",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "firebase": "^12.14.0",
+    "framer-motion": "^12.41.0",
     "jspdf": "2.5.2",
     "jspdf-autotable": "3.8.4",
     "lucide-react": "^1.17.0",
     "next": "16.2.7",
+    "postprocessing": "^6.39.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.6.0",
+    "three": "^0.184.0",
     "xlsx": "0.18.5"
   },
   "devDependencies": {

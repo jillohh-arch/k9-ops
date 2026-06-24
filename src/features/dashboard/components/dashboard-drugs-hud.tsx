@@ -12,10 +12,11 @@
  *   - 4+ categories: top 3 + a compact "+N categorias" badge
  *
  * The DOM measurement logic lives in `DashboardHudConnections`; this
- * file owns the React state for the connection registry.
+ * file owns the React state for the connection registry and the
+ * decorative HUD backdrop (radial halo, grid, corner ticks).
  */
 
-import { useMemo, type ReactNode } from "react";
+import { Children, isValidElement, useMemo, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,10 @@ import {
   type DrugStats,
 } from "./dashboard-utils";
 
+/** Opacity of the dark overlay on top of the background image.
+ *  Lower = more image visible. Adjust to calibrate without touching logic. */
+const BG_OVERLAY_OPACITY = 0.5;
+
 export interface DashboardDrugsHudProps {
   drugStats: DrugStats;
   /** Total grams already computed by the dashboard page. */
@@ -49,26 +54,7 @@ export interface DashboardDrugsHudProps {
   error?: string | null;
 }
 
-/**
- * Splits the HUD items into left and right slots.
- *
- * With 1 or 2 items, the items occupy the left column (item 0) and the
- * right column (item 1). With 3+ items, the left side holds the
- * top-ranked category and the right side stacks the rest.
- */
-function splitLayout(items: DrugDisplayItem[]) {
-  const safeItems = items.slice(0, HUD_PRIMARY_SLOTS + 1);
-  if (safeItems.length === 0) {
-    return { left: null, right: [] as DrugDisplayItem[] };
-  }
-  if (safeItems.length === 1) {
-    return { left: safeItems[0] ?? null, right: [] };
-  }
-  return {
-    left: safeItems[0] ?? null,
-    right: safeItems.slice(1),
-  };
-}
+
 
 interface BadgeProps {
   children: ReactNode;
@@ -79,7 +65,7 @@ function OverflowBadge({ children, tone }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-mono text-[10px] font-black uppercase tracking-[0.18em]",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[9px] font-black uppercase tracking-[0.2em]",
         tone === "cyan"
           ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-200"
           : "border-amber-300/30 bg-amber-300/10 text-amber-200",
@@ -131,7 +117,40 @@ export function DashboardDrugsHud({
     );
   }
 
-  const { left, right } = splitLayout(summary.items);
+  const maconha = summary.items.find((item) => item.id === "maconha");
+  const cocaina = summary.items.find((item) => item.id === "cocaina");
+  const crack = summary.items.find((item) => item.id === "crack");
+  
+  const others = summary.items.filter(
+    (item) => item.id !== "maconha" && item.id !== "cocaina" && item.id !== "crack"
+  );
+  
+  let left: DrugDisplayItem | null = null;
+  const right: DrugDisplayItem[] = [];
+
+  if (maconha) {
+    left = maconha;
+  } else if (others.length > 0) {
+    left = others.shift()!;
+  } else if (cocaina) {
+    left = cocaina;
+  } else if (crack) {
+    left = crack;
+  }
+
+  if (cocaina && cocaina !== left) {
+    right.push(cocaina);
+  }
+  if (crack && crack !== left) {
+    right.push(crack);
+  }
+  
+  for (const item of others) {
+    if (item !== left) {
+      right.push(item);
+    }
+  }
+
   const totalForDisplay = totalDrugGrams > 0 ? totalDrugGrams : summary.totalGrams;
 
   const leftCard = left ? (
@@ -161,23 +180,60 @@ export function DashboardDrugsHud({
   ));
 
   return (
-    <div className="relative mt-4">
-      <DashboardHudConnections
-        cardNodes={cardNodes}
-        className="z-0"
-        connections={connectionList}
-        coreNode={coreNode}
+    <div className="relative mt-5 overflow-hidden rounded-3xl border border-cyan-200/12 bg-slate-950/65 p-5">
+      {/* Layer 1 — Background image fills the full rectangular card */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-3xl"
+        style={{
+          backgroundImage: `url("/assets/bg_drogas.png")`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          zIndex: 0,
+        }}
       />
+      {/* Layer 2 — Dark blue overlay controls how much the image shows */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-3xl"
+        style={{
+          backgroundImage: `radial-gradient(ellipse at center,
+            rgba(2, 8, 20, ${Math.min(1, BG_OVERLAY_OPACITY + 0.08)}) 20%,
+            rgba(2, 8, 20, ${BG_OVERLAY_OPACITY}) 55%,
+            rgba(2, 8, 20, ${Math.max(0, BG_OVERLAY_OPACITY - 0.15)}) 100%)`,
+          zIndex: 1,
+        }}
+      />
+      {/* Connection lines (absolute, beneath the cards/core) */}
+      <div className="absolute inset-0 z-0">
+        <DashboardHudConnections
+          cardNodes={cardNodes}
+          connections={connectionList}
+          coreNode={coreNode}
+        />
+      </div>
 
-      <div className="relative z-10 grid items-center gap-6 md:grid-cols-[1fr_auto_1fr]">
-        <div className="flex justify-center md:justify-end">{leftCard}</div>
+      {/* Main composition grid */}
+      <div
+        className={cn(
+          "relative z-10 grid min-h-[360px] items-center gap-x-5 gap-y-5",
+          "lg:[grid-template-columns:minmax(290px,1fr)_288px_minmax(290px,1fr)]",
+          "md:[grid-template-columns:minmax(220px,1fr)_288px_minmax(220px,1fr)]",
+          "grid-cols-1",
+        )}
+      >
+        <div className="order-2 flex items-center justify-center md:order-1 md:justify-end">
+          <div className="w-full max-w-[320px]">{leftCard}</div>
+        </div>
 
-        <div className="flex justify-center">
+        <div className="order-1 flex items-center justify-center md:order-2">
           <DashboardHudCore
             categoryCount={Math.max(activeDrugCategories, summary.categoryCount)}
             coreRef={registerCore}
             loading={loading || Boolean(error)}
             segments={segments}
+            size={288}
             totalLabel={loading || error ? "--" : formatWeight(totalForDisplay)}
             unit={loading || error ? "" : primaryUnit(totalForDisplay)}
           />
@@ -185,12 +241,22 @@ export function DashboardDrugsHud({
 
         <div
           className={cn(
-            "flex flex-col gap-3",
+            "order-3 flex flex-col gap-3",
             rightCards.length > 1 && "md:gap-4",
           )}
         >
           {rightCards.length > 0 ? (
-            rightCards
+            Children.map(rightCards, (card, index) => (
+              <div
+                className={cn(
+                  "w-full",
+                  index === 0 ? "max-w-[320px]" : "max-w-[310px]",
+                )}
+                key={isValidElement(card) ? card.key : `right-${index}`}
+              >
+                {card}
+              </div>
+            ))
           ) : (
             <div
               aria-hidden="true"
@@ -214,11 +280,6 @@ export function DashboardDrugsHud({
   );
 }
 
-/**
- * Lightweight helper used only to surface the unit ("g" / "kg") below
- * the total. Lives here instead of `formatWeight` because the HUD wants
- * the unit separately from the formatted number.
- */
 function primaryUnit(grams: number): string {
   if (grams <= 0) return "g";
   return grams < 1000 ? "g" : "kg";

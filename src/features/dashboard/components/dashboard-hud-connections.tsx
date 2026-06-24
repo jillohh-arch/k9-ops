@@ -1,20 +1,5 @@
-"use client";
-
-/**
- * Decorative SVG connections drawn between the HUD cards and the central
- * ring. Renders nothing on viewports below the `lg` breakpoint.
- *
- * Card positions are read from a `Map<string, HTMLElement>` stored in
- * local state (no prop mutation, no `window` registry). The HUD
- * composition passes a `registerSource` callback to each card, which
- * forwards the card element through that callback so the connection
- * layer can recompute paths on layout changes.
- *
- * Effects are fully torn down on unmount: the `ResizeObserver` is
- * disconnected and any pending `requestAnimationFrame` is cancelled.
- */
-
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
 
@@ -43,15 +28,15 @@ export interface HudConnectionsProps {
 interface ResolvedConnection {
   id: string;
   tone: DashboardTone;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
+  /** Polyline points (x, y) — already rotated correctly. */
+  points: Array<{ x: number; y: number }>;
+  /** Total path length in pixels (for the travelling dot). */
+  length: number;
 }
 
-const NODE_RADIUS = 3;
-const CORNER_RADIUS = 14;
-const STROKE_WIDTH = 1;
+const NODE_RADIUS_OUT = 3.5;
+const NODE_RADIUS_IN = 4;
+const STROKE_WIDTH = 1.25;
 
 export function DashboardHudConnections({
   connections,
@@ -81,32 +66,53 @@ export function DashboardHudConnections({
         const coreRect = coreNode.getBoundingClientRect();
         const coreCx = coreRect.left + coreRect.width / 2 - bounds.left;
         const coreCy = coreRect.top + coreRect.height / 2 - bounds.top;
-        const coreRadius = coreRect.width / 2;
+        const coreRadius = coreRect.width / 2 - 4;
 
         const next: ResolvedConnection[] = [];
         for (const connection of connections) {
           const node = cardNodes.get(connection.id);
           if (!node) continue;
           const rect = node.getBoundingClientRect();
-          const cardCx = rect.left + rect.width / 2 - bounds.left;
-          const cardCy = rect.top + rect.height / 2 - bounds.top;
 
-          const cardRadius = Math.max(rect.width, rect.height) / 2;
-          const dx = coreCx - cardCx;
-          const dy = coreCy - cardCy;
-          const dist = Math.max(1, Math.hypot(dx, dy));
-          const x1 = cardCx + (dx / dist) * cardRadius;
-          const y1 = cardCy + (dy / dist) * cardRadius;
-          const x2 = coreCx - (dx / dist) * coreRadius;
-          const y2 = coreCy - (dy / dist) * coreRadius;
+          // Pick the closest vertical edge of the card to the core.
+          const isLeftCard = (coreRect.left + coreRect.width / 2) > (rect.left + rect.width / 2);
+          const exitX = isLeftCard
+            ? rect.right - bounds.left
+            : rect.left - bounds.left;
+          const exitY = rect.top + rect.height / 2 - bounds.top;
+
+          let points: Array<{ x: number; y: number }> = [];
+
+          if (isLeftCard) {
+            // Left card connection: exits right, stops at the outer edge of the Canvas container
+            const entryX = coreCx - 144;
+            points = [
+              { x: exitX, y: exitY },
+              { x: entryX, y: exitY },
+            ];
+          } else {
+            // Right cards connection: exits left, stops at the outer edge of the Canvas container
+            const entryX = coreCx + 144;
+            points = [
+              { x: exitX, y: exitY },
+              { x: entryX, y: exitY },
+            ];
+          }
+
+          let length = 0;
+          for (let i = 1; i < points.length; i += 1) {
+            const a = points[i - 1];
+            const b = points[i];
+            if (a && b) {
+              length += Math.hypot(b.x - a.x, b.y - a.y);
+            }
+          }
 
           next.push({
             id: connection.id,
+            length,
+            points,
             tone: connection.tone,
-            x1,
-            x2,
-            y1,
-            y2,
           });
         }
         setResolved(next);
@@ -136,60 +142,122 @@ export function DashboardHudConnections({
       )}
       ref={containerRef}
     >
-      <svg className="h-full w-full">
+      <svg className="h-full w-full overflow-visible">
         <defs>
-          {resolved.map((connection) => {
-            const stops = gradientStop(connection.tone);
-            return (
-              <linearGradient
-                id={`hud-line-${connection.id}`}
-                key={`grad-${connection.id}`}
-                x1="0%"
-                x2="100%"
-                y1="0%"
-                y2="0%"
-              >
-                <stop offset="0%" stopColor={stops.from} stopOpacity="0.9" />
-                <stop offset="100%" stopColor={stops.to} stopOpacity="0.9" />
-              </linearGradient>
-            );
-          })}
+          <filter id="hud-line-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
         {resolved.map((connection) => {
-          const dx = connection.x2 - connection.x1;
-          const dy = connection.y2 - connection.y1;
-          const dist = Math.max(1, Math.hypot(dx, dy));
-          const ux = dx / dist;
-          const uy = dy / dist;
-          const midX = connection.x1 + ux * Math.min(CORNER_RADIUS, dist / 3);
-          const midY = connection.y1 + uy * Math.min(CORNER_RADIUS, dist / 3);
-          const endX = connection.x2 - ux * Math.min(CORNER_RADIUS, dist / 3);
-          const endY = connection.y2 - uy * Math.min(CORNER_RADIUS, dist / 3);
+          const pathD = connection.points
+            .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+            .join(" ");
 
-          const path = `M ${connection.x1} ${connection.y1} L ${midX} ${midY} Q ${connection.x1 + ux * CORNER_RADIUS * 1.6} ${connection.y1 + uy * CORNER_RADIUS * 1.6}, ${connection.x1 + ux * CORNER_RADIUS * 2.2} ${connection.y1 + uy * CORNER_RADIUS * 2.2} T ${endX} ${endY} L ${connection.x2} ${connection.y2}`;
+          const first = connection.points[0];
+          const last = connection.points[connection.points.length - 1];
+
+          // Map tone to ciano or roxo
+          const color = connection.tone === "violet" || connection.tone === "amber"
+            ? "#8A2BE2" // Purple
+            : "#00FFFF"; // Cyan
 
           return (
             <g key={`line-${connection.id}`}>
-              <path
-                className={cn(connectionStrokeClass(connection.tone), "hud-line-fill")}
-                d={path}
+              {/* Neon Glow path */}
+              <motion.path
+                d={pathD}
                 fill="none"
-                stroke={`url(#hud-line-${connection.id})`}
-                strokeLinecap="round"
-                strokeWidth={STROKE_WIDTH}
+                stroke={color}
+                strokeWidth={3}
+                opacity={0.25}
+                filter="url(#hud-line-glow)"
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: 1.8, ease: "easeInOut" }}
               />
-              <circle
-                cx={connection.x1}
-                cy={connection.y1}
-                fill="rgba(34,211,238,0.85)"
-                r={NODE_RADIUS}
+
+              {/* Inner Sharp Laser path */}
+              <motion.path
+                d={pathD}
+                fill="none"
+                stroke={color}
+                strokeWidth={1.5}
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: 1.5, ease: "easeInOut" }}
               />
-              <circle
-                cx={connection.x2}
-                cy={connection.y2}
-                fill="rgba(34,211,238,0.85)"
-                r={NODE_RADIUS}
-              />
+
+              {/* Travelling neon pulse dot */}
+              <circle r="2.2" fill="#ffffff" filter="url(#hud-line-glow)">
+                <animateMotion
+                  dur="4s"
+                  repeatCount="indefinite"
+                  path={pathD}
+                />
+              </circle>
+              <circle r="4" fill="none" stroke={color} strokeWidth="1" opacity="0.6">
+                <animateMotion
+                  dur="4s"
+                  repeatCount="indefinite"
+                  path={pathD}
+                />
+              </circle>
+
+              {first && (
+                <g>
+                  {/* Outer glow ring around the node */}
+                  <motion.circle
+                    cx={first.x}
+                    cy={first.y}
+                    r={NODE_RADIUS_OUT + 2.5}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={1}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 0.6 }}
+                    transition={{ delay: 0.6, duration: 0.4 }}
+                  />
+                  {/* Inner solid node */}
+                  <motion.circle
+                    cx={first.x}
+                    cy={first.y}
+                    r={NODE_RADIUS_OUT - 1.5}
+                    fill="#ffffff"
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.8, duration: 0.3 }}
+                  />
+                </g>
+              )}
+
+              {last && (
+                <g>
+                  {/* Core entry glowing node */}
+                  <motion.circle
+                    cx={last.x}
+                    cy={last.y}
+                    r={NODE_RADIUS_IN + 3}
+                    fill={color}
+                    opacity={0.35}
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 1.2, duration: 0.4 }}
+                  />
+                  <motion.circle
+                    cx={last.x}
+                    cy={last.y}
+                    r={NODE_RADIUS_IN}
+                    fill={color}
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 1.4, duration: 0.3 }}
+                  />
+                </g>
+              )}
             </g>
           );
         })}

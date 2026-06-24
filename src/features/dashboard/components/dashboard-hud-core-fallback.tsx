@@ -15,7 +15,8 @@
  * is taken, only the decorative chrome differs.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
 
 export interface HudCoreSegment {
@@ -40,18 +41,57 @@ export interface HudCoreProps {
 }
 
 const TONE_COLOR: Record<string, string> = {
-  amber: "#fcd34d",
-  blue: "#60a5fa",
-  cyan: "#22d3ee",
-  emerald: "#34d399",
-  red: "#f87171",
+  amber: "#f59e0b",
+  blue: "#22d3ee",
+  cyan: "#06b6d4",
+  emerald: "#10b981",
+  red: "#ef4444",
   violet: "#a78bfa",
 };
+
+function useCountUp(targetValue: number, duration = 1200, shouldAnimate = true) {
+  const [value, setValue] = useState(0);
+  const [hasAnimated, setHasAnimated] = useState(false);
+
+  useEffect(() => {
+    if (targetValue === 0) return;
+    if (!shouldAnimate || hasAnimated) {
+      return;
+    }
+
+    let startTimestamp: number | null = null;
+    const startValue = 0;
+    let animationFrameId: number;
+
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = timestamp - startTimestamp;
+      const progressPercentage = Math.min(progress / duration, 1);
+      const easeOut = 1 - Math.pow(1 - progressPercentage, 3);
+      const currentValue = startValue + easeOut * (targetValue - startValue);
+      setValue(currentValue);
+
+      if (progress < duration) {
+        animationFrameId = requestAnimationFrame(step);
+      } else {
+        setValue(targetValue);
+        setHasAnimated(true);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [targetValue, duration, shouldAnimate, hasAnimated]);
+
+  if (!shouldAnimate) return targetValue;
+  return hasAnimated ? targetValue : value;
+}
 
 export function DashboardHudCoreFallback({
   segments,
   totalLabel,
-  unit,
   categoryCount,
   loading = false,
   totalCaption = "TOTAL APREENDIDO",
@@ -60,17 +100,43 @@ export function DashboardHudCoreFallback({
   coreRef,
 }: HudCoreProps) {
   const caption = categoriesCaption ?? `${categoryCount} categorias`;
+  const shouldReduceMotion = useReducedMotion();
+
+  const [showCaption, setShowCaption] = useState(false);
+
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => {
+        setShowCaption(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   const ringSegments = useMemo(() => {
     const filtered = segments.filter((s) => s.percent > 0);
     if (filtered.length === 0) return [];
     const total = filtered.reduce((sum, s) => sum + s.percent, 0);
+
+    // Gap config: 3 degrees gap between segments if there's more than 1 segment
+    const gapAngle = filtered.length > 1 ? 3 : 0;
+    const totalGap = filtered.length * gapAngle;
+    const availableDegrees = 360 - totalGap;
+
     let cursor = -90; // start at 12 o'clock
     return filtered.map((segment, index) => {
-      const sweep = total > 0 ? (segment.percent / total) * 360 : 0;
+      let sweep = total > 0 ? (segment.percent / total) * availableDegrees : 0;
+      // Cap single segment at 359.9 to avoid zero-length arc rendering bugs in some browsers
+      if (filtered.length === 1 && sweep > 359.9) {
+        sweep = 359.9;
+      }
+
       const start = cursor;
       const end = cursor + sweep;
-      cursor = end;
+      
+      // Update cursor for the next segment, adding the gap
+      cursor = end + gapAngle;
+
       const largeArc = sweep > 180 ? 1 : 0;
       const r = 110;
       const cx = 130;
@@ -82,12 +148,44 @@ export function DashboardHudCoreFallback({
       const x2 = cx + r * Math.cos(endRad);
       const y2 = cy + r * Math.sin(endRad);
       return {
-        color: TONE_COLOR[segment.tone] ?? TONE_COLOR.cyan,
+        color: TONE_COLOR[segment.tone] ?? TONE_COLOR.blue ?? "#22d3ee",
         d: `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`,
         key: `${segment.tone}-${index}`,
       };
     });
   }, [segments]);
+
+  // Parsing the weight formatting (Portuguese pt-BR locale)
+  const parsed = useMemo(() => {
+    if (loading || totalLabel === "--") return null;
+    const match = totalLabel.match(/^([\d.,]+)\s*([a-zA-Z]+)?$/);
+    if (!match) return null;
+    const numStr = match[1];
+    const unitStr = match[2] ?? "";
+    const isDecimal = numStr.includes(",");
+    const cleanNumStr = numStr.replace(/\./g, "").replace(",", ".");
+    const targetValue = parseFloat(cleanNumStr);
+    return {
+      targetValue,
+      unitStr,
+      isDecimal,
+    };
+  }, [totalLabel, loading]);
+
+  const shouldAnimate = !shouldReduceMotion && parsed !== null;
+  const animatedValue = useCountUp(parsed?.targetValue ?? 0, 1200, shouldAnimate);
+
+  const displayLabel = useMemo(() => {
+    if (loading || totalLabel === "--") return "--";
+    if (!parsed) return totalLabel;
+    const formatted = new Intl.NumberFormat("pt-BR", {
+      maximumFractionDigits: parsed.isDecimal ? 1 : 0,
+      minimumFractionDigits: parsed.isDecimal ? 1 : 0,
+    }).format(animatedValue);
+    return `${formatted} ${parsed.unitStr}`;
+  }, [animatedValue, parsed, loading, totalLabel]);
+
+  const showCaptionFinal = shouldReduceMotion || showCaption;
 
   return (
     <div
@@ -100,6 +198,8 @@ export function DashboardHudCoreFallback({
         className="relative h-full w-full"
         style={{ animation: "drug-hud-fallback-pulse 4s ease-in-out infinite" }}
       >
+        {/* Layers 1 & 2 are rendered inside the SVG below for correct stacking */}
+
         {/* Outer halo */}
         <div
           aria-hidden="true"
@@ -114,7 +214,7 @@ export function DashboardHudCoreFallback({
         {/* Concentric rings (SVG so we can animate them cheaply) */}
         <svg
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full"
+          className="absolute inset-0 h-full w-full z-10"
           viewBox="0 0 260 260"
         >
           <defs>
@@ -127,12 +227,14 @@ export function DashboardHudCoreFallback({
             </filter>
           </defs>
 
-          {/* Static plate */}
+          {/* glow filter only — background image now lives on the outer card */}
+
+          {/* Static plate border ring */}
           <circle
             cx="130"
             cy="130"
             r="118"
-            fill="rgba(8,16,28,0.85)"
+            fill="none"
             stroke="rgba(34,211,238,0.35)"
             strokeWidth="1"
           />
@@ -201,16 +303,26 @@ export function DashboardHudCoreFallback({
           {/* Data ring (segments) */}
           {ringSegments.length > 0 && (
             <g filter="url(#drug-hud-fallback-glow)">
-              {ringSegments.map((segment) => (
-                <path
-                  d={segment.d}
-                  key={segment.key}
-                  fill="none"
-                  stroke={segment.color}
-                  strokeLinecap="round"
-                  strokeWidth="6"
-                />
-              ))}
+              {ringSegments.map((segment, index) => {
+                const delay = shouldReduceMotion ? 0 : index * 0.15;
+                return (
+                  <motion.path
+                    d={segment.d}
+                    key={segment.key}
+                    fill="none"
+                    stroke={segment.color}
+                    strokeLinecap="round"
+                    strokeWidth="6"
+                    initial={shouldReduceMotion ? { pathLength: 1 } : { pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{
+                      duration: shouldReduceMotion ? 0 : 1.0,
+                      ease: "easeOut",
+                      delay,
+                    }}
+                  />
+                );
+              })}
             </g>
           )}
 
@@ -241,46 +353,30 @@ export function DashboardHudCoreFallback({
         {/* Central Glass Card Overlay */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
           <div
-            className="relative w-[170px] h-[122px]"
+            className="relative w-[160px] h-[160px] rounded-full flex flex-col items-center justify-center p-4 text-center border border-cyan-400/30 bg-[#021020]/90"
             style={{
               filter: "drop-shadow(0 0 18px rgba(34,211,238,0.3))",
             }}
           >
-            {/* Bevel Border */}
-            <div
-              className="absolute inset-0"
+            <span className="text-[8px] font-bold uppercase tracking-[0.24em] text-cyan-200/70 font-sans">
+              {totalCaption}
+            </span>
+            <span
+              className="mt-2 font-mono text-[30px] font-extrabold leading-none text-white"
               style={{
-                backgroundColor: "rgba(34,211,238,0.45)",
-                clipPath: "polygon(0 12px, 12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px))",
-              }}
-            />
-            {/* Bevel Content */}
-            <div
-              className="absolute inset-[1px] bg-[#021020]/90 flex flex-col items-center justify-center p-4 text-center"
-              style={{
-                clipPath: "polygon(0 11px, 11px 0, calc(100% - 11px) 0, 100% 11px, 100% calc(100% - 11px), calc(100% - 11px) 100%, 11px 100%, 0 calc(100% - 11px))",
+                textShadow: "0 0 12px rgba(34,211,238,0.6)",
               }}
             >
-              <span className="text-[8px] font-bold uppercase tracking-[0.24em] text-cyan-200/70 font-sans">
-                {totalCaption}
-              </span>
-              <span
-                className="mt-1.5 font-mono text-[30px] font-extrabold leading-none text-white"
-                style={{
-                  textShadow: "0 0 12px rgba(34,211,238,0.6)",
-                }}
-              >
-                {loading ? "--" : totalLabel}
-              </span>
-              {unit && !loading && (
-                <span className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.24em] text-cyan-200/60 font-sans font-mono">
-                  {unit}
-                </span>
-              )}
-              <span className="mt-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-300 font-sans">
-                {caption}
-              </span>
-            </div>
+              {displayLabel}
+            </span>
+            <motion.span
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 3 }}
+              animate={showCaptionFinal ? { opacity: 1, y: 0 } : { opacity: 0, y: 3 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="mt-2.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-300 font-sans"
+            >
+              {caption}
+            </motion.span>
           </div>
         </div>
       </div>

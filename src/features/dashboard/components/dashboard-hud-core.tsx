@@ -1,18 +1,12 @@
-/**
- * Central HUD ring rendered as inline SVG. Server-safe — no hooks,
- * browser APIs, or client-only behaviour. Animations are declared as
- * Tailwind utilities (`animate-*`) plus a small SVG transition on
- * `stroke-dashoffset`/`opacity` controlled by CSS in the parent.
- *
- * The ring represents the real distribution across categories: each
- * visible category gets its own circular segment computed from
- * `strokeDasharray` and `strokeDashoffset`. Segments are rendered
- * starting from 12 o'clock and rotated by `-90deg` via `transform`.
- */
+/* eslint-disable react-hooks/set-state-in-effect */
+"use client";
 
-import { cn } from "@/lib/utils";
-
-import { ringStrokeClass } from "./dashboard-utils";
+import React, { Component, Suspense, lazy, useEffect, useState, type ReactNode } from "react";
+import { DashboardHudCoreFallback } from "./dashboard-hud-core-fallback";
+import {
+  DRUG_HUD_3D_FORCE_FALLBACK,
+  DRUG_HUD_3D_MOBILE_QUERY,
+} from "./drug-hud-3d-config";
 import type { DashboardTone } from "./dashboard-utils";
 
 export interface HudCoreSegment {
@@ -21,7 +15,7 @@ export interface HudCoreSegment {
   /** Percentage 0..100. */
   percent: number;
   /** Tone key for the segment colour. */
-  tone: DashboardTone;
+  tone: DashboardTone | string;
 }
 
 export interface HudCoreProps {
@@ -37,7 +31,7 @@ export interface HudCoreProps {
   loading?: boolean;
   /** Optional override for the inner text. Defaults to "TOTAL APREENDIDO". */
   totalCaption?: string;
-  /** Optional size in pixels (square). Default 240. */
+  /** Optional size in pixels (square). Default 220. */
   size?: number;
   /** Optional accent text shown below the unit. Defaults to "N categorias". */
   categoriesCaption?: string;
@@ -46,209 +40,140 @@ export interface HudCoreProps {
   coreRef?: (node: HTMLElement | null) => void;
 }
 
-const RING_RADIUS_RATIO = 0.78;
-const RING_STROKE_RATIO = 0.08;
-const OUTER_RING_RATIO = 0.94;
-const OUTER_RING_STROKE = 0.012;
-const INNER_RING_RATIO = 0.62;
-const INNER_RING_STROKE = 0.01;
+// Lazy load the 3D core to avoid importing Three.js eagerly in the main bundle
+const DashboardHudCore3D = lazy(() =>
+  import("./dashboard-hud-core-3d").then((m) => ({
+    default: m.DashboardHudCore3D,
+  }))
+);
 
-export function DashboardHudCore({
-  segments,
-  totalLabel,
-  unit,
-  categoryCount,
-  loading = false,
-  totalCaption = "TOTAL APREENDIDO",
-  size = 240,
-  categoriesCaption,
-  coreRef,
-}: HudCoreProps) {
-  const center = size / 2;
-  const ringRadius = size * RING_RADIUS_RATIO;
-  const ringStroke = size * RING_STROKE_RATIO;
-  const ringCircumference = 2 * Math.PI * ringRadius;
-  const outerRadius = size * OUTER_RING_RATIO;
-  const outerStroke = size * OUTER_RING_STROKE;
-  const innerRadius = size * INNER_RING_RATIO;
-  const innerStroke = size * INNER_RING_STROKE;
+// Helper to check WebGL compatibility on the client side
+function isWebGLAvailable(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(
+      window.WebGLRenderingContext &&
+        (canvas.getContext("webgl") || canvas.getContext("experimental-webgl"))
+    );
+  } catch {
+    return false;
+  }
+}
 
-  const caption = categoriesCaption ?? `${categoryCount} categorias`;
+// Safety Error Boundary to fallback to CSS/SVG HUD core on rendering or loader failures
+interface ErrorBoundaryProps {
+  fallback: ReactNode;
+  children: ReactNode;
+}
 
-  return (
-    <div
-      ref={coreRef}
-      aria-hidden={loading ? undefined : "true"}
-      className="relative inline-flex items-center justify-center"
-      style={{ height: size, width: size }}
-    >
-      {/* Base ellipse — simulates projection on the floor */}
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Three.js/R3F Canvas error caught in ErrorBoundary:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
+export function DashboardHudCore(props: HudCoreProps) {
+  const {
+    segments,
+    totalLabel,
+    unit,
+    categoryCount,
+    loading = false,
+    totalCaption = "TOTAL APREENDIDO",
+    size = 288,
+    categoriesCaption,
+    coreRef,
+  } = props;
+
+  const [use3D, setUse3D] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+
+    if (DRUG_HUD_3D_FORCE_FALLBACK) {
+      setUse3D(false);
+      return;
+    }
+
+    // Skip WebGL pipeline on mobile/touch screens
+    const mediaQuery = window.matchMedia(DRUG_HUD_3D_MOBILE_QUERY);
+    if (mediaQuery.matches) {
+      setUse3D(false);
+      return;
+    }
+
+    // Check feature support in the browser
+    if (!isWebGLAvailable()) {
+      setUse3D(false);
+      return;
+    }
+
+    setUse3D(true);
+  }, []);
+
+  // Server-side rendering or initial client mount placeholder to prevent layout shift
+  if (!mounted) {
+    return (
       <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-3 left-1/2 -z-10 h-6 w-[80%] -translate-x-1/2 rounded-[100%] bg-cyan-400/20 blur-md"
-      />
-      <svg
-        aria-label={
-          loading
-            ? "Carregando distribuição de apreensões"
-            : `Total apreendido: ${totalLabel}, ${categoryCount} categorias`
-        }
-        className="hud-fade-in"
-        height={size}
-        role="img"
-        viewBox={`0 0 ${size} ${size}`}
-        width={size}
+        ref={coreRef}
+        className="relative inline-flex items-center justify-center select-none"
+        style={{ width: size, height: size }}
       >
-        <defs>
-          <radialGradient cx="50%" cy="50%" id="hud-core-glow" r="50%">
-            <stop offset="0%" stopColor="rgba(34,211,238,0.25)" />
-            <stop offset="60%" stopColor="rgba(34,211,238,0.04)" />
-            <stop offset="100%" stopColor="rgba(34,211,238,0)" />
-          </radialGradient>
-          <linearGradient id="hud-core-stroke" x1="0%" x2="100%" y1="0%" y2="100%">
-            <stop offset="0%" stopColor="rgba(34,211,238,0.0)" />
-            <stop offset="50%" stopColor="rgba(34,211,238,0.4)" />
-            <stop offset="100%" stopColor="rgba(34,211,238,0.0)" />
-          </linearGradient>
-        </defs>
-
-        {/* Inner glow */}
-        <circle
-          cx={center}
-          cy={center}
-          fill="url(#hud-core-glow)"
-          r={center}
-        />
-
-        {/* Technical outer ring (slow rotation handled via parent class) */}
-        <g
-          className="hud-rotate-slow origin-center"
-          style={{ transformOrigin: `${center}px ${center}px` }}
-        >
-          <circle
-            cx={center}
-            cy={center}
-            fill="none"
-            r={outerRadius}
-            stroke="rgba(34,211,238,0.18)"
-            strokeWidth={outerStroke}
-          />
-          {/* Markers around the outer ring */}
-          {Array.from({ length: 24 }).map((_, index) => {
-            const angle = (index / 24) * Math.PI * 2 - Math.PI / 2;
-            const x1 = center + Math.cos(angle) * (outerRadius - outerStroke * 2);
-            const y1 = center + Math.sin(angle) * (outerRadius - outerStroke * 2);
-            const x2 = center + Math.cos(angle) * (outerRadius + outerStroke * 2);
-            const y2 = center + Math.sin(angle) * (outerRadius + outerStroke * 2);
-            return (
-              <line
-                key={`marker-${index}`}
-                stroke="rgba(34,211,238,0.35)"
-                strokeWidth={outerStroke * 0.6}
-                x1={x1}
-                x2={x2}
-                y1={y1}
-                y2={y2}
-              />
-            );
-          })}
-        </g>
-
-        {/* Inner technical ring */}
-        <circle
-          cx={center}
-          cy={center}
-          fill="none"
-          r={innerRadius}
-          stroke="rgba(148,163,184,0.18)"
-          strokeDasharray="2 6"
-          strokeWidth={innerStroke}
-        />
-
-        {/* Background ring track */}
-        <circle
-          cx={center}
-          cy={center}
-          fill="none"
-          r={ringRadius}
-          stroke="rgba(255,255,255,0.06)"
-          strokeWidth={ringStroke}
-        />
-
-        {/* Distribution segments */}
-        {!loading &&
-          segments.map((segment, index) => {
-            const previousTotal = segments
-              .slice(0, index)
-              .reduce((sum, current) => sum + current.percent, 0);
-            const dashLength = (segment.percent / 100) * ringCircumference;
-            const offset = -(previousTotal / 100) * ringCircumference;
-            return (
-              <circle
-                className={cn("hud-ring-segment", ringStrokeClass(segment.tone))}
-                cx={center}
-                cy={center}
-                fill="none"
-                key={`${segment.label}-${index}`}
-                r={ringRadius}
-                strokeDasharray={`${dashLength} ${ringCircumference - dashLength}`}
-                strokeDashoffset={offset}
-                strokeLinecap="butt"
-                strokeWidth={ringStroke}
-                style={{
-                  transform: `rotate(${-90 + (previousTotal / 100) * 360}deg)`,
-                  transformOrigin: `${center}px ${center}px`,
-                }}
-              />
-            );
-          })}
-
-        {/* Outer hairline */}
-        <circle
-          cx={center}
-          cy={center}
-          fill="none"
-          r={ringRadius + ringStroke}
-          stroke="url(#hud-core-stroke)"
-          strokeWidth={outerStroke * 0.6}
-        />
-
-        {/* Loading skeleton: dim placeholder ring */}
-        {loading && (
-          <circle
-            className="hud-ring-pulse"
-            cx={center}
-            cy={center}
-            fill="none"
-            r={ringRadius}
-            stroke="rgba(148,163,184,0.25)"
-            strokeDasharray={`${ringCircumference * 0.25} ${ringCircumference * 0.75}`}
-            strokeWidth={ringStroke}
-            style={{
-              transform: "rotate(-90deg)",
-              transformOrigin: `${center}px ${center}px`,
-            }}
-          />
-        )}
-      </svg>
-
-      {/* Center labels */}
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-[10px] font-bold uppercase tracking-[0.32em] text-cyan-200/60">
-          {totalCaption}
-        </span>
-        <span className="mt-2 font-mono text-4xl font-black leading-none text-white drop-shadow-[0_0_18px_rgba(34,211,238,0.28)]">
-          {loading ? "--" : totalLabel}
-        </span>
-        {unit && !loading && (
-          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-slate-400">
-            {unit}
+        <div className="p-4 rounded-full bg-slate-900/60 backdrop-blur-md flex flex-col items-center shadow-[0_0_15px_rgba(0,255,255,0.2)] pointer-events-none text-center select-none whitespace-nowrap">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-200/70">
+            {totalCaption}
           </span>
-        )}
-        <span className="mt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-          {caption}
-        </span>
+          <span className="mt-2 font-mono text-[40px] font-extrabold leading-none text-white">
+            --
+          </span>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  const fallbackProps = {
+    segments,
+    totalLabel,
+    unit,
+    categoryCount,
+    loading,
+    totalCaption,
+    size,
+    categoriesCaption,
+    coreRef,
+  };
+
+  if (use3D) {
+    return (
+      <ErrorBoundary fallback={<DashboardHudCoreFallback {...fallbackProps} />}>
+        <Suspense fallback={<DashboardHudCoreFallback {...fallbackProps} loading={true} />}>
+          <DashboardHudCore3D {...props} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  return <DashboardHudCoreFallback {...fallbackProps} />;
 }

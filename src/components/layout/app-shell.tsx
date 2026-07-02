@@ -32,6 +32,7 @@ import {
 } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
+import { HudStatusDot } from "@/components/hud-status-dot";
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAuth } from "@/features/auth/providers/auth-provider";
 import { db } from "@/lib/firebase/client";
@@ -291,7 +292,7 @@ function SidebarContent({
         </Button>
         <div className="flex items-center justify-between text-xs text-slate-500">
           <span className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.85)]" />
+            <HudStatusDot color="emerald" size={10} />
             Sistema online
           </span>
           <span>v0.1.0</span>
@@ -567,7 +568,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         />
         <aside
           className={cn(
-            "absolute inset-y-0 left-0 w-[min(86vw,320px)] overflow-hidden border-r border-cyan-200/10 bg-[#07111f]/96 shadow-[30px_0_90px_rgba(0,0,0,0.48)] backdrop-blur-2xl transition-transform duration-300 ease-out",
+            "absolute inset-y-0 left-0 w-[min(86vw,320px)] overflow-hidden border-r border-cyan-200/10 bg-[#07111f]/96 shadow-[30px_0_90px_rgba(0,0,0,0.48)] backdrop-blur-2xl transition-transform duration-[var(--hud-normal)] ease-[var(--hud-move)]",
             isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >

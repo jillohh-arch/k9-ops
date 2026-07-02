@@ -72,7 +72,10 @@ export interface SummaryCardMeta {
 
 export interface SummaryCardData extends SummaryCardMeta {
   detail: string;
+  /** String formatada para display (fallback). */
   value: string;
+  /** Valor numérico raw para animação de contador. */
+  rawValue: number;
 }
 
 /* ─── Occurrence metrics ─── */
@@ -120,7 +123,7 @@ export interface IntegrityMetrics {
   versions: Array<{ version: number; count: number }>;
 }
 
-/* ─── Shift today ─── */
+/* ─── Shift today (deprecated — kept for backwards compat) ─── */
 
 export interface ActiveCrewData {
   vehiclePrefix: string;
@@ -143,6 +146,38 @@ export interface ShiftTodayGroup {
   }>;
   startHour?: string;
   endHour?: string;
+}
+
+/* ─── Service Day cards (Phase 2) ─── */
+
+export interface ServiceDayMember {
+  id: string;
+  callsign: string;
+  ra: string;
+  photoUrl?: string;
+  isK9Instructor: boolean;
+}
+
+export interface ServiceDogMember {
+  id: string;
+  name: string;
+  photoUrl?: string;
+  specializations: string[];
+}
+
+export interface ServiceDayShift {
+  id: string;
+  name: string;
+  members: ServiceDayMember[];
+}
+
+export interface ServiceDayCrew {
+  vehicleLabel: string;
+  vehiclePrefix: string;
+  vehicleModel: string;
+  vehicleUnit: string;
+  members: Array<ServiceDayMember & { role: string }>;
+  dog?: ServiceDogMember;
 }
 
 /* ─── Metric item (used in health/occurrences) ─── */

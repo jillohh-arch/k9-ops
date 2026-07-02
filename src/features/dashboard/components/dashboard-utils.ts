@@ -1206,6 +1206,7 @@ export function computeSummaryCards(
       ...card,
       detail: metric.error ? "falha ao carregar" : metric.detail,
       value: metric.loading ? "..." : metric.error ? "--" : formatCount(metric.value),
+      rawValue: metric.loading ? 0 : metric.value,
     };
   });
 }

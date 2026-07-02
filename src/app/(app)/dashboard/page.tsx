@@ -13,11 +13,11 @@ import {
   query,
   where,
 } from "firebase/firestore";
+import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/features/auth/providers/auth-provider";
 import {
-  isShiftWorkDay,
   subscribeShiftAssignments,
   subscribeShiftGroups,
   type ShiftAssignment as ShiftAssignmentType,
@@ -28,6 +28,10 @@ import {
   type DashboardPeriodDays,
 } from "@/features/dashboard/providers/dashboard-period-provider";
 import { db } from "@/lib/firebase/client";
+import {
+  useShiftPayload,
+  useCrewPayload,
+} from "@/features/dashboard/hooks/use-service-day-data";
 
 import { DashboardHeader } from "@/features/dashboard/components/dashboard-header";
 import { DashboardMetrics } from "@/features/dashboard/components/dashboard-metrics";
@@ -36,55 +40,26 @@ import { DashboardPending } from "@/features/dashboard/components/dashboard-pend
 import { DashboardHealth } from "@/features/dashboard/components/dashboard-health";
 import { DashboardDrugs } from "@/features/dashboard/components/dashboard-drugs";
 import { DashboardCharts } from "@/features/dashboard/components/dashboard-charts";
-import { DashboardShiftToday } from "@/features/dashboard/components/dashboard-shift-today";
+import {
+  PlantaoCard,
+  EquipeCard,
+} from "@/features/dashboard/components/dashboard-service-day-cards";
 
 import {
-  summaryCardMeta,
-  drugTiles,
-  emptyDrugStats,
   dashboardCollectionPaths,
   emptyDashboardCollection,
   createDashboardCollections,
-  normalizeText,
-  drugCategory,
-  parseNumber,
-  entryWeightGrams,
-  asRecord,
-  asArray,
+  drugTiles,
+  emptyDrugStats,
   drugEntriesFromOccurrence,
-  formatWeight,
-  formatPercent,
+  drugCategory,
+  entryWeightGrams,
   formatCount,
-  parseBoolean,
-  hasValue,
-  isSoftDeleted,
   visibleRecords,
-  recordText,
-  statusOf,
-  dateValue,
   occurrenceDate,
   periodStart,
-  addDays,
-  startOfToday,
-  dogIdentity,
-  dogName,
-  healthEventType,
-  healthEventDate,
-  healthEventDueDate,
-  weightRecordDate,
-  weightRecordValue,
-  dogIdealWeightRange,
-  daysFromToday,
-  occurrenceNature,
-  hasAuditAction,
-  dashboardDateLabel,
   isActiveRecord,
-  isK9Instructor,
-  isActiveShift,
-  isActiveVehicleCrew,
-  hasDogAndHandler,
-  vehicleIdentity,
-  toneClasses,
+  dogIdentity,
   detectUserProfile,
   computeHealthMetrics,
   computeSummaryCards,
@@ -101,7 +76,6 @@ import type {
   DrugStats,
   DogHealthStatus,
   UserProfile,
-  ShiftTodayGroup,
   SummaryCardData,
   OccurrenceMetrics,
   PendingMetrics,
@@ -111,7 +85,45 @@ import type {
 
 import type { PendingItem } from "@/features/dashboard/components/dashboard-pending";
 
+/* ─── Dashboard entry animation delays ─── */
+const STAGGER = 0.06; // 60ms between sections
+const ENTRY_DURATION = 0.3; // hud-entry
+
+function sectionVariant(delay: number) {
+  return {
+    initial: { opacity: 0, y: 12 },
+    animate: { opacity: 1, y: 0 },
+    transition: {
+      duration: ENTRY_DURATION,
+      ease: [0.215, 0.61, 0.355, 1] as const,
+      delay,
+    },
+  };
+}
+
+function staggerContainer() {
+  return {
+    animate: {
+      transition: {
+        staggerChildren: STAGGER,
+      },
+    },
+  };
+}
+
+function cardVariant() {
+  return {
+    initial: { opacity: 0, y: 12 },
+    animate: { opacity: 1, y: 0 },
+    transition: {
+      duration: ENTRY_DURATION,
+      ease: [0.215, 0.61, 0.355, 1] as const,
+    },
+  };
+}
+
 export default function DashboardPage() {
+  const prefersReducedMotion = useReducedMotion();
   const { profile } = useAuth();
   const { periodDays, periodLabel } = useDashboardPeriod();
   const warName = profile?.displayName?.trim() || "Operador";
@@ -299,123 +311,121 @@ export default function DashboardPage() {
   const healthError = dashboardCollections.dogs.error ?? healthEvents.error ?? weightRecords.error;
   const readinessPercent = healthMetrics.total > 0 ? Math.round((healthMetrics.ready / healthMetrics.total) * 100) : 0;
 
-  const onDutyToday = useMemo(() => {
-    const today = new Date();
-    const activeGroups = shiftGroups.filter((g) => isShiftWorkDay(g, today));
-    const users = visibleRecords(dashboardCollections.users.records);
-    return activeGroups.map((group) => {
-      const memberIds = shiftAssignments.filter((a) => a.shiftGroupId === group.id && a.active).map((a) => a.userId);
-      const members = memberIds.map((uid) => {
-        const user = users.find((u) => u._id === uid || (u as Record<string, unknown>).ra === uid || (u as Record<string, unknown>).uid === uid);
-        return {
-          name: user ? recordText(user as Record<string, unknown>, ["name", "nome", "displayName", "display_name"]) || uid : uid,
-          callsign: user ? recordText(user as Record<string, unknown>, ["warName", "war_name", "callSign", "callsign"]) || recordText(user as Record<string, unknown>, ["displayName", "display_name", "name", "nome"]) || uid : uid,
-          photoUrl: user ? recordText(user as Record<string, unknown>, ["photoUrl", "photo_url", "image_url", "profileImageUrl", "profile_image_url"]) || undefined : undefined,
-        };
-      }).sort((a, b) => a.callsign.localeCompare(b.callsign));
-      return {
-        group: { id: group.id, name: group.name, color: (group as Record<string, unknown>).color as string | undefined },
-        members,
-        startHour: String(group.expectedStartHour).padStart(2, "0") + ":00h",
-        endHour: String(group.expectedEndHour).padStart(2, "0") + ":00h",
-      };
-    });
-  }, [shiftGroups, shiftAssignments, dashboardCollections.users.records]);
+  const shiftPayload = useShiftPayload({
+    shiftGroups,
+    shiftAssignments,
+    users: dashboardCollections.users,
+  });
 
-  const activeCrew = useMemo(() => {
-    const activeVehicleCrews = dashboardCollections.vehicleCrews.records.filter(isActiveVehicleCrew);
-    if (activeVehicleCrews.length === 0) return null;
-
-    const currentCrew = activeVehicleCrews[0];
-    const prefix = vehicleIdentity(currentCrew) || "Viatura K9";
-
-    let dogNameStr = "K9 não escalado";
-    const dogId = currentCrew.dogId ?? currentCrew.service_dog_id;
-    if (hasValue(dogId)) {
-      const dogRecord = dashboardCollections.dogs.records.find((d) => d._id === dogId);
-      if (dogRecord) {
-        dogNameStr = dogName(dogRecord);
-      }
-    }
-
-    const handlerIds: string[] = [];
-    const titularId = currentCrew.titular_handler_id ?? currentCrew.handler_id ?? currentCrew.handlerId;
-    if (hasValue(titularId)) handlerIds.push(String(titularId));
-
-    if (Array.isArray(currentCrew.handlers)) {
-      currentCrew.handlers.forEach((h) => handlerIds.push(String(h)));
-    } else if (Array.isArray(currentCrew.handlerIds)) {
-      currentCrew.handlerIds.forEach((h) => handlerIds.push(String(h)));
-    }
-
-    const uniqueHandlers = Array.from(new Set(handlerIds.filter(Boolean)));
-    const users = visibleRecords(dashboardCollections.users.records);
-
-    const gcms = uniqueHandlers.map((uid) => {
-      const user = users.find((u) => u._id === uid || (u as Record<string, unknown>).ra === uid || (u as Record<string, unknown>).uid === uid);
-      return user ? recordText(user as Record<string, unknown>, ["warName", "war_name", "callSign", "callsign"]) || recordText(user as Record<string, unknown>, ["displayName", "display_name", "name", "nome"]) || uid : uid;
-    }).sort((a, b) => a.localeCompare(b));
-
-    return {
-      vehiclePrefix: prefix,
-      dogName: dogNameStr,
-      gcms,
-    };
-  }, [dashboardCollections.vehicleCrews.records, dashboardCollections.dogs.records, dashboardCollections.users.records]);
+  const crewPayload = useCrewPayload({
+    vehicleCrews: dashboardCollections.vehicleCrews,
+    activeShifts: dashboardCollections.activeShifts,
+    dogs: dashboardCollections.dogs,
+    users: dashboardCollections.users,
+  });
 
   const pendingItems: PendingItem[] = [
-    { label: "Aguardando assinaturas", value: pendingMetrics.awaitingSignatureOccurrences, detail: "ocorrencias em rodada de assinatura", icon: FileSignature, tone: "amber", loading: occurrences.loading, error: occurrences.error },
-    { label: "Em finalizacao", value: pendingMetrics.finalizingOccurrences, detail: pendingMetrics.finalizedWithPending > 0 ? `${formatCount(pendingMetrics.finalizedWithPending)} finalizada(s) com pendencia` : "rascunhos ainda nao selados", icon: Clock3, tone: "blue", loading: occurrences.loading, error: occurrences.error },
-    { label: "Minhas acoes", value: pendingMetrics.personalActions, detail: "convites, assinaturas e avaliacoes", icon: ListChecks, tone: "red", loading: notifications.loading, error: notifications.error },
-    { label: profile?.isK9Instructor ? "Evolucoes para avaliar" : "Minhas evolucoes pendentes", value: pendingMetrics.pendingPromotions, detail: profile?.isK9Instructor ? "solicitacoes aguardando instrutor" : "solicitacoes aguardando decisao", icon: GraduationCap, tone: "violet", loading: promotionRequests.loading, error: promotionRequests.error },
+    { label: "Aguardando assinaturas", value: pendingMetrics.awaitingSignatureOccurrences, detail: "ocorrencias em rodada de assinatura", iconSrc: "/assets/icones/pend_assinaturas.png", fallback: FileSignature, fallbackTone: "amber", tone: "amber", loading: occurrences.loading, error: occurrences.error },
+    { label: "Em finalizacao", value: pendingMetrics.finalizingOccurrences, detail: pendingMetrics.finalizedWithPending > 0 ? `${formatCount(pendingMetrics.finalizedWithPending)} finalizada(s) com pendencia` : "rascunhos ainda nao selados", iconSrc: "/assets/icones/pend_finalizacao.png", fallback: Clock3, fallbackTone: "blue", tone: "blue", loading: occurrences.loading, error: occurrences.error },
+    { label: "Minhas acoes", value: pendingMetrics.personalActions, detail: "convites, assinaturas e avaliacoes", iconSrc: "/assets/icones/pend_acoes.png", fallback: ListChecks, fallbackTone: "red", tone: "red", loading: notifications.loading, error: notifications.error },
+    { label: profile?.isK9Instructor ? "Evolucoes para avaliar" : "Minhas evolucoes pendentes", value: pendingMetrics.pendingPromotions, detail: profile?.isK9Instructor ? "solicitacoes aguardando instrutor" : "solicitacoes aguardando decisao", iconSrc: "/assets/icones/pend_evolucoes.png", fallback: GraduationCap, fallbackTone: "violet", tone: "violet", loading: promotionRequests.loading, error: promotionRequests.error },
   ];
+
+  const reduced = prefersReducedMotion ?? false;
 
   return (
     <div className="space-y-5">
-      <DashboardHeader
-        warName={warName}
-        userProfile={userProfile}
-      />
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduced ? { duration: 0 } : { duration: ENTRY_DURATION, ease: [0.215, 0.61, 0.355, 1] as const }}
+      >
+        <DashboardHeader
+          warName={warName}
+          userProfile={userProfile}
+        />
+      </motion.div>
 
-      <DashboardMetrics cards={summaryCards} />
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduced ? { duration: 0 } : { duration: ENTRY_DURATION, ease: [0.215, 0.61, 0.355, 1] as const, delay: STAGGER }}
+      >
+        <DashboardMetrics cards={summaryCards} />
+      </motion.div>
 
-      <DashboardShiftToday onDutyToday={onDutyToday} activeCrew={activeCrew} />
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduced ? { duration: 0 } : { duration: ENTRY_DURATION, ease: [0.215, 0.61, 0.355, 1] as const, delay: STAGGER * 2 }}
+      >
+        <div className="grid gap-5 xl:grid-cols-2">
+          <PlantaoCard shifts={shiftPayload} />
+          <EquipeCard crew={crewPayload} />
+        </div>
+      </motion.div>
 
-      <section className="grid items-start gap-4 2xl:grid-cols-[1.25fr_0.75fr]">
-        <DashboardOccurrences
-          metrics={occurrenceMetrics}
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduced ? { duration: 0 } : { duration: ENTRY_DURATION, ease: [0.215, 0.61, 0.355, 1] as const, delay: STAGGER * 3 }}
+      >
+        <section className="grid items-stretch gap-4 2xl:grid-cols-[1.25fr_0.75fr]">
+          <DashboardOccurrences
+            metrics={occurrenceMetrics}
+            periodDays={periodDays}
+            periodLabel={periodLabel}
+            loading={occurrences.loading}
+            error={occurrences.error}
+            records={occurrences.records}
+          />
+          <DashboardPending items={pendingItems} />
+        </section>
+      </motion.div>
+
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduced ? { duration: 0 } : { duration: ENTRY_DURATION, ease: [0.215, 0.61, 0.355, 1] as const, delay: STAGGER * 4 }}
+      >
+        <DashboardHealth
+          healthMetrics={healthMetrics}
+          healthLoading={healthLoading}
+          healthError={healthError}
+          readinessPercent={readinessPercent}
           periodLabel={periodLabel}
+        />
+      </motion.div>
+
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduced ? { duration: 0 } : { duration: ENTRY_DURATION, ease: [0.215, 0.61, 0.355, 1] as const, delay: STAGGER * 5 }}
+      >
+        <DashboardDrugs
+          drugStats={drugStats}
+          totalDrugGrams={totalDrugGrams}
+          activeDrugCategories={activeDrugCategories.length}
+          visibleDrugTiles={visibleDrugTiles}
+          isLoadingDrugs={isLoadingDrugs}
+          drugStatsError={drugStatsError}
+        />
+      </motion.div>
+
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduced ? { duration: 0 } : { duration: ENTRY_DURATION, ease: [0.215, 0.61, 0.355, 1] as const, delay: STAGGER * 6 }}
+      >
+        <DashboardCharts
+          userProfile={userProfile}
+          integrityMetrics={integrityMetrics}
+          occurrenceMetrics={occurrenceMetrics}
+          readinessPercent={readinessPercent}
           loading={occurrences.loading}
           error={occurrences.error}
         />
-        <DashboardPending items={pendingItems} />
-      </section>
-
-      <DashboardHealth
-        healthMetrics={healthMetrics}
-        healthLoading={healthLoading}
-        healthError={healthError}
-        readinessPercent={readinessPercent}
-        periodLabel={periodLabel}
-      />
-
-      <DashboardDrugs
-        drugStats={drugStats}
-        totalDrugGrams={totalDrugGrams}
-        activeDrugCategories={activeDrugCategories.length}
-        visibleDrugTiles={visibleDrugTiles}
-        isLoadingDrugs={isLoadingDrugs}
-        drugStatsError={drugStatsError}
-      />
-
-      <DashboardCharts
-        userProfile={userProfile}
-        integrityMetrics={integrityMetrics}
-        occurrenceMetrics={occurrenceMetrics}
-        readinessPercent={readinessPercent}
-        loading={occurrences.loading}
-        error={occurrences.error}
-      />
+      </motion.div>
     </div>
   );
 }

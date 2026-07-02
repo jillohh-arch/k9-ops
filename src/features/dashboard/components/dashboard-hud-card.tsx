@@ -13,6 +13,7 @@ import { useMemo, type ReactNode } from "react";
 import { motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
+import { hudDurations } from "@/lib/motion";
 
 import {
   cardGlyphBgClass,
@@ -138,7 +139,7 @@ export function DashboardHudCard({
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       whileHover={{ y: -6, scale: 1.02 }}
-      transition={{ duration: 0.4 }}
+      transition={{ duration: hudDurations.entry, ease: [0.215, 0.61, 0.355, 1] }}
       className="w-full h-[132px]"
       style={{
         filter: `drop-shadow(0 4px 20px rgba(0,0,0,0.5)) drop-shadow(0 0 15px ${color}18)`,
@@ -155,7 +156,7 @@ export function DashboardHudCard({
       >
         {/* Outer clipped border layer */}
         <div
-          className="absolute inset-0 transition-colors duration-300"
+          className="absolute inset-0 transition-colors duration-[var(--hud-fast)]"
           style={{
             backgroundColor: `${color}40`,
             clipPath: "polygon(0 12px, 12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px))",
@@ -165,7 +166,7 @@ export function DashboardHudCard({
           <div
             aria-label={ariaLabel}
             className={cn(
-              "absolute inset-[1px] overflow-hidden bg-slate-950/90 backdrop-blur-md transition-all duration-300 hover:bg-slate-900/95",
+              "absolute inset-[1px] overflow-hidden bg-slate-950/90 backdrop-blur-md transition-all duration-[var(--hud-fast)] hover:bg-slate-900/95",
               emphasis === "primary" ? "p-5" : "p-4.5",
             )}
             style={{
@@ -174,7 +175,7 @@ export function DashboardHudCard({
           >
             {/* Glow highlight on hover */}
             <div
-              className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+              className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-[var(--hud-fast)] pointer-events-none"
               style={{
                 boxShadow: `inset 0 0 12px ${color}20`,
               }}
@@ -184,7 +185,7 @@ export function DashboardHudCard({
             <div
               aria-hidden="true"
               className={cn(
-                "pointer-events-none absolute inset-0 opacity-20 transition-opacity duration-300 hover:opacity-35",
+                "pointer-events-none absolute inset-0 opacity-20 transition-opacity duration-[var(--hud-fast)] hover:opacity-35",
                 cardGlyphBgClass(item.tone),
               )}
               style={{
@@ -196,7 +197,7 @@ export function DashboardHudCard({
               {/* Left Side: Circular Icon Disc */}
               <div
                 aria-hidden="true"
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border transition-all duration-300 hover:scale-105"
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border transition-all duration-[var(--hud-fast)] hover:scale-105"
                 style={{
                   borderColor: `${color}45`,
                   backgroundColor: `${color}12`,
@@ -253,7 +254,7 @@ export function DashboardHudCard({
                     {Array.from({ length: SEGMENT_COUNT }).map((_, index) => (
                       <span
                         aria-hidden="true"
-                        className="h-full w-2.5 rounded-[1px] transition-all duration-500"
+                        className="h-full w-2.5 rounded-[1px] transition-all duration-[var(--hud-slower)]"
                         style={{
                           backgroundColor: index < filledSegments ? color : "rgba(255,255,255,0.06)",
                           boxShadow: index < filledSegments ? `0 0 6px ${color}af` : "none",

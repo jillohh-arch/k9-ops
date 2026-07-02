@@ -13,6 +13,21 @@
   --warning: #f1c40f;
   --danger: #e74c3c;
   --border: rgba(77, 208, 225, 0.12);
+
+  /* Motion tokens — espelho do mobile (HudDurations/HudCurves) */
+  --hud-micro: 80ms;
+  --hud-tap: 120ms;
+  --hud-fast: 160ms;
+  --hud-normal: 220ms;
+  --hud-entry: 300ms;
+  --hud-slower: 500ms;  /* transições de elementos decorativos (progress bars, etc.) */
+  --hud-pulse: 1600ms;
+
+  --hud-enter: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --hud-exit: cubic-bezier(0.55, 0.055, 0.675, 0.19);
+  --hud-move: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --hud-snappy: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --hud-reveal: 600ms; /* entrada reveal — fora da escala normal (usado em @keyframes) */
 }
 
 @theme inline {
@@ -185,6 +200,18 @@ body {
   50%      { opacity: 0.7; }
 }
 
+/* Pulso de radar para HudStatusDot */
+@keyframes hud-dot-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
 @keyframes hud-ring-segment {
   from { stroke-dashoffset: var(--hud-ring-circ, 0); }
   to   { stroke-dashoffset: 0; }
@@ -199,19 +226,25 @@ body {
 }
 
 .hud-ring-pulse {
-  animation: hud-ring-pulse 1.6s ease-in-out infinite;
+  animation: hud-ring-pulse var(--hud-pulse) ease-in-out infinite;
 }
 
 .hud-ring-segment {
   stroke-dashoffset: 0;
-  transition: stroke-dasharray 600ms ease-out;
+  transition: stroke-dasharray var(--hud-reveal, 600ms) var(--hud-enter);
+}
+
+/* Pulso de radar — expande e desvanece (estilo HudStatusDot) */
+.animate-hud-ring-pulse {
+  animation: hud-dot-ring var(--hud-pulse) var(--hud-enter) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .hud-fade-in,
   .hud-rotate-slow,
   .hud-ring-pulse,
-  .hud-ring-segment {
+  .hud-ring-segment,
+  .animate-hud-ring-pulse {
     animation: none !important;
     transition: none !important;
   }

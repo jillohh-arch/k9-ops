@@ -312,9 +312,24 @@ export function useCrewPayload(params: {
               "profileImageUrl",
             ]) || undefined,
           specializations: dogSpecializations(dogRecord),
+          breed:
+            recordText(dogRecord, ["breed", "raca", "race"]) || undefined,
+          status:
+            recordText(dogRecord, [
+              "operational_status",
+              "status",
+              "readiness",
+            ]) || "Pronto para emprego",
         };
       }
     }
+
+    // Shift times from crew doc
+    const shiftStart =
+      recordText(crew, ["shift_start", "shiftStart", "start_time"]) ||
+      undefined;
+    const shiftEnd =
+      recordText(crew, ["shift_end", "shiftEnd", "end_time"]) || undefined;
 
     const crewPayload: ServiceDayCrew = {
       vehicleLabel,
@@ -323,6 +338,8 @@ export function useCrewPayload(params: {
       vehicleUnit,
       members,
       dog,
+      shiftStart,
+      shiftEnd,
     };
 
     return crewPayload;

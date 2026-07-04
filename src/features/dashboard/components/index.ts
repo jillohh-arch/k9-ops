@@ -5,7 +5,6 @@ export { DashboardHealth } from "./dashboard-health";
 export { DashboardMetrics } from "./dashboard-metrics";
 export { DashboardOccurrences } from "./dashboard-occurrences";
 export { DashboardPending } from "./dashboard-pending";
-export { DashboardShiftToday } from "./dashboard-shift-today";
 export type {
   DashboardCollectionKey,
   DashboardCollections,

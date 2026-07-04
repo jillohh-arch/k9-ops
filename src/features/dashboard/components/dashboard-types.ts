@@ -176,6 +176,9 @@ export interface ServiceDogMember {
   name: string;
   photoUrl?: string;
   specializations: string[];
+  breed?: string;
+  status?: string;
+  handlerCallsign?: string;
 }
 
 export interface ServiceDayShift {
@@ -191,6 +194,8 @@ export interface ServiceDayCrew {
   vehicleUnit: string;
   members: Array<ServiceDayMember & { role: string }>;
   dog?: ServiceDogMember;
+  shiftStart?: string;
+  shiftEnd?: string;
 }
 
 /* ─── Metric item (used in health/occurrences) ─── */

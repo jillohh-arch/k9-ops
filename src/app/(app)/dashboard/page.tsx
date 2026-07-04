@@ -32,6 +32,7 @@ import {
   useShiftPayload,
   useCrewPayload,
 } from "@/features/dashboard/hooks/use-service-day-data";
+import { useCrewMembers } from "@/features/dashboard/hooks/use-crew-members";
 
 import { DashboardHeader } from "@/features/dashboard/components/dashboard-header";
 import { DashboardMetrics } from "@/features/dashboard/components/dashboard-metrics";
@@ -317,11 +318,14 @@ export default function DashboardPage() {
     users: dashboardCollections.users,
   });
 
+  const crewMembers = useCrewMembers(dashboardCollections.vehicleCrews.records);
+
   const crewPayload = useCrewPayload({
     vehicleCrews: dashboardCollections.vehicleCrews,
     activeShifts: dashboardCollections.activeShifts,
     dogs: dashboardCollections.dogs,
     users: dashboardCollections.users,
+    crewMembers,
   });
 
   const pendingItems: PendingItem[] = [

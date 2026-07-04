@@ -469,7 +469,14 @@ export function isActiveVehicleCrew(record: Record<string, unknown>) {
     return ["active", "ativo", "titular"].includes(status);
   }
 
-  return parseBoolean(record.active) === true && !hasValue(record.ended_at);
+  // Aceitar cycle reaberto: active:true mesmo que ended_at antigo persista (resíduo
+  // de ciclo anterior). Só bloqueia se active for explicitamente false OU status
+  // de encerramento explícito.
+  if (parseBoolean(record.active) === true) {
+    return true;
+  }
+
+  return false;
 }
 
 export function hasDogAndHandler(record: Record<string, unknown>) {

@@ -148,6 +148,19 @@ export interface ShiftTodayGroup {
   endHour?: string;
 }
 
+/* ─── Vehicle crew member (Firestore sub-collection) ─── */
+
+export interface VehicleCrewMember {
+  handler_id: string;
+  name?: string;
+  role: "motorista" | "encarregado" | "auxiliar_1" | "auxiliar_2" | string;
+  status: "active" | "ended" | string;
+  dog_id?: string;
+  joined_at?: Date | string;
+  responded_at?: Date | string;
+  left_at?: Date | string;
+}
+
 /* ─── Service Day cards (Phase 2) ─── */
 
 export interface ServiceDayMember {

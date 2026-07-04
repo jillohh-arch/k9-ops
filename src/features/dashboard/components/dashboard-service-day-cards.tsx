@@ -92,7 +92,7 @@ function InstructorTag() {
 
 /* ─── GCM Member chip ─── */
 
-function MemberChip({ member }: { member: ServiceDayMember }) {
+function MemberChip({ member }: { member: ServiceDayMember & { role?: string } }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-2.5 py-2">
       <MemberAvatar callsign={member.callsign} photoUrl={member.photoUrl} />
@@ -102,7 +102,14 @@ function MemberChip({ member }: { member: ServiceDayMember }) {
         </p>
         <p className="font-mono text-[10px] text-cyan-300/70">RA {member.ra}</p>
       </div>
-      {member.isK9Instructor && <InstructorTag />}
+      <div className="flex shrink-0 items-center gap-1.5">
+        {member.isK9Instructor && <InstructorTag />}
+        {member.role && member.role !== "Integrante" && (
+          <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-cyan-200">
+            {member.role}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -257,9 +264,9 @@ export function EquipeCard({ crew }: { crew: ServiceDayCrew | null }) {
             </p>
 
             {/* Crew members */}
-            <div className="space-y-1.5">
+            <div className="grid gap-2 sm:grid-cols-2">
               {crew.members.map((member) => (
-                <CrewMemberRow key={member.id} member={member} />
+                <MemberChip key={member.id} member={member} />
               ))}
             </div>
 

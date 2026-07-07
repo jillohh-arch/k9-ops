@@ -1,8 +1,9 @@
 "use client";
 
+import { doc, Timestamp, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
-import { storage } from "@/lib/firebase/client";
+import { db, storage } from "@/lib/firebase/client";
 import {
   callAdminCreateHealthEvent,
   callAdminCreateK9HealthDocument,
@@ -127,6 +128,25 @@ export async function createHealthEvent(input: HealthEventInput) {
       vetName: input.vetName || null,
     },
   });
+
+  try {
+    const dogRef = doc(db, "dogs", input.dogId);
+    const eventDate = Timestamp.fromDate(new Date(`${input.date}T12:00:00`));
+    if (input.type === "vaccination") {
+      const update: Record<string, unknown> = { _last_vaccine_at: eventDate };
+      if (input.nextDueDate) {
+        update._last_vaccine_due_at = Timestamp.fromDate(
+          new Date(`${input.nextDueDate}T12:00:00`),
+        );
+      }
+      await updateDoc(dogRef, update);
+    } else if (input.type === "exam") {
+      await updateDoc(dogRef, { _last_exam_at: eventDate });
+    }
+  } catch {
+    // Best-effort denormalization — don't fail the main operation
+  }
+
   return result.data;
 }
 
@@ -140,6 +160,21 @@ export async function createHealthWeight(input: HealthWeightInput) {
       weightKg: input.weightKg,
     },
   });
+
+  try {
+    const dogRef = doc(db, "dogs", input.dogId);
+    const weightKg = Number(input.weightKg);
+    const measuredAt = Timestamp.fromDate(new Date(`${input.measuredAt}T12:00:00`));
+    if (Number.isFinite(weightKg) && weightKg > 0) {
+      await updateDoc(dogRef, {
+        _last_weight_kg: weightKg,
+        _last_weight_at: measuredAt,
+      });
+    }
+  } catch {
+    // Best-effort denormalization — don't fail the main operation
+  }
+
   return result.data;
 }
 

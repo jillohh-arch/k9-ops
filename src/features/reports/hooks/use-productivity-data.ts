@@ -3,10 +3,10 @@
 import {
   collection,
   collectionGroup,
-  onSnapshot,
+  getDocs,
   type Query,
 } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DashboardPeriodDays } from "@/features/dashboard/providers/dashboard-period-provider";
 import { db } from "@/lib/firebase/client";
@@ -236,7 +236,7 @@ const sourceDefinitions: Array<{
 
 export function useProductivityData(
   periodDays: DashboardPeriodDays,
-): ProductivityData {
+): ProductivityData & { refresh: () => void; refreshing: boolean } {
   const [sources, setSources] = useState<Sources>(() => {
     const initial = {} as Sources;
     for (const { key } of sourceDefinitions) {
@@ -244,49 +244,60 @@ export function useProductivityData(
     }
     return initial;
   });
+  const [refreshing, setRefreshing] = useState(false);
+  const mountedRef = useRef(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!db) return;
+    setRefreshing(true);
+    setSources(() => {
+      const reset = {} as Sources;
+      for (const { key } of sourceDefinitions) {
+        reset[key] = { loading: true, records: [] };
+      }
+      return reset;
+    });
 
-    const unsubscribers: (() => void)[] = [];
-
-    for (const { group, key, path } of sourceDefinitions) {
-      const query: Query = group
+    const promises = sourceDefinitions.map(async ({ group, key, path }) => {
+      const ref: Query = group
         ? collectionGroup(db, path)
         : collection(db, path);
-
-      const unsubscribe = onSnapshot(
-        query,
-        (snapshot) => {
-          const records = snapshot.docs.map((doc) => ({
-            _id: doc.id,
-            ...doc.data(),
-          })) as RawRecord[];
-
+      try {
+        const snapshot = await getDocs(ref);
+        const records = snapshot.docs.map((doc) => ({
+          _id: doc.id,
+          ...doc.data(),
+        })) as RawRecord[];
+        if (mountedRef.current) {
           setSources((prev) => ({
             ...prev,
             [key]: { loading: false, records },
           }));
-        },
-        () => {
+        }
+      } catch {
+        if (mountedRef.current) {
           setSources((prev) => ({
             ...prev,
             [key]: { loading: false, records: [] },
           }));
-        },
-      );
-
-      unsubscribers.push(unsubscribe);
-    }
-
-    return () => {
-      for (const unsubscribe of unsubscribers) {
-        unsubscribe();
+        }
       }
-    };
+    });
+
+    Promise.all(promises).then(() => {
+      if (mountedRef.current) setRefreshing(false);
+    });
   }, []);
 
-  return useMemo(() => {
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => { mountedRef.current = false; };
+  }, [load]);
+
+  const refresh = useCallback(() => { load(); }, [load]);
+
+  const computed = useMemo(() => {
     const isLoading = sourceDefinitions.some(
       ({ key }) => sources[key].loading,
     );
@@ -495,4 +506,6 @@ export function useProductivityData(
       topConductors: conductorRanking.slice(0, 10),
     };
   }, [periodDays, sources]);
+
+  return { ...computed, refresh, refreshing };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 
 import { db } from "@/lib/firebase/client";
@@ -240,9 +240,13 @@ function subscribeCollection(
   path: string,
   setter: React.Dispatch<React.SetStateAction<CollectionState>>,
   ordered = false,
+  maxResults?: number,
 ) {
-  const ref = ordered
-    ? query(collection(db, path), orderBy("created_at", "desc"))
+  const constraints = [];
+  if (ordered) constraints.push(orderBy("created_at", "desc"));
+  if (maxResults) constraints.push(limit(maxResults));
+  const ref = constraints.length
+    ? query(collection(db, path), ...constraints)
     : collection(db, path);
   return onSnapshot(
     ref,
@@ -273,7 +277,7 @@ export function useInventoryData() {
     const unsubscribes = [
       subscribeCollection("inventory_categories", setCategoriesState),
       subscribeCollection("inventory_items", setItemsState),
-      subscribeCollection("inventory_movements", setMovementsState, true),
+      subscribeCollection("inventory_movements", setMovementsState, true, 500),
     ];
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, []);

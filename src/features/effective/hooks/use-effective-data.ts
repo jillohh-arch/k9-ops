@@ -14,6 +14,7 @@ import {
   canônicalModality,
   canônicalModalityLabel,
 } from "@/features/effective/lib/k9-modalities";
+import { useEntities } from "@/features/effective/providers/entities-provider";
 import { db } from "@/lib/firebase/client";
 
 type RawRecord = Record<string, unknown> & { _id: string };
@@ -327,6 +328,7 @@ function subscribeCollection(
 }
 
 export function useEffectiveData() {
+  const { dogs: entityDogs, dogsLoading, users: entityUsers, usersLoading, vehicles: entityVehicles, vehiclesLoading } = useEntities();
   const [binomialsState, setBinomialsState] =
     useState<CollectionState>(initialState);
   const [dogsState, setDogsState] = useState<CollectionState>(initialState);
@@ -341,20 +343,22 @@ export function useEffectiveData() {
   const [specialtiesError, setSpecialtiesError] = useState<string | null>(null);
 
   useEffect(() => {
+    setDogsState({ error: null, loading: dogsLoading, records: entityDogs });
+  }, [entityDogs, dogsLoading]);
+
+  useEffect(() => {
+    setUsersState({ error: null, loading: usersLoading, records: entityUsers });
+  }, [entityUsers, usersLoading]);
+
+  useEffect(() => {
+    setVehiclesState({ error: null, loading: vehiclesLoading, records: entityVehicles });
+  }, [entityVehicles, vehiclesLoading]);
+
+  useEffect(() => {
     const unsubscribes = [
-      // QW-4: Filter at query level to avoid downloading soft-deleted records.
-      // The "active" field is the canonical soft-delete flag used throughout
-      // the codebase (confirmed in isDeleted / booleanValue helpers).
       subscribeCollection("binomials", setBinomialsState, [
         where("active", "==", true),
       ]),
-      subscribeCollection("dogs", setDogsState, [where("active", "==", true)]),
-      subscribeCollection("users", setUsersState, [where("active", "==", true)]),
-      subscribeCollection("vehicles", setVehiclesState, [
-        where("active", "==", true),
-      ]),
-      // active_shifts is intentionally unfiltered here — isActiveShift()
-      // in the useMemo already handles status + deleted_at + active flag.
       subscribeCollection("active_shifts", setShiftsState),
     ];
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());

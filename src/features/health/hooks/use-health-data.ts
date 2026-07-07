@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import type { DashboardPeriodDays } from "@/features/dashboard/providers/dashboard-period-provider";
+import { useEntities } from "@/features/effective/providers/entities-provider";
 import { db } from "@/lib/firebase/client";
 
 export type HealthTone =
@@ -466,6 +467,7 @@ function sortDateDesc(a: Date | null, b: Date | null) {
 }
 
 export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
+  const { dogs: entityDogs, dogsLoading } = useEntities();
   const [dogsState, setDogsState] = useState<SourceState>(emptySource);
   const [rootHealthLogsState, setRootHealthLogsState] =
     useState<SourceState>(emptySource);
@@ -478,8 +480,11 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
     useState<SourceState>(emptySource);
 
   useEffect(() => {
+    setDogsState({ error: null, loading: dogsLoading, records: entityDogs });
+  }, [entityDogs, dogsLoading]);
+
+  useEffect(() => {
     const unsubscribes = [
-      subscribeCollection("dogs", setDogsState),
       subscribeCollection("health_logs", setRootHealthLogsState, 500),
       subscribeCollection("documentos", setRootDocumentsState),
     ];

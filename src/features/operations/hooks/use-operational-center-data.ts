@@ -18,6 +18,7 @@ import {
 } from "react";
 
 import type { DashboardPeriodDays } from "@/features/dashboard/providers/dashboard-period-provider";
+import { useEntities } from "@/features/effective/providers/entities-provider";
 import { db } from "@/lib/firebase/client";
 
 type RawRecord = Record<string, unknown> & { _id: string };
@@ -653,21 +654,23 @@ export function useOperationalCenterData(
   periodDays: DashboardPeriodDays,
 ): OperationalCenterData {
   const [collections, setCollections] = useState(createCollections);
+  const { dogs: entityDogs, dogsLoading, users: entityUsers, usersLoading, vehicles: entityVehicles, vehiclesLoading } = useEntities();
 
   useEffect(() => {
-    // QW-4: Filter dogs, users, vehicles at query level by active==true.
-    // occurrences, active_shifts, vehicle_crews, inventory_items use their
-    // own status/isActive*() logic in the useMemo — do NOT add where here.
-    const unsubscribes = centerCollectionPaths.map(({ key, path }) => {
-      const constraints =
-        key === "dogs"
-          ? [where("active", "==", true)]
-          : key === "users"
-            ? [where("active", "==", true)]
-            : key === "vehicles"
-              ? [where("active", "==", true)]
-              : undefined;
-      return subscribeCollection(
+    setCollections((current) => ({
+      ...current,
+      dogs: { error: null, loading: dogsLoading, records: entityDogs },
+      users: { error: null, loading: usersLoading, records: entityUsers },
+      vehicles: { error: null, loading: vehiclesLoading, records: entityVehicles },
+    }));
+  }, [entityDogs, dogsLoading, entityUsers, usersLoading, entityVehicles, vehiclesLoading]);
+
+  useEffect(() => {
+    const paths = centerCollectionPaths.filter(
+      ({ key }) => key !== "dogs" && key !== "users" && key !== "vehicles",
+    );
+    const unsubscribes = paths.map(({ key, path }) =>
+      subscribeCollection(
         path,
         (nextState) => {
           setCollections((current) => {
@@ -680,9 +683,8 @@ export function useOperationalCenterData(
             };
           });
         },
-        constraints,
-      );
-    });
+      ),
+    );
 
     return () => {
       unsubscribes.forEach((unsubscribe) => unsubscribe());

@@ -9,8 +9,11 @@ import {
 import {
   collection,
   collectionGroup,
+  limit,
   onSnapshot,
+  orderBy,
   query,
+  Timestamp,
   where,
 } from "firebase/firestore";
 import { motion, useReducedMotion } from "framer-motion";
@@ -177,8 +180,17 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    return onSnapshot(
+    const thirtyOneDaysAgo = new Date();
+    thirtyOneDaysAgo.setDate(thirtyOneDaysAgo.getDate() - 31);
+    const cutoff = Timestamp.fromDate(thirtyOneDaysAgo);
+    const occurrencesQuery = query(
       collection(db, "occurrences"),
+      where("started_at", ">=", cutoff),
+      orderBy("started_at", "desc"),
+      limit(500),
+    );
+    return onSnapshot(
+      occurrencesQuery,
       (snapshot) => {
         setOccurrences({ error: null, loading: false, records: snapshot.docs.map((d) => ({ ...d.data(), _id: d.id })) });
       },

@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import {
   collection,
-  collectionGroup,
   limit,
   onSnapshot,
   orderBy,
@@ -62,8 +61,6 @@ import {
   visibleRecords,
   occurrenceDate,
   periodStart,
-  isActiveRecord,
-  dogIdentity,
   detectUserProfile,
   computeHealthMetrics,
   computeSummaryCards,
@@ -75,7 +72,6 @@ import {
 import type {
   DashboardCollectionState,
   DashboardCollections,
-  DashboardRecord,
   DrugCategory,
   DrugStats,
   DogHealthStatus,
@@ -144,11 +140,6 @@ export default function DashboardPage() {
     () => emptyDashboardCollection(),
   );
   const [promotionRequests, setPromotionRequests] =
-    useState<DashboardCollectionState>(() => emptyDashboardCollection());
-  const [healthEvents, setHealthEvents] = useState<DashboardCollectionState>(
-    () => emptyDashboardCollection(),
-  );
-  const [weightRecords, setWeightRecords] =
     useState<DashboardCollectionState>(() => emptyDashboardCollection());
   const [dashboardCollections, setDashboardCollections] =
     useState<DashboardCollections>(() => createDashboardCollections());
@@ -221,65 +212,6 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (dashboardCollections.dogs.loading) return;
-    const activeDogs = visibleRecords(dashboardCollections.dogs.records).filter(isActiveRecord);
-    const dogIdSet = new Set(activeDogs.map(dogIdentity).filter(Boolean));
-    if (dogIdSet.size === 0) {
-      // Use microtask to avoid synchronous setState in effect body
-      queueMicrotask(() => {
-        setHealthEvents({ error: null, loading: false, records: [] });
-        setWeightRecords({ error: null, loading: false, records: [] });
-      });
-      return;
-    }
-    const healthByDog = new Map<string, DashboardRecord[]>();
-    const weightsByDog = new Map<string, DashboardRecord[]>();
-    let healthError: string | null = null;
-    let weightError: string | null = null;
-    function updateHealth() {
-      const records: DashboardRecord[] = [];
-      for (const entries of healthByDog.values()) records.push(...entries);
-      setHealthEvents({ error: healthError, loading: false, records });
-    }
-    function updateWeight() {
-      const records: DashboardRecord[] = [];
-      for (const entries of weightsByDog.values()) records.push(...entries);
-      setWeightRecords({ error: weightError, loading: false, records });
-    }
-    const unsubHealth = onSnapshot(
-      collectionGroup(db, "health_events"),
-      (snapshot) => {
-        healthByDog.clear();
-        for (const docSnap of snapshot.docs) {
-          const dogId = dogIdentity(docSnap.data());
-          if (dogId && dogIdSet.has(dogId)) {
-            healthByDog.set(dogId, [...(healthByDog.get(dogId) ?? []), { ...docSnap.data(), _dogId: dogId, _id: docSnap.id }]);
-          }
-        }
-        healthError = null;
-        updateHealth();
-      },
-      (error) => { healthError = error.message; updateHealth(); },
-    );
-    const unsubWeight = onSnapshot(
-      collectionGroup(db, "weight_records"),
-      (snapshot) => {
-        weightsByDog.clear();
-        for (const docSnap of snapshot.docs) {
-          const dogId = dogIdentity(docSnap.data());
-          if (dogId && dogIdSet.has(dogId)) {
-            weightsByDog.set(dogId, [...(weightsByDog.get(dogId) ?? []), { ...docSnap.data(), _dogId: dogId, _id: docSnap.id }]);
-          }
-        }
-        weightError = null;
-        updateWeight();
-      },
-      (error) => { weightError = error.message; updateWeight(); },
-    );
-    return () => { unsubHealth(); unsubWeight(); };
-  }, [dashboardCollections.dogs.loading, dashboardCollections.dogs.records]);
-
-  useEffect(() => {
     const ra = profile?.ra?.trim();
     if (!ra) return;
     return onSnapshot(
@@ -331,11 +263,11 @@ export default function DashboardPage() {
   const occurrenceMetrics = useMemo(() => computeOccurrenceMetrics(occurrences.records, periodOccurrences), [occurrences.records, periodOccurrences]);
   const pendingMetrics = useMemo(() => computePendingMetrics(occurrences.records, notifications.records, promotionRequests.records), [notifications.records, occurrences.records, promotionRequests.records]);
   const integrityMetrics = useMemo(() => computeIntegrityMetrics(occurrences.records), [occurrences.records]);
-  const healthMetrics = useMemo(() => computeHealthMetrics(dashboardCollections.dogs.records, healthEvents.records, weightRecords.records, periodDays), [dashboardCollections.dogs.records, healthEvents.records, periodDays, weightRecords.records]);
+  const healthMetrics = useMemo(() => computeHealthMetrics(dashboardCollections.dogs.records, [], [], periodDays), [dashboardCollections.dogs.records, periodDays]);
   const summaryCards = useMemo(() => computeSummaryCards(dashboardCollections), [dashboardCollections]);
 
-  const healthLoading = dashboardCollections.dogs.loading || healthEvents.loading || weightRecords.loading;
-  const healthError = dashboardCollections.dogs.error ?? healthEvents.error ?? weightRecords.error;
+  const healthLoading = dashboardCollections.dogs.loading;
+  const healthError = dashboardCollections.dogs.error;
   const readinessPercent = healthMetrics.total > 0 ? Math.round((healthMetrics.ready / healthMetrics.total) * 100) : 0;
 
   const shiftPayload = useShiftPayload({

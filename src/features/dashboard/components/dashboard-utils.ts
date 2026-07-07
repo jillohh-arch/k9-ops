@@ -1043,70 +1043,40 @@ export function computeIntegrityMetrics(
 
 export function computeHealthMetrics(
   dogRecords: DashboardRecord[],
-  healthRecords: DashboardRecord[],
-  weightRecordsArr: DashboardRecord[],
+  _healthRecords: DashboardRecord[],
+  _weightRecordsArr: DashboardRecord[],
   periodDays: DashboardPeriodDays,
 ): HealthMetrics {
   const activeDogs = visibleRecords(dogRecords).filter(isActiveRecord);
-  const activeHealthEvents = visibleRecords(healthRecords);
-  const activeWeightRecords = visibleRecords(weightRecordsArr);
-  const healthByDog = new Map<string, DashboardRecord[]>();
-  const weightsByDog = new Map<string, DashboardRecord[]>();
-
-  for (const event of activeHealthEvents) {
-    const id = dogIdentity(event);
-    if (!id) continue;
-    healthByDog.set(id, [...(healthByDog.get(id) ?? []), event]);
-  }
-
-  for (const record of activeWeightRecords) {
-    const id = dogIdentity(record);
-    if (!id) continue;
-    weightsByDog.set(id, [...(weightsByDog.get(id) ?? []), record]);
-  }
+  const start = periodStart(periodDays);
 
   const statuses: DogHealthStatus[] = activeDogs.map((dog) => {
     const id = dogIdentity(dog);
-    const events = healthByDog.get(id) ?? [];
-    const vaccines = events
-      .filter((e) => healthEventType(e) === "vaccination")
-      .map((e) => ({ appliedAt: healthEventDate(e), dueAt: healthEventDueDate(e) }))
-      .filter((e): e is { appliedAt: Date; dueAt: Date | null } => e.appliedAt != null)
-      .sort((a, b) => b.appliedAt.getTime() - a.appliedAt.getTime());
-    const snapshotVaccineDate = dateValue(dog.lastVaccineDate ?? dog.last_vaccine_date);
-    const latestVaccine = vaccines[0];
-    const vaccineDueDate = latestVaccine
-      ? latestVaccine.dueAt ?? addDays(latestVaccine.appliedAt, 365)
-      : snapshotVaccineDate
-        ? addDays(snapshotVaccineDate, 365)
-        : null;
+
+    // Vaccine status — from denormalized _last_vaccine_at / _last_vaccine_due_at
+    const lastVaccineAt = dateValue(dog._last_vaccine_at ?? dog.lastVaccineDate ?? dog.last_vaccine_date);
+    const lastVaccineDueAt = dateValue(dog._last_vaccine_due_at);
+    const vaccineDueDate = lastVaccineDueAt
+      ?? (lastVaccineAt ? addDays(lastVaccineAt, 365) : null);
     const vaccineDays = vaccineDueDate ? daysFromToday(vaccineDueDate) : null;
     const vaccine: DogHealthStatus["vaccine"] =
       vaccineDays == null ? "missing" : vaccineDays < 0 ? "overdue" : vaccineDays <= 30 ? "due_soon" : "current";
 
-    const dogWeights = weightsByDog.get(id) ?? [];
-    const latestWeight = dogWeights
-      .map((w) => ({ date: weightRecordDate(w), value: weightRecordValue(w) }))
-      .filter((w): w is { date: Date; value: number } => w.date != null && w.value > 0)
-      .sort((a, b) => b.date.getTime() - a.date.getTime())[0];
+    // Weight status — from denormalized _last_weight_kg / _last_weight_at
+    const lastWeightKg = parseNumber(dog._last_weight_kg);
+    const lastWeightAt = dateValue(dog._last_weight_at);
     const idealRange = dogIdealWeightRange(dog);
-    const weight: DogHealthStatus["weight"] = !latestWeight
+    const weight: DogHealthStatus["weight"] = !(lastWeightKg > 0) || !lastWeightAt
       ? "missing"
       : !idealRange
         ? "missing_range"
-        : latestWeight.value >= idealRange.min && latestWeight.value <= idealRange.max
+        : lastWeightKg >= idealRange.min && lastWeightKg <= idealRange.max
           ? "in_range"
           : "out_of_range";
 
-    const exams = events
-      .filter((e) => healthEventType(e) === "exam")
-      .map((e) => ({ date: healthEventDate(e), dueAt: healthEventDueDate(e) }))
-      .filter((e): e is { date: Date; dueAt: Date | null } => e.date != null)
-      .sort((a, b) => b.date.getTime() - a.date.getTime());
-    const latestExam = exams[0];
-    const examDueDate = latestExam
-      ? latestExam.dueAt ?? addDays(latestExam.date, 180)
-      : null;
+    // Exam status — from denormalized _last_exam_at
+    const lastExamAt = dateValue(dog._last_exam_at);
+    const examDueDate = lastExamAt ? addDays(lastExamAt, 180) : null;
     const exam: DogHealthStatus["exam"] = !examDueDate
       ? "missing"
       : daysFromToday(examDueDate) < 0
@@ -1117,7 +1087,7 @@ export function computeHealthMetrics(
     if (vaccine === "overdue") issues.push({ label: "Vacina vencida", detail: `Vencida ha ${Math.abs(vaccineDays!)} dias`, severity: "critical" });
     if (vaccine === "due_soon") issues.push({ label: "Vacina a vencer", detail: `Vence em ${vaccineDays} dias`, severity: "warning" });
     if (vaccine === "missing") issues.push({ label: "Vacina nao registrada", detail: "Nenhum registro encontrado", severity: "missing" });
-    if (weight === "out_of_range") issues.push({ label: "Peso fora do intervalo", detail: `${latestWeight!.value.toFixed(1)} kg`, severity: "warning" });
+    if (weight === "out_of_range") issues.push({ label: "Peso fora do intervalo", detail: `${lastWeightKg.toFixed(1)} kg`, severity: "warning" });
     if (weight === "missing") issues.push({ label: "Peso nao registrado", detail: "Sem pesagem registrada", severity: "missing" });
     if (weight === "missing_range") issues.push({ label: "Faixa ideal nao definida", detail: "Cadastrar peso ideal", severity: "missing" });
     if (exam === "due") issues.push({ label: "Exame pendente", detail: "Periodicidade excedida", severity: "warning" });
@@ -1144,17 +1114,23 @@ export function computeHealthMetrics(
     })
     .slice(0, 4);
 
-  const periodHealthEvents = activeHealthEvents.filter((event) => {
-    const eventDate = healthEventDate(event);
-    return eventDate != null && eventDate >= periodStart(periodDays);
-  });
+  // Approximate period events from denormalized dates
+  let periodEvents = 0;
+  for (const dog of activeDogs) {
+    const vaccineAt = dateValue(dog._last_vaccine_at);
+    const examAt = dateValue(dog._last_exam_at);
+    const weightAt = dateValue(dog._last_weight_at);
+    if (vaccineAt && vaccineAt >= start) periodEvents++;
+    if (examAt && examAt >= start) periodEvents++;
+    if (weightAt && weightAt >= start) periodEvents++;
+  }
 
   return {
     attention,
     critical: statuses.filter((s) => s.issues.some((i) => i.severity === "critical")).length,
     incomplete: statuses.filter((s) => s.vaccine === "missing" || s.weight === "missing" || s.weight === "missing_range").length,
     outOfRangeWeight: statuses.filter((s) => s.weight === "out_of_range").length,
-    periodEvents: periodHealthEvents.length,
+    periodEvents,
     ready: statuses.filter((s) => s.ready).length,
     total: statuses.length,
     vaccinesDueSoon: statuses.filter((s) => s.vaccine === "due_soon").length,

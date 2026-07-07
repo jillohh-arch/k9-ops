@@ -53,25 +53,33 @@ async function main() {
       .limit(1)
       .get();
 
-    // Fetch latest vaccination event
-    const vaccineSnap = await db
+    // Fetch all health_events (no composite index needed) and filter in code
+    const healthSnap = await db
       .collection("dogs")
       .doc(dogId)
       .collection("health_events")
-      .where("type", "in", ["vaccination", "vacina", "vaccine"])
-      .orderBy("date", "desc")
-      .limit(1)
       .get();
 
-    // Fetch latest exam event
-    const examSnap = await db
-      .collection("dogs")
-      .doc(dogId)
-      .collection("health_events")
-      .where("type", "in", ["exam", "exame", "examination", "checkup"])
-      .orderBy("date", "desc")
-      .limit(1)
-      .get();
+    const healthDocs = healthSnap.docs.map((d) => d.data());
+
+    const vaccineTypes = ["vaccination", "vacina", "vaccine"];
+    const examTypes = ["exam", "exame", "examination", "checkup"];
+
+    function eventDate(e) {
+      return e.date?.toDate?.() ?? e.event_date?.toDate?.() ?? e.eventDate?.toDate?.() ?? e.created_at?.toDate?.() ?? null;
+    }
+
+    const vaccines = healthDocs
+      .filter((e) => vaccineTypes.includes(e.type))
+      .map((e) => ({ ...e, _date: eventDate(e) }))
+      .filter((e) => e._date != null)
+      .sort((a, b) => b._date.getTime() - a._date.getTime());
+
+    const exams = healthDocs
+      .filter((e) => examTypes.includes(e.type))
+      .map((e) => ({ ...e, _date: eventDate(e) }))
+      .filter((e) => e._date != null)
+      .sort((a, b) => b._date.getTime() - a._date.getTime());
 
     const update = {};
 
@@ -92,8 +100,8 @@ async function main() {
       if (measuredAt != null) update._last_weight_at = measuredAt;
     }
 
-    if (!vaccineSnap.empty) {
-      const v = vaccineSnap.docs[0].data();
+    if (vaccines.length > 0) {
+      const v = vaccines[0];
       const vaccineDate = v.date ?? v.event_date ?? v.eventDate ?? v.created_at ?? null;
       const vaccineDueDate = v.nextDueDate ?? v.next_due_date ?? v.due_date ?? null;
       if (vaccineDate != null) update._last_vaccine_at = vaccineDate;
@@ -104,8 +112,8 @@ async function main() {
       }
     }
 
-    if (!examSnap.empty) {
-      const e = examSnap.docs[0].data();
+    if (exams.length > 0) {
+      const e = exams[0];
       const examDate = e.date ?? e.event_date ?? e.eventDate ?? e.created_at ?? null;
       if (examDate != null) update._last_exam_at = examDate;
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, onSnapshot, type Query } from "firebase/firestore";
+import { collection, limit, onSnapshot, orderBy, query, type Query } from "firebase/firestore";
 import {
   useEffect,
   useMemo,
@@ -150,8 +150,12 @@ function subscribeQuery(
 function subscribeCollection(
   path: string,
   setter: Dispatch<SetStateAction<SourceState>>,
+  maxResults?: number,
 ) {
-  return subscribeQuery(collection(db, path), setter);
+  const ref = maxResults
+    ? query(collection(db, path), orderBy("created_at", "desc"), limit(maxResults))
+    : collection(db, path);
+  return subscribeQuery(ref, setter);
 }
 
 function subscribeManyCollections(
@@ -476,7 +480,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
   useEffect(() => {
     const unsubscribes = [
       subscribeCollection("dogs", setDogsState),
-      subscribeCollection("health_logs", setRootHealthLogsState),
+      subscribeCollection("health_logs", setRootHealthLogsState, 500),
       subscribeCollection("documentos", setRootDocumentsState),
     ];
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());

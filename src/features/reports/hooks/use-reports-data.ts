@@ -3,12 +3,14 @@
 import {
   collection,
   collectionGroup,
-  onSnapshot,
+  getDocs,
   type Query,
 } from "firebase/firestore";
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -230,29 +232,29 @@ function createSources(): Sources {
   };
 }
 
-function subscribeSource(
+async function fetchSource(
   path: string,
   group: boolean,
   setter: Dispatch<SetStateAction<SourceState>>,
 ) {
   const ref: Query = group ? collectionGroup(db, path) : collection(db, path);
-
-  return onSnapshot(
-    ref,
-    (snapshot) => {
-      setter({
-        error: null,
-        loading: false,
-        records: snapshot.docs.map((item) => ({
-          ...item.data(),
-          _id: item.id,
-        })),
-      });
-    },
-    (error) => {
-      setter({ error: error.message, loading: false, records: [] });
-    },
-  );
+  try {
+    const snapshot = await getDocs(ref);
+    setter({
+      error: null,
+      loading: false,
+      records: snapshot.docs.map((item) => ({
+        ...item.data(),
+        _id: item.id,
+      })),
+    });
+  } catch (error) {
+    setter({
+      error: error instanceof Error ? error.message : "Erro ao carregar dados",
+      loading: false,
+      records: [],
+    });
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -600,12 +602,17 @@ function reportItem(
   };
 }
 
-export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
+export function useReportsData(periodDays: DashboardPeriodDays): ReportsData & { refresh: () => void; refreshing: boolean } {
   const [sources, setSources] = useState<Sources>(createSources);
+  const [refreshing, setRefreshing] = useState(false);
+  const mountedRef = useRef(true);
 
-  useEffect(() => {
-    const unsubscribes = sourceDefinitions.map(({ group = false, key, path }) =>
-      subscribeSource(path, group, (nextState) => {
+  const load = useCallback(() => {
+    setRefreshing(true);
+    setSources(createSources());
+    const promises = sourceDefinitions.map(({ group = false, key, path }) =>
+      fetchSource(path, group, (nextState) => {
+        if (!mountedRef.current) return;
         setSources((current) => {
           const nextValue =
             typeof nextState === "function" ? nextState(current[key]) : nextState;
@@ -613,13 +620,20 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
         });
       }),
     );
-
-    return () => {
-      unsubscribes.forEach((unsubscribe) => unsubscribe());
-    };
+    Promise.all(promises).then(() => {
+      if (mountedRef.current) setRefreshing(false);
+    });
   }, []);
 
-  return useMemo<ReportsData>(() => {
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => { mountedRef.current = false; };
+  }, [load]);
+
+  const refresh = useCallback(() => { load(); }, [load]);
+
+  const computed = useMemo<ReportsData>(() => {
     const start = periodStart(periodDays);
     const occurrences = visible(sources.occurrences.records);
     const periodOccurrences = occurrences.filter((record) => inPeriod(record, start));
@@ -1186,4 +1200,6 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData {
       },
     };
   }, [periodDays, sources]);
+
+  return { ...computed, refresh, refreshing };
 }

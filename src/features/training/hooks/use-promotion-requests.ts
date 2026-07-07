@@ -2,12 +2,12 @@
 
 import {
   collection,
-  onSnapshot,
+  getDocs,
   orderBy,
   query,
   type Timestamp,
 } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { db } from "@/lib/firebase/client";
 
@@ -121,38 +121,38 @@ export function usePromotionRequests() {
   const [requests, setRequests] = useState<PromotionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const mountedRef = useRef(true);
 
-  useEffect(() => {
-    let mounted = true;
-
+  const load = useCallback(async () => {
+    setRefreshing(true);
     const q = query(
       collection(db, "promotion_requests"),
       orderBy("created_at", "desc"),
     );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        if (!mounted) return;
-        const parsed = snapshot.docs.map((doc) =>
-          parseDoc(doc.id, doc.data() as Record<string, unknown>),
-        );
-        setRequests(parsed);
-        setLoading(false);
-        setError(null);
-      },
-      (err) => {
-        if (!mounted) return;
-        setError(err.message);
-        setLoading(false);
-      },
-    );
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
+    try {
+      const snapshot = await getDocs(q);
+      if (!mountedRef.current) return;
+      const parsed = snapshot.docs.map((doc) =>
+        parseDoc(doc.id, doc.data() as Record<string, unknown>),
+      );
+      setRequests(parsed);
+      setLoading(false);
+      setError(null);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setError(err instanceof Error ? err.message : "Erro ao carregar");
+      setLoading(false);
+    } finally {
+      if (mountedRef.current) setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => { mountedRef.current = false; };
+  }, [load]);
 
   const grouped = useMemo(() => {
     const pending = requests.filter((r) => r.status === "pending");
@@ -169,5 +169,7 @@ export function usePromotionRequests() {
     pendingCount: grouped.pending.length,
     loading,
     error,
+    refresh: load,
+    refreshing,
   };
 }

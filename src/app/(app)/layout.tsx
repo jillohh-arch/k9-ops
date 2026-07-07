@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthGate } from "@/features/auth/components/auth-gate";
 import { AccessControlProvider } from "@/features/access/providers/access-control-provider";
+import { EntitiesProvider } from "@/features/effective/providers/entities-provider";
 
 // All pages in (app) are client-side only (Firebase listeners).
 // Prevent Next.js from attempting static prerendering.
@@ -14,7 +15,9 @@ export default function ProtectedAppLayout({
   return (
     <AuthGate>
       <AccessControlProvider>
-        <AppShell>{children}</AppShell>
+        <EntitiesProvider>
+          <AppShell>{children}</AppShell>
+        </EntitiesProvider>
       </AccessControlProvider>
     </AuthGate>
   );

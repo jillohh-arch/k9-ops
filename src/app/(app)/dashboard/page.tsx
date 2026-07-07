@@ -26,6 +26,7 @@ import {
   type ShiftAssignment as ShiftAssignmentType,
   type ShiftGroup as ShiftGroupType,
 } from "@/features/effective/data/shift-group-service";
+import { useEntities } from "@/features/effective/providers/entities-provider";
 import {
   useDashboardPeriod,
   type DashboardPeriodDays,
@@ -50,7 +51,6 @@ import {
 } from "@/features/dashboard/components/dashboard-service-day-cards";
 
 import {
-  dashboardCollectionPaths,
   emptyDashboardCollection,
   createDashboardCollections,
   drugTiles,
@@ -130,6 +130,7 @@ export default function DashboardPage() {
   const prefersReducedMotion = useReducedMotion();
   const { profile } = useAuth();
   const { periodDays, periodLabel } = useDashboardPeriod();
+  const { dogs: entityDogs, dogsLoading, users: entityUsers, usersLoading, vehicles: entityVehicles, vehiclesLoading } = useEntities();
   const warName = profile?.displayName?.trim() || "Operador";
   const userProfile = detectUserProfile({
     isK9Instructor: profile?.isK9Instructor,
@@ -155,7 +156,11 @@ export default function DashboardPage() {
   const [shiftAssignments, setShiftAssignments] = useState<ShiftAssignmentType[]>([]);
 
   useEffect(() => {
-    const unsubscribes = dashboardCollectionPaths.map(({ key, path }) =>
+    const paths = [
+      { key: "activeShifts" as const, path: "active_shifts" },
+      { key: "vehicleCrews" as const, path: "vehicle_crews" },
+    ];
+    const unsubscribes = paths.map(({ key, path }) =>
       onSnapshot(
         collection(db, path),
         (snapshot) => {
@@ -178,6 +183,15 @@ export default function DashboardPage() {
     );
     return () => { for (const unsub of unsubscribes) unsub(); };
   }, []);
+
+  useEffect(() => {
+    setDashboardCollections((current) => ({
+      ...current,
+      dogs: { error: null, loading: dogsLoading, records: entityDogs },
+      users: { error: null, loading: usersLoading, records: entityUsers },
+      vehicles: { error: null, loading: vehiclesLoading, records: entityVehicles },
+    }));
+  }, [entityDogs, dogsLoading, entityUsers, usersLoading, entityVehicles, vehiclesLoading]);
 
   useEffect(() => {
     const thirtyOneDaysAgo = new Date();

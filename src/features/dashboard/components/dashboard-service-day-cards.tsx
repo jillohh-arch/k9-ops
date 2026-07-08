@@ -8,7 +8,6 @@ import type {
   ServiceDayShift,
   ServiceDogMember,
 } from "./dashboard-types";
-import { PngIcon } from "./png-icon";
 import { HudStatusDot } from "@/components/hud-status-dot";
 
 /* ─── Avatar ─── */
@@ -114,31 +113,6 @@ function MemberChip({ member }: { member: ServiceDayMember & { role?: string } }
   );
 }
 
-/* ─── Crew member row ─── */
-
-function CrewMemberRow({
-  member,
-}: {
-  member: ServiceDayMember & { role: string };
-}) {
-  return (
-    <div className="flex items-center gap-2.5 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2">
-      <MemberAvatar callsign={member.callsign} photoUrl={member.photoUrl} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-white">
-          {member.callsign}
-        </p>
-        <p className="font-mono text-[10px] text-cyan-300/70">RA {member.ra}</p>
-      </div>
-      <div className="flex items-center gap-1.5">
-        {member.isK9Instructor && <InstructorTag />}
-        <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-cyan-200">
-          {member.role}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 /* ─── Card 1 — Plantão de serviço ─── */
 
@@ -207,68 +181,30 @@ export function PlantaoCard({ shifts }: { shifts: ServiceDayShift[] }) {
   );
 }
 
-/* ─── Subcomponents — Vehicle Info Banner ─── */
+/* ─── Subcomponents — Crew Slot Card (filled or vacant) ─── */
 
-function VehicleInfoBanner({
-  crew,
-}: {
-  crew: ServiceDayCrew;
-}) {
-  const hasModel =
-    crew.vehicleModel && crew.vehicleModel !== crew.vehicleLabel;
-  const hasUnit = !!crew.vehicleUnit;
-  const hasShift = !!(crew.shiftStart || crew.shiftEnd);
-
-  return (
-    <div className="rounded-xl border border-cyan-400/15 bg-cyan-500/[0.04] p-3">
-      {/* Section label */}
-      <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.15em] text-cyan-400/60">
-        Viatura em serviço
-      </p>
-      <div className="flex items-start gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-500/10 text-cyan-300">
-          <Truck className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="truncate text-sm font-bold text-white">
-            {crew.vehicleLabel}
-          </p>
-          {hasModel && (
-            <p className="truncate text-xs text-slate-400">
-              {crew.vehicleModel}
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {hasUnit && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                <MapPin className="h-3 w-3 text-cyan-400/60" />
-                {crew.vehicleUnit}
-              </span>
-            )}
-            {hasShift && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                <Clock className="h-3 w-3 text-cyan-400/60" />
-                {crew.shiftStart ?? "—"}
-                {" – "}
-                {crew.shiftEnd ?? "—"}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Subcomponents — Crew Member Mini Card ─── */
-
-function CrewMemberMiniCard({
+function CrewSlotCard({
+  slotRole,
   member,
-  isLeader,
 }: {
-  member: ServiceDayMember & { role?: string };
-  isLeader?: boolean;
+  slotRole: string;
+  member?: ServiceDayMember & { role: string };
 }) {
+  if (!member) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-white/12 bg-white/[0.015] px-2 py-3 text-center">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-white/15 bg-white/[0.03]">
+          <span className="text-[10px] font-bold text-slate-600">{slotRole}</span>
+        </div>
+        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600">
+          Posto vago
+        </p>
+      </div>
+    );
+  }
+
+  const isLeader = slotRole === "ENC";
+
   return (
     <div
       className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-center ${
@@ -288,11 +224,9 @@ function CrewMemberMiniCard({
         </p>
         <p className="font-mono text-[9px] text-cyan-300/60">RA {member.ra}</p>
       </div>
-      {member.role && member.role !== "Integrante" && (
-        <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-cyan-200">
-          {member.role}
-        </span>
-      )}
+      <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-cyan-200">
+        {member.role}
+      </span>
       {member.isK9Instructor && (
         <span className="rounded-full border border-violet-400/25 bg-violet-500/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-violet-300">
           Condutor K9
@@ -363,12 +297,41 @@ function K9OperationalPanel({
   );
 }
 
+/* ─── Crew completeness helper ─── */
+
+const CREW_SLOTS = ["ENC", "MOT", "AUX1", "AUX2"] as const;
+
+function isCrewOperational(members: Array<ServiceDayMember & { role: string }>) {
+  // Operacional = pelo menos motorista E encarregado ativos
+  const roles = new Set(members.map((m) => m.role));
+  return roles.has("MOT") && roles.has("ENC");
+}
+
+function formatCrewTime(isoOrTimestamp: string | undefined): string {
+  if (!isoOrTimestamp) return "";
+  try {
+    const date = new Date(isoOrTimestamp);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
 /* ─── Card 2 — Equipe de serviço ─── */
 
 export function EquipeCard({ crew }: { crew: ServiceDayCrew | null }) {
   // Determine conductor name (first member who is K9 instructor, or titular)
   const conductorName = crew?.members.find((m) => m.isK9Instructor)?.callsign
     ?? crew?.members[0]?.callsign;
+
+  // Map members to slots
+  const memberByRole = new Map(
+    crew?.members.map((m) => [m.role, m]) ?? [],
+  );
+
+  const operational = crew ? isCrewOperational(crew.members) : false;
+  const crewStartTime = crew ? formatCrewTime(crew.createdAt) : "";
 
   return (
     <article className="relative min-h-[320px] overflow-hidden rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
@@ -382,22 +345,11 @@ export function EquipeCard({ crew }: { crew: ServiceDayCrew | null }) {
 
       {/* Content */}
       <div className="relative z-10 flex h-full flex-col">
-        {/* Header */}
+        {/* Section label + online dot */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <PngIcon
-              alt="Equipe de serviço"
-              fallbackTone="emerald"
-              size={44}
-              src="/assets/icones/equipe_servico.png"
-            />
-            <div>
-              <h2 className="text-lg font-bold text-white">Equipe de serviço</h2>
-              <p className="text-[13px] text-slate-400">
-                Guarnição embarcada na viatura.
-              </p>
-            </div>
-          </div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-cyan-400/60">
+            Equipe de serviço
+          </p>
           {crew && (
             <div className="flex items-center gap-1.5">
               <HudStatusDot color="emerald" size={7} />
@@ -410,7 +362,7 @@ export function EquipeCard({ crew }: { crew: ServiceDayCrew | null }) {
 
         {!crew ? (
           /* ─── Estado vazio ─── */
-          <div className="mt-6 flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-10 text-center">
+          <div className="mt-4 flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-10 text-center">
             <ShieldCheck className="h-8 w-8 text-slate-600" />
             <p className="mt-3 text-sm font-semibold text-slate-500">
               Nenhuma equipe em serviço
@@ -421,31 +373,80 @@ export function EquipeCard({ crew }: { crew: ServiceDayCrew | null }) {
           </div>
         ) : (
           /* ─── Estado ativo ─── */
-          <div className="mt-4 flex flex-1 flex-col space-y-3">
-            {/* Status pill */}
-            <div className="inline-flex self-start items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 shadow-[inset_0_0_14px_rgba(16,185,129,0.06)]">
-              <HudStatusDot color="emerald" size={6} />
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-100">
-                {crew.vehicleLabel} · Em serviço
-              </span>
+          <div className="mt-3 flex flex-1 flex-col space-y-3">
+            {/* ─── Header operacional (viatura + status) ─── */}
+            <div className="rounded-xl border border-cyan-400/15 bg-cyan-500/[0.04] px-3 py-2.5">
+              {/* L1: Vehicle label + status chip */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Truck className="h-4 w-4 shrink-0 text-cyan-300" />
+                  <span className="truncate text-sm font-bold text-white">
+                    {crew.vehicleLabel}
+                  </span>
+                  <HudStatusDot color="emerald" size={6} />
+                  <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-emerald-300">
+                    Em serviço
+                  </span>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                    operational
+                      ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                      : "border-amber-400/30 bg-amber-500/10 text-amber-300"
+                  }`}
+                >
+                  {operational ? "Operacional" : "Incompleta"}
+                </span>
+              </div>
+
+              {/* L2: Model + unit */}
+              {(crew.vehicleModel || crew.vehicleUnit) && (
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400">
+                  {crew.vehicleModel && crew.vehicleModel !== crew.vehicleLabel && (
+                    <span>{crew.vehicleModel}</span>
+                  )}
+                  {crew.vehicleModel && crew.vehicleModel !== crew.vehicleLabel && crew.vehicleUnit && (
+                    <span className="text-slate-600">·</span>
+                  )}
+                  {crew.vehicleUnit && (
+                    <span className="inline-flex items-center gap-0.5">
+                      <MapPin className="h-3 w-3 text-cyan-400/50" />
+                      {crew.vehicleUnit}
+                    </span>
+                  )}
+                </p>
+              )}
+
+              {/* L3: Shift label + crew start time */}
+              {(crew.shiftStart || crewStartTime) && (
+                <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
+                  <Clock className="h-3 w-3 text-cyan-400/50" />
+                  {crew.shiftStart && (
+                    <span>Turno {crew.shiftStart}{crew.shiftEnd ? `–${crew.shiftEnd}` : ""}</span>
+                  )}
+                  {crew.shiftStart && crewStartTime && (
+                    <span className="text-slate-600">·</span>
+                  )}
+                  {crewStartTime && (
+                    <span>desde {crewStartTime}</span>
+                  )}
+                </p>
+              )}
             </div>
 
-            {/* Vehicle info banner */}
-            <VehicleInfoBanner crew={crew} />
-
-            {/* Bottom section: Crew + K9 */}
+            {/* ─── Bottom section: Slots grid + K9 ─── */}
             <div className="flex flex-1 flex-col gap-3 lg:flex-row">
-              {/* Guarnição embarcada */}
+              {/* Guarnição embarcada — 4 slots always visible */}
               <div className="flex-1">
                 <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.15em] text-cyan-400/60">
                   Guarnição embarcada
                 </p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
-                  {crew.members.slice(0, 4).map((member, idx) => (
-                    <CrewMemberMiniCard
-                      key={member.id}
-                      member={member}
-                      isLeader={idx === 0}
+                <div className="grid grid-cols-2 gap-2">
+                  {CREW_SLOTS.map((slotRole) => (
+                    <CrewSlotCard
+                      key={slotRole}
+                      slotRole={slotRole}
+                      member={memberByRole.get(slotRole)}
                     />
                   ))}
                 </div>

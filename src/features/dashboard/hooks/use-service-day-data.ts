@@ -132,11 +132,13 @@ const ROLE_DISPLAY_MAP: Record<string, string> = {
   encarregado: "ENC",
   auxiliar_1: "AUX1",
   auxiliar_2: "AUX2",
+  // "titular" é o status/role do criador da guarnição no mobile atual
+  titular: "Titular",
 };
 
 function mapRoleToDisplay(role: string | undefined): string {
-  if (!role) return "Integrante";
-  return ROLE_DISPLAY_MAP[role] ?? role.toUpperCase();
+  if (!role) return "Função não informada";
+  return ROLE_DISPLAY_MAP[role] ?? "Função não informada";
 }
 
 /* ─── Hook — Equipe de serviço ─── */
@@ -193,8 +195,9 @@ export function useCrewPayload(params: {
 
     // Members: usar sub-coleção se disponível, senão reconstruir de active_shifts
     const membersFromSubcollection = params.crewMembers?.[crewId] ?? [];
+    // Incluir "active" e "titular" (criador da guarnição) — excluir apenas "ended" (histórico)
     const activeMembersFromSubcollection = membersFromSubcollection.filter(
-      (m) => m.status === "active",
+      (m) => m.status !== "ended",
     );
 
     // Se temos membros da sub-coleção, usar como source-of-truth
@@ -331,6 +334,10 @@ export function useCrewPayload(params: {
     const shiftEnd =
       recordText(crew, ["shift_end", "shiftEnd", "end_time"]) || undefined;
 
+    // Crew creation time — used by the header "desde HH:MM"
+    const createdAt =
+      recordText(crew, ["created_at", "createdAt"]) || undefined;
+
     const crewPayload: ServiceDayCrew = {
       vehicleLabel,
       vehiclePrefix,
@@ -340,6 +347,7 @@ export function useCrewPayload(params: {
       dog,
       shiftStart,
       shiftEnd,
+      createdAt,
     };
 
     return crewPayload;

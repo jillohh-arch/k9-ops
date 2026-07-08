@@ -1,104 +1,185 @@
-# Plano — Refatoração do card "Equipe de Serviço"
+# Plano — Redesign Equipe de Serviço + Histórico de Guarnições
 
-## Resumo
+## Entregas
 
-Refatorar o `EquipeCard` existente em `dashboard-service-day-cards.tsx` para virar um card completo de "Viatura em Serviço / Guarnição Embarcada", mantendo o mesmo tamanho aproximado (~320px min-height) e a mesma identidade visual dark navy/glassmorphism do dashboard.
+1. **Redesign visual do EquipeCard** — painel operacional rico estilo HUD tático
+2. **Página de Histórico de Guarnições** — rota `/shifts/history`
+3. **Conferência de rules** — apenas verificar leitura de `vehicle_crew_history`
 
-## Análise do código atual
+---
 
-- **`EquipeCard`** em `src/features/dashboard/components/dashboard-service-day-cards.tsx` (linhas 212-304) — card simples com badge da viatura, lista de MemberChips e bloco K9 básico
-- **`ServiceDayCrew`** em `dashboard-types.ts` — já possui: `vehicleLabel`, `vehiclePrefix`, `vehicleModel`, `vehicleUnit`, `members[]`, `dog?`
-- **`ServiceDogMember`** — possui: `id`, `name`, `photoUrl?`, `specializations[]`
-- **`useCrewPayload`** em `hooks/use-service-day-data.ts` — resolve tudo a partir do Firestore em tempo real
-- **`useCrewMembers`** — listener real-time da sub-coleção `vehicle_crews/{id}/members`
-- Background image já existe: `public/assets/card_equipe.png`
-- Ícone do módulo: `public/assets/icones/equipe_servico.png`
+## ENTREGA 1 — Redesign do EquipeCard
 
-## Arquivos que serão alterados
+### Dados disponíveis hoje (sem criar listeners novos)
 
-| # | Arquivo | O que muda |
-|---|---------|------------|
-| 1 | `src/features/dashboard/components/dashboard-types.ts` | Estender `ServiceDogMember` com `breed?`, `status?`, `handlerCallsign?`; estender `ServiceDayCrew` com `shiftStart?`, `shiftEnd?` |
-| 2 | `src/features/dashboard/hooks/use-service-day-data.ts` | Extrair breed/status/handler do dog record e shift times do crew record no Firestore |
-| 3 | `src/features/dashboard/components/dashboard-service-day-cards.tsx` | Reescrever o `EquipeCard` inteiro com novo layout (o `PlantaoCard` fica INTOCADO) |
+O `useCrewPayload` já retorna:
+- `vehicleLabel`, `vehiclePrefix`, `vehicleModel`, `vehicleUnit`
+- `members: Array<ServiceDayMember & { role: string }>` — role já mapeado (MOT/ENC/AUX1/AUX2)
+- `dog?: ServiceDogMember` (name, photoUrl, specializations, breed?, status?)
+- `shiftStart?`, `shiftEnd?`
 
-## Novo layout do EquipeCard
+O que **não** existe no payload hoje:
+- `shiftGroupLabel` — o crew doc não tem esse campo; vou ignorar (mostrar "Turno atual" genérico)
+- `created_at` da crew — não extraído; vou adicionar extração simples como `createdAt?: string`
+- `dog_id` por membro — existe no Firestore (`VehicleCrewMember.dog_id`) mas não é propagado. Vou propagar para identificar o condutor K9.
+- `updated_at` — não extraído; vou adicionar para o rodapé
+
+### Mudanças no hook (`use-service-day-data.ts`)
+
+Mínimas, sem listener novo:
+1. Extrair `created_at` / `createdAt` do crew doc → expor como `createdAt?: string`
+2. Extrair `updated_at` / `updatedAt` do crew doc → expor como `updatedAt?: string`
+3. Ao mapear membros da sub-coleção, ler `dog_id` de cada membro → expor em `ServiceDayMember` como `dogId?: string`
+
+### Mudanças em `dashboard-types.ts`
+
+- `ServiceDayMember`: adicionar `dogId?: string`
+- `ServiceDayCrew`: adicionar `createdAt?: string`, `updatedAt?: string`
+
+### Novo layout do EquipeCard
+
+Reescrever o `EquipeCard` completamente:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ [icon] EQUIPE DE SERVIÇO               ● ONLINE             │
-│        Guarnição embarcada na viatura operacional.            │
-│                                                              │
-│  ● CANIL 1075 • EM SERVIÇO                                  │
-│                                                              │
-│ ┌─ VIATURA EM SERVIÇO ──────────────────────────────────┐   │
-│ │ CANIL 1075  ·  Toyota Hilux                            │   │
-│ │ 📍 Limeira/SP      ⏰ 07h00 – 19h00                   │   │
-│ └────────────────────────────────────────────────────────┘   │
-│                                                              │
-│ ── GUARNIÇÃO EMBARCADA ──          ┌── K9 OPERACIONAL ──┐   │
-│ ┌────────┐ ┌────────┐             │ [🐕]  Bono         │   │
-│ │ [Av]   │ │ [Av]   │             │ K9 · Malinois      │   │
-│ │Ragonha │ │ Silva  │             │ Binômio op.        │   │
-│ │RA xxxxx│ │RA xxxxx│             │ com Ragonha        │   │
-│ │ ENC    │ │ MOT    │             │ PRONTO P/ EMPREGO  │   │
-│ └────────┘ └────────┘             └─────────────────────┘   │
-│ ┌────────┐ ┌────────┐                                       │
-│ │ [Av]   │ │ [Av]   │   ← imagem de fundo (opacidade baixa)│
-│ │Membro 3│ │Membro 4│                                       │
-│ │RA xxxxx│ │RA xxxxx│                                       │
-│ │ AUX1   │ │ AUX2   │                                       │
-│ └────────┘ └────────┘                                       │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ [icon] EQUIPE DE SERVIÇO    [OPERACIONAL●] / [INCOMPLETA●]  ●ON│
+│        Guarnição embarcada na viatura operacional.               │
+│                                                                 │
+│  ● CANIL 1075 • EM SERVIÇO                                     │
+│                                                                 │
+│ ┌── VIATURA EM SERVIÇO ────────────────────────────────────┐    │
+│ │ CANIL 1075         Toyota Hilux                          │    │
+│ │ 📍 Limeira/SP      ⏰ Turno: 07h00 – 19h00              │    │
+│ └──────────────────────────────────────────────────────────┘    │
+│                                                                 │
+│ ── GUARNIÇÃO EMBARCADA ───────────────────────────────────────  │
+│                                                                 │
+│ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
+│ │  [Av]    │ │  [Av]    │ │  [Av]    │ │  [Av]    │           │
+│ │ Ragonha  │ │ Silva    │ │ ─ ─ ─ ─  │ │ ─ ─ ─ ─  │           │
+│ │ RA xxxxx │ │ RA xxxxx │ │POSTO VAGO│ │POSTO VAGO│           │
+│ │  ENC     │ │  MOT     │ │  AUX1    │ │  AUX2    │           │
+│ │CONDUTOR  │ │          │ │          │ │          │           │
+│ └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
+│                                                                 │
+│ ┌── K9 OPERACIONAL (âmbar/dourado) ────────────────────────┐   │
+│ │ [🐕 foto]  Bono  ·  Pastor Belga Malinois               │   │
+│ │ Binômio operacional com Ragonha                          │   │
+│ │ STATUS: PRONTO PARA EMPREGO                              │   │
+│ └──────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│ ─── DATA: 04/07/2026 │ ATUALIZ.: 08:42 │ PATRULHAMENTO ─────  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Subcomponentes internos (todos no mesmo arquivo)
+#### Regras de derivação:
 
-1. **`VehicleInfoBanner`** — faixa compacta com nome/modelo/local/turno da viatura. Borda cyan sutil, ícones inline (MapPin, Clock)
-2. **`CrewMemberMiniCard`** — card vertical compacto com avatar circular, callsign, RA e role badge. O primeiro membro (encarregado) recebe borda cyan mais forte
-3. **`K9OperationalPanel`** — bloco âmbar com foto do dog, nome, raça, condutor vinculado e status operacional
-4. **`EmptyServiceState`** — estado vazio compacto (já existe, vou apenas refinar visualmente)
-5. **`StatusPill`** — badge reutilizável tipo "CANIL 1075 • EM SERVIÇO" com dot pulsante
+- **OPERACIONAL**: tem pelo menos 1 membro com role `encarregado`/`ENC` + 1 com role `motorista`/`MOT` (ambos ativos)
+- **INCOMPLETA**: falta encarregado ou motorista
+- **4 slots fixos**: ENC, MOT, AUX1, AUX2. Membros preenchem pelo role. Slots sem membro = "POSTO VAGO" (dashed, esmaecido)
+- **Condutor K9**: membro cujo `dogId` está preenchido → badge extra "CONDUTOR K9" (cyan)
+- **Legado** (role "titular" ou vazio/"Integrante"): aparece após os 4 slots como "Função não informada"
+- **K9 sem cão**: bloco dourado esmaecido "SEM K9 EMBARCADO"
+- **Condutor vinculado ao K9**: nome do membro que tem `dogId` == `crew.dog.id`
 
-## Fonte de dados
+#### Subcomponentes internos (mesmo arquivo):
 
-- **Todos** os dados vêm do `useCrewPayload` existente — nenhuma nova API, rota ou fetch
-- O condutor/handler do K9 = primeiro membro da lista (titular, já ordenado pelo hook)
-- Raça do dog: extrair do campo `breed` / `raca` / `race` no Firestore (fallback: primeira especialização ou string vazia)
-- Status do dog: extrair do campo `status` / `operational_status` (fallback: "Pronto para emprego" se o dog existe no crew)
-- Turno: extrair de `shift_start`/`shift_end` no crew doc (fallback: não mostrar a linha de turno)
+1. `CrewSlotCard` — slot de posto (ocupado ou vago)
+2. `K9OperationalPanel` — painel âmbar do cão
+3. `VehicleBanner` — faixa da viatura
+4. `CrewFooter` — rodapé com metadados
+5. `StatusChip` — OPERACIONAL/INCOMPLETA
 
-## Regras visuais
+#### Layout/grid do dashboard:
 
-- Dark navy glassmorphism: `bg-[#0b1628]/82`, `border-cyan-200/12`
-- Background image `card_equipe.png` com gradient overlay (esquerda opaca, direita transparente)
-- Badges de status: verde/emerald para "em serviço"
-- K9 panel: borda `amber-400/25`, bg `amber-500/5`
-- Primeiro membro: borda `cyan-400/30` mais forte que os demais
-- Role badges: `text-[9px]` uppercase tracking-wider
-- Dot "ONLINE": `HudStatusDot` emerald no canto superior direito
-- Responsivo:
-  - **Desktop**: guarnição (grid 2 colunas) e K9 lado a lado
-  - **Tablet/Mobile**: empilhado — viatura → guarnição → K9
+Manter o grid `xl:grid-cols-2` inalterado. O EquipeCard simplesmente cresce em altura (auto). Não quebra vizinhos.
 
-## Estado vazio (quando não há crew ativa)
+#### Motion:
 
-Mantém o visual existente com pequeno refinamento:
-- Ícone ShieldCheck discreto
-- Texto: "Nenhuma equipe em serviço"
-- Subtexto: "Não há viatura com guarnição ativa no momento."
-- Background image mantida com opacidade baixa
+- Card: `hudEntry` (já tem via motion.div wrapper no page.tsx)
+- Slots da guarnição: stagger interno 60ms via `transition-delay` CSS inline
+- HudStatusDot: pulso apenas no chip OPERACIONAL
 
-## O que NÃO será tocado
+---
 
-- `PlantaoCard` — zero alterações
-- API / rotas / autenticação
-- Layout global do dashboard
-- Outros cards (Métricas, Ocorrências, Pendências, Saúde, Drogas)
-- Firebase Rules
+## ENTREGA 2 — Histórico de Guarnições
 
-## Verificação
+### Rota
 
-- Rodar `npm run build` após implementação
-- Corrigir qualquer erro de tipo ou lint
-- Confirmar que todos os subcomponentes usam dados reais do hook (sem mock permanente)
+`/shifts/history` → `src/app/(app)/shifts/history/page.tsx`
+
+Acessível a partir da página de Plantões (`/shifts`) via botão/link.
+
+### Estrutura da página
+
+```
+┌─────────────────────────────────────────────┐
+│ [←] Histórico de Guarnições                 │
+│                                             │
+│ Filtros: [Viatura ▾] [Data início] [Data fim]│
+│                                             │
+│ ┌─ Card ──────────────────────────────────┐ │
+│ │ Canil 1075 · 03/07/2026                 │ │
+│ │ 07:00 – 19:00 (12h)                    │ │
+│ │ Ragonha (ENC) · Silva (MOT) · K9 Bono  │ │
+│ └─────────────────────────────────────────┘ │
+│                                             │
+│ [Carregar mais]                             │
+└─────────────────────────────────────────────┘
+```
+
+### Dados
+
+- Coleção: `vehicle_crew_history`
+- Query: `getDocs` (NÃO onSnapshot — dado imutável, economiza reads)
+- Ordenação: `period.ended_at` desc
+- Paginação: `limit(20)` + `startAfter(lastDoc)`
+- Filtros:
+  - Por viatura: `where("vehicle_id", "==", selectedVehicleId)`
+  - Por data: `where("period.started_at", ">=", startDate)` + `where("period.started_at", "<=", endDate)`
+
+### Índice composto
+
+A query `vehicle_id + period.ended_at desc` provavelmente exige índice composto. Se o Firestore retornar erro com link de criação, vou **reportar o link** para o usuário clicar — NÃO criar via CLI.
+
+### Componentes
+
+- `CrewHistoryPage` — page component com filtros + lista + paginação
+- `CrewHistoryCard` — card compacto de cada guarnição passada
+- `CrewHistoryFilters` — select de viatura + date pickers
+
+### Hook
+
+- `useCrewHistory` — hook com `getDocs`, paginação cursor-based, filtros. Zero `onSnapshot`.
+
+---
+
+## ENTREGA 3 — Conferência de Rules
+
+Apenas verificar se `vehicle_crew_history` tem `allow read: if signedIn()` nas rules. Reportar resultado. NÃO editar rules.
+
+---
+
+## Arquivos a criar/modificar
+
+| # | Arquivo | Ação |
+|---|---------|------|
+| 1 | `src/features/dashboard/components/dashboard-types.ts` | Adicionar `dogId?` em ServiceDayMember, `createdAt?`/`updatedAt?` em ServiceDayCrew |
+| 2 | `src/features/dashboard/hooks/use-service-day-data.ts` | Extrair `created_at`, `updated_at`, `dog_id` por membro |
+| 3 | `src/features/dashboard/components/dashboard-service-day-cards.tsx` | Reescrever EquipeCard inteiro com novo layout HUD |
+| 4 | `src/lib/routes/paths.ts` | Adicionar `shiftsHistory` |
+| 5 | `src/app/(app)/shifts/history/page.tsx` | Nova página de histórico |
+| 6 | `src/features/shifts/hooks/use-crew-history.ts` | Hook getDocs paginado |
+| 7 | `src/app/(app)/shifts/page.tsx` | Link para /shifts/history |
+
+---
+
+## Validação
+
+1. `npm run build` + typecheck limpos
+2. Zero listeners novos no dashboard (Entrega 1)
+3. Zero `onSnapshot` no histórico — só `getDocs` (Entrega 2)
+4. Descrever estado com 1 membro (ENC condutor K9 + 3 postos vagos + Bono)
+5. Se Firestore negar leitura de `vehicle_crew_history`, reportar — NÃO editar rules
+6. Se índice composto for necessário, reportar link — NÃO criar via CLI
+7. Listar todos os arquivos criados/modificados

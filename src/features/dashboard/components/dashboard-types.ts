@@ -196,6 +196,8 @@ export interface ServiceDayCrew {
   dog?: ServiceDogMember;
   shiftStart?: string;
   shiftEnd?: string;
+  /** ISO timestamp de abertura da guarnição (created_at do doc pai). */
+  createdAt?: string;
 }
 
 /* ─── Metric item (used in health/occurrences) ─── */

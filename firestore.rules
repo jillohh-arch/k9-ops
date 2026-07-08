@@ -1300,6 +1300,9 @@ service cloud.firestore {
           'handlerId',
           'auth_uid',
           'handler_email',
+          'shift_group_id',
+          'shift_group_code',
+          'shift_group_label',
           'dogId',
           'service_dog_id',
           'status',
@@ -1320,7 +1323,6 @@ service cloud.firestore {
         ])
         && request.resource.data.handlerId == ra
         && request.resource.data.dogId is string
-        && request.resource.data.dogId.size() > 0
         && request.resource.data.status in ['active', 'ended'];
     }
 
@@ -1330,6 +1332,9 @@ service cloud.firestore {
           'handlerId',
           'auth_uid',
           'handler_email',
+          'shift_group_id',
+          'shift_group_code',
+          'shift_group_label',
           'initialDogId',
           'currentDogId',
           'service_dog_id',
@@ -1337,6 +1342,7 @@ service cloud.firestore {
           'startedAt',
           'endedAt',
           'dogSwitches',
+          'vehicleChanges',
           'createdAt',
           'updatedAt',
           'vehicle_id',
@@ -1358,6 +1364,7 @@ service cloud.firestore {
         && request.resource.data.startedAt is timestamp
         && request.resource.data.endedAt == null
         && request.resource.data.dogSwitches is list
+        && request.resource.data.vehicleChanges is list
         && emailMatchesRa(request.resource.data.handlerId);
     }
 
@@ -1370,8 +1377,12 @@ service cloud.firestore {
           'currentDogId',
           'dogSwitches',
           'dog_changes',
+          'vehicleChanges',
           'auth_uid',
           'handler_email',
+          'shift_group_id',
+          'shift_group_code',
+          'shift_group_label',
           'service_dog_id',
           'vehicle_id',
           'vehicle_crew_id',
@@ -1391,7 +1402,34 @@ service cloud.firestore {
 
     match /active_shifts/{ra} {
       allow read: if signedIn();
-      allow create, update: if emailMatchesRa(ra) && isValidActiveShiftFor(ra);
+      allow create: if emailMatchesRa(ra) && isValidActiveShiftFor(ra);
+      // Update usa diff(): só os campos que mudam (updatedAt SEMPRE presente nos merges)
+      allow update: if emailMatchesRa(ra)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'shiftId',
+          'auth_uid',
+          'handler_email',
+          'shift_group_id',
+          'shift_group_code',
+          'shift_group_label',
+          'dogId',
+          'service_dog_id',
+          'status',
+          'startedAt',
+          'updatedAt',
+          'lastDogSwitchAt',
+          'endedAt',
+          'vehicle_id',
+          'vehicle_crew_id',
+          'crew_id',
+          'crew_role',
+          'crew_status',
+          'vehicle_label',
+          'vehicle_prefix',
+          'vehicle_model',
+          'vehicle_unit',
+          'vehicle_joined_at'
+        ]);
       allow delete: if false;
     }
 
@@ -1452,6 +1490,9 @@ service cloud.firestore {
           'active',
           'created_at',
           'updated_at',
+          // ended_at entra como FieldValue.delete() no payload de abertura (limpeza
+          // de encerramento anterior) — a key precisa ser aceita também no create
+          'ended_at',
           'dog_changes'
         ]);
       allow update: if signedIn()
@@ -1469,7 +1510,7 @@ service cloud.firestore {
         )
         && request.resource.data.vehicle_id == resource.data.vehicle_id
         && request.resource.data.crew_size == resource.data.crew_size
-        && request.resource.data.keys().hasOnly([
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'id',
           'vehicle_id',
           'vehicle_label',
@@ -1482,8 +1523,8 @@ service cloud.firestore {
           'active',
           'created_at',
           'updated_at',
-          'dog_changes',
-          'ended_at'
+          'ended_at',
+          'dog_changes'
         ]);
       allow delete: if false;
 
@@ -1494,39 +1535,47 @@ service cloud.firestore {
             'handler_id',
             'auth_uid',
             'handler_email',
+            'name',
             'role',
             'status',
             'joined_at',
             'responded_at',
             'decline_reason',
+            'dog_id',
             'updated_at'
           ])
           && request.resource.data.handler_id == ra
-          && request.resource.data.role == 'titular'
-          && request.resource.data.status == 'titular';
+          // 'titular' = papel legado da transição; remover após rollout completo do APK
+          && request.resource.data.role in ['titular', 'motorista', 'encarregado', 'auxiliar_1', 'auxiliar_2', 'k9']
+          && request.resource.data.status == 'active';
         allow update: if emailMatchesRa(ra)
           && request.resource.data.handler_id == resource.data.handler_id
+          && request.resource.data.role in ['titular', 'motorista', 'encarregado', 'auxiliar_1', 'auxiliar_2', 'k9', '']
           && (
             (
+              // Saída: campos de saída são imutáveis após criação
               request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'status',
                 'left_at',
+                'dog_id',
                 'updated_at'
               ])
               && request.resource.data.status == 'ended'
             )
             || (
-              request.resource.data.role == 'titular'
-              && request.resource.data.status == 'titular'
+              // Adesão/transf.: status ativo, campos completos
+              request.resource.data.status == 'active'
               && request.resource.data.keys().hasOnly([
                 'handler_id',
                 'auth_uid',
                 'handler_email',
+                'name',
                 'role',
                 'status',
                 'joined_at',
                 'responded_at',
                 'decline_reason',
+                'dog_id',
                 'left_at',
                 'updated_at'
               ])
@@ -1536,11 +1585,74 @@ service cloud.firestore {
       }
     }
 
+    match /vehicle_crew_history/{recordId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'id',
+          'vehicle_id',
+          'vehicle_label',
+          'vehicle_prefix',
+          'vehicle_model',
+          'period',
+          'members',
+          'dog_changes',
+          'ended_by',
+          'shift_ids',
+          'created_at'
+        ])
+        && request.resource.data.vehicle_id is string
+        && request.resource.data.vehicle_id.size() > 0
+        && request.resource.data.period is map
+        && request.resource.data.period.started_at is timestamp
+        && request.resource.data.period.ended_at is timestamp
+        && request.resource.data.members is list
+        && request.resource.data.ended_by is string
+        && request.resource.data.shift_ids is list;
+      allow update: if false;
+      allow delete: if false;
+    }
+
     match /users/{ra} {
       allow read: if signedIn();
-      allow create: if emailMatchesRa(ra) && canCreateAuditedRecord();
+      // campos pessoais editáveis pelo próprio usuário no app
+      allow create: if emailMatchesRa(ra)
+        && canCreateAuditedRecord()
+        && request.resource.data.keys().hasOnly([
+          'ra',
+          'name',
+          'callsign',
+          'unit',
+          'photoUrl',
+          'shift_group_id',
+          'shift_group_name',
+          'shift_group_start_hour',
+          'shift_group_end_hour',
+          'updated_at',
+          'audit_trail'
+        ]);
+      // campos administrativos (accessLevel, specialties, is_k9_instructor,
+      // training_role, roles) são soberania do painel web via adminUpsertHuman
+      // (Admin SDK — ignora rules). NÃO adicionar esses campos aqui.
       allow update: if emailMatchesRa(ra)
-        && (canUpdateUserProfile() || canSoftDeleteUser());
+        && (
+          (
+            appendsInlineAuditOnUpdate()
+            && changedKeys().hasOnly([
+              'name',
+              'callsign',
+              'unit',
+              'photoUrl',
+              'shift_group_id',
+              'shift_group_name',
+              'shift_group_start_hour',
+              'shift_group_end_hour',
+              'updated_at',
+              'audit_trail'
+            ])
+          )
+          || canSoftDeleteUser()
+        );
       allow delete: if false;
 
       match /certifications/{recordId} {
@@ -1959,10 +2071,24 @@ service cloud.firestore {
 
     match /documentos/{docId} {
       allow read: if signedIn() && canAccessDogData(resource.data);
-      allow create: if canAccessDogData(request.resource.data)
-        && canCreateDogDocument();
-      allow update: if canAccessDogData(request.resource.data)
-        && canUpdateAuditedOrSoftDelete();
+      allow create: if signedIn()
+        && canCreateAuditedRecord()
+        && request.resource.data.keys().hasOnly([
+          'caoId', 'nome', 'descricao', 'tipo', 'url',
+          'dataUpload', 'emissor', 'audit_trail'
+        ])
+        && request.resource.data.caoId is string
+        && request.resource.data.caoId.size() > 0
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.tipo is string
+        && request.resource.data.url is string
+        && request.resource.data.dataUpload is timestamp;
+      allow update: if signedIn()
+        && canUpdateAuditedRecord()
+        && changedKeys().hasOnly([
+          'nome', 'descricao', 'tipo', 'emissor', 'audit_trail'
+        ]);
       allow delete: if false;
     }
 
@@ -1971,6 +2097,39 @@ service cloud.firestore {
       allow create: if canCreateNotification(userId);
       allow update: if emailMatchesRa(userId) && canUpdateOwnNotification();
       allow delete: if false;
+    }
+
+    // ── Coleções legadas (somente leitura) ──────────────────────────────────
+    // Lidas pelo app mas sem regras explícitas até esta versão.
+    // Nenhum write pelo app mobile — eventuais migrações via Admin SDK.
+    match /alertas/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /atalhos_registro/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /registros/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /climaAtual/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /vacinas/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /training_specialties/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
     }
 
     match /{document=**} {

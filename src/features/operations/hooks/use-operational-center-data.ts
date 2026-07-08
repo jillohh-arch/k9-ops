@@ -2,7 +2,6 @@
 
 import {
   collection,
-  collectionGroup,
   onSnapshot,
   query,
   where,

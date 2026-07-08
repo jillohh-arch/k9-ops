@@ -9,43 +9,11 @@
       ]
     },
     {
-      "collectionGroup": "health_events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "dogId", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "weight_records",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "dogId", "order": "ASCENDING" },
-        { "fieldPath": "measured_at", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "training_sessions",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "dog_id", "order": "ASCENDING" },
         { "fieldPath": "created_at", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "health_events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "dog_id", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "weight_records",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "dog_id", "order": "ASCENDING" },
-        { "fieldPath": "measured_at", "order": "DESCENDING" }
       ]
     },
     {

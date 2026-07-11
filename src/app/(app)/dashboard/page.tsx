@@ -149,11 +149,17 @@ export default function DashboardPage() {
   useEffect(() => {
     const paths = [
       { key: "activeShifts" as const, path: "active_shifts" },
-      { key: "vehicleCrews" as const, path: "vehicle_crews" },
+      {
+        key: "vehicleCrews" as const,
+        // OPT-FS-101: Filtrar apenas crews ativas para reduzir documentos
+        // desnecessários. O campo `active` é obrigatório e todos os docs
+        // possuem `active: boolean`. O dashboard não exibe crews inativas.
+        query: query(collection(db, "vehicle_crews"), where("active", "==", true)),
+      },
     ];
-    const unsubscribes = paths.map(({ key, path }) =>
+    const unsubscribes = paths.map(({ key, path, query: q }) =>
       onSnapshot(
-        collection(db, path),
+        q ?? collection(db, path),
         (snapshot) => {
           const records = snapshot.docs.map((documentSnapshot) => ({
             ...documentSnapshot.data(),

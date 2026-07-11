@@ -34,9 +34,17 @@ function formatDate(date: Date | null) {
 }
 
 function category(record: BinomialRecord) {
-  if (record._source.startsWith("training_sessions")) return "training";
-  if (record._source.startsWith("occurrences")) return "occurrence";
-  if (record._source === "shift_logs") return "shift";
+  const source = record._source;
+  // BUG-FS-002: Incluir todas as fontes de treino
+  if (
+    source.startsWith("training_sessions") || // training_sessions, training_sessions_legacy
+    source === "trainings" ||                // BUG-FS-002: coleção raiz trainings
+    source === "dogs_training_sessions"       // BUG-FS-002: subcoleção dogs/{id}/training_sessions
+  ) {
+    return "training";
+  }
+  if (source.startsWith("occurrences")) return "occurrence";
+  if (source === "shift_logs") return "shift";
   return "other";
 }
 

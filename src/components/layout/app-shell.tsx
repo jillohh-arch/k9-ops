@@ -11,7 +11,6 @@ import {
   ChevronRight,
   ClipboardList,
   Clock,
-  FileBarChart,
   FileText,
   HeartPulse,
   KeyRound,
@@ -85,17 +84,11 @@ const navItems = [
     moduleId: "occurrences",
   },
   {
-    activePrefixes: [paths.training, paths.trainingPromotions],
+    activePrefixes: [paths.training, paths.trainingMatrix],
     href: paths.training,
     icon: ClipboardList,
-    label: "Treinamentos",
-    moduleId: "training",
-  },
-  {
-    href: paths.trainingMatrix,
-    icon: FileBarChart,
-    label: "Prontidão K9",
-    moduleId: "training_matrix",
+    label: "Treinamento K9",
+    moduleIds: ["training", "training_matrix"],
   },
   { href: paths.health, icon: HeartPulse, label: "Saúde", moduleId: "health" },
   {
@@ -160,8 +153,8 @@ const routeAccessRules: RouteAccessRule[] = [
   },
   { prefix: paths.vehicles, modules: ["vehicles"] },
   { prefix: paths.effective, modules: ["k9", "humans", "binomials", "vehicles"] },
-  { prefix: paths.trainingMatrix, modules: ["training_matrix"] },
-  { prefix: paths.training, modules: ["training"] },
+  { prefix: paths.trainingMatrix, modules: ["training", "training_matrix"] },
+  { prefix: paths.training, modules: ["training", "training_matrix"] },
   { prefix: paths.occurrences, modules: ["occurrences"] },
   { prefix: paths.health, modules: ["health"] },
   { prefix: paths.inventory, modules: ["inventory"] },
@@ -613,34 +606,36 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               />
             </div>
 
-            <label className="relative hidden h-12 items-center rounded-2xl border border-white/10 bg-white/[0.045] transition focus-within:border-cyan-300/35 lg:flex">
-              <span className="pointer-events-none absolute left-4 top-2 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                Período
-              </span>
-              <select
-                aria-label="Período global do dashboard"
-                className="h-full w-full cursor-pointer appearance-none bg-transparent px-4 pb-1 pt-4 text-sm font-semibold text-slate-200 outline-none"
-                onChange={(event) =>
-                  setPeriodDays(
-                    Number(event.target.value) as DashboardPeriodDays,
-                  )
-                }
-                value={periodDays}
-              >
-                {dashboardPeriodOptions.map((option) => (
-                  <option
-                    className="bg-[#0b1628] text-slate-100"
-                    key={option.days}
-                    value={option.days}
-                  >
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-4 text-xs text-cyan-300">
-                ▾
-              </span>
-            </label>
+            {!pathname.startsWith("/training") && (
+              <label className="relative hidden h-12 items-center rounded-2xl border border-white/10 bg-white/[0.045] transition focus-within:border-cyan-300/35 lg:flex">
+                <span className="pointer-events-none absolute left-4 top-2 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Período
+                </span>
+                <select
+                  aria-label="Período global do dashboard"
+                  className="h-full w-full cursor-pointer appearance-none bg-transparent px-4 pb-1 pt-4 text-sm font-semibold text-slate-200 outline-none"
+                  onChange={(event) =>
+                    setPeriodDays(
+                      Number(event.target.value) as DashboardPeriodDays,
+                    )
+                  }
+                  value={periodDays}
+                >
+                  {dashboardPeriodOptions.map((option) => (
+                    <option
+                      className="bg-[#0b1628] text-slate-100"
+                      key={option.days}
+                      value={option.days}
+                    >
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-4 text-xs text-cyan-300">
+                  ▾
+                </span>
+              </label>
+            )}
 
             <div className="flex items-center justify-between gap-4 lg:justify-end">
               <div className="lg:hidden">

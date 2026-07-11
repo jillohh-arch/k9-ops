@@ -1,0 +1,151 @@
+{
+  "communities": {
+    "0": [
+      "OPT-FS-102",
+      "OPT-FS-103",
+      "OPT-FS-104",
+      "OPT-FS-105",
+      "OPT-FS-106",
+      "OPT-FS-109",
+      "OPT-FS-110",
+      "OPT-FS-111",
+      "OPT-FS-112",
+      "OPT-FS-113",
+      "OPT-FS-114",
+      "OPT-FS-115",
+      "OPT-FS-116",
+      "OPT-FS-117",
+      "OPT-FS-118",
+      "lazy-loading",
+      "optimization-phase-1"
+    ],
+    "1": [
+      "N+1-problem",
+      "OPT-FS-108",
+      "OPT-FS-119",
+      "binomials",
+      "collectionGroup",
+      "denormalization",
+      "dog-documents",
+      "dogs",
+      "health-module",
+      "health_events",
+      "health_logs",
+      "specialties",
+      "use-effective-data",
+      "use-health-data",
+      "weight_records"
+    ],
+    "2": [
+      "FIRESTORE_SCHEMA",
+      "active_shifts",
+      "cloud-functions",
+      "firebase-console",
+      "firestore",
+      "firestore-indexes",
+      "firestore-rules",
+      "mobile-app",
+      "shift_logs",
+      "use-binomial-profile-data",
+      "use-reports-data",
+      "web-panel"
+    ],
+    "3": [
+      "OPT-FS-107",
+      "cleanup",
+      "listeners",
+      "memory-leak",
+      "onSnapshot",
+      "react-strict-mode",
+      "subscribeCollection",
+      "subscribeManyCollections"
+    ],
+    "4": [
+      "dashboard",
+      "notifications",
+      "occurrences",
+      "promotion_requests",
+      "shift-group-service",
+      "shift_groups",
+      "use-shift-groups",
+      "user_shift_assignments"
+    ],
+    "5": [
+      "FIRESTORE_BASELINE",
+      "FIRESTORE_OPTIMIZATION_PLAN",
+      "baseline-measurement",
+      "optimization-phase-0",
+      "optimization-phase-2",
+      "optimization-phase-3",
+      "optimization-phase-4"
+    ],
+    "6": [
+      "OPT-FS-101",
+      "dashboard-page",
+      "members",
+      "use-crew-members",
+      "use-operational-center-data",
+      "vehicle_crews"
+    ],
+    "7": [
+      "documents",
+      "entities-provider",
+      "use-entities",
+      "users",
+      "vehicles"
+    ],
+    "8": [
+      "gen_fs",
+      "gen_js_gen_21ee6e",
+      "gen_l",
+      "gen_t"
+    ],
+    "9": [
+      "aggregation"
+    ],
+    "10": [
+      "crew-history"
+    ],
+    "11": [
+      "dual-casing"
+    ],
+    "12": [
+      "firebase-edition"
+    ],
+    "13": [
+      "firebase-plan"
+    ],
+    "14": [
+      "gen_js_gen_fa8eba"
+    ],
+    "15": [
+      "gen_schema"
+    ],
+    "16": [
+      "pagination"
+    ],
+    "17": [
+      "subscriptions"
+    ]
+  },
+  "cohesion": {
+    "0": 0.125,
+    "1": 0.21904761904761905,
+    "2": 0.19696969696969696,
+    "3": 0.25,
+    "4": 0.2857142857142857,
+    "5": 0.2857142857142857,
+    "6": 0.4,
+    "7": 0.6,
+    "8": 0.5,
+    "9": 1.0,
+    "10": 1.0,
+    "11": 1.0,
+    "12": 1.0,
+    "13": 1.0,
+    "14": 1.0,
+    "15": 1.0,
+    "16": 1.0,
+    "17": 1.0
+  }
+}

@@ -1,0 +1,3 @@
+C:\Projetos\k9-ops\docs\FIRESTORE_BASELINE.md
+C:\Projetos\k9-ops\docs\FIRESTORE_OPTIMIZATION_PLAN.md
+C:\Projetos\k9-ops\docs\bugs\BUG-FS-002-binomial-history-missing-events.md

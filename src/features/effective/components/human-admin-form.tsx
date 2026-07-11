@@ -9,6 +9,7 @@ import {
   Camera,
   Check,
   CircleAlert,
+  Copy,
   IdCard,
   KeyRound,
   LoaderCircle,
@@ -167,6 +168,7 @@ export function HumanAdminForm({
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(
     null,
   );
+  const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [activeFormTab, setActiveFormTab] =
     useState<HumanFormTab>("identity");
@@ -760,9 +762,32 @@ export function HumanAdminForm({
               Entregue esta senha provisória ao agente. Ela não será exibida
               novamente.
             </p>
-            <div className="mt-5 rounded-xl border border-cyan-300/20 bg-black/25 p-4 font-mono text-lg font-black text-cyan-200">
-              {temporaryPassword}
+            <div className="mt-5 flex items-center gap-3 rounded-xl border border-cyan-300/20 bg-black/25 p-4">
+              <span className="flex-1 font-mono text-lg font-black text-cyan-200">
+                {temporaryPassword}
+              </span>
+              <button
+                className="shrink-0 rounded-lg border border-cyan-300/25 bg-cyan-300/10 p-2 text-cyan-200 transition hover:bg-cyan-300/20"
+                onClick={() => {
+                  navigator.clipboard.writeText(temporaryPassword ?? "");
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2500);
+                }}
+                title="Copiar senha"
+                type="button"
+              >
+                {copied ? (
+                  <Check className="h-4 w-4 text-emerald-300" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </button>
             </div>
+            {copied ? (
+              <p className="mt-2 text-center text-xs text-emerald-300">
+                Senha copiada!
+              </p>
+            ) : null}
             <button
               className="mt-5 w-full rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200"
               onClick={() =>

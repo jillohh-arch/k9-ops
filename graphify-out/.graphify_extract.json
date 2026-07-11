@@ -1,0 +1,1721 @@
+{
+  "nodes": [
+    {
+      "id": "gen_js_gen_fa8eba",
+      "label": "_gen.js",
+      "file_type": "code",
+      "source_file": "docs\\_gen.js",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "gen_js_gen_21ee6e",
+      "label": "gen.js",
+      "file_type": "code",
+      "source_file": "docs\\gen.js",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "gen_fs",
+      "label": "fs",
+      "file_type": "code",
+      "source_file": "docs\\gen.js",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "gen_l",
+      "label": "L()",
+      "file_type": "code",
+      "source_file": "docs\\gen.js",
+      "source_location": "L3",
+      "_origin": "ast"
+    },
+    {
+      "id": "gen_t",
+      "label": "T()",
+      "file_type": "code",
+      "source_file": "docs\\gen.js",
+      "source_location": "L4",
+      "_origin": "ast"
+    },
+    {
+      "id": "gen_schema",
+      "label": "gen_schema.js",
+      "file_type": "code",
+      "source_file": "docs\\gen_schema.js",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "firestore",
+      "label": "Firestore",
+      "type": "concept",
+      "properties": {
+        "description": "Firebase NoSQL database for real-time data synchronization",
+        "platform": "Firebase",
+        "region": "southamerica-east1"
+      }
+    },
+    {
+      "id": "dashboard",
+      "label": "Dashboard",
+      "type": "concept",
+      "properties": {
+        "description": "Main web dashboard for K9 operations monitoring",
+        "route": "/dashboard"
+      }
+    },
+    {
+      "id": "health-module",
+      "label": "Health Module",
+      "type": "concept",
+      "properties": {
+        "description": "K9 health monitoring module with events, weight, and documents",
+        "route": "/health"
+      }
+    },
+    {
+      "id": "vehicle_crews",
+      "label": "vehicle_crews Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Active vehicle crews in service",
+        "writers": [
+          "Mobile",
+          "Functions"
+        ],
+        "readers": [
+          "Mobile",
+          "Web"
+        ],
+        "estimatedDocs": "3-20 active"
+      }
+    },
+    {
+      "id": "active_shifts",
+      "label": "active_shifts Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Real-time individual shift states",
+        "writers": [
+          "Mobile"
+        ],
+        "readers": [
+          "Mobile",
+          "Web"
+        ],
+        "estimatedDocs": "5-50 active"
+      }
+    },
+    {
+      "id": "members",
+      "label": "members Subcollection",
+      "type": "collection",
+      "properties": {
+        "description": "Crew members subcollection under vehicle_crews",
+        "writers": [
+          "Mobile",
+          "Functions"
+        ],
+        "estimatedDocs": "2-6 per crew"
+      }
+    },
+    {
+      "id": "shift_logs",
+      "label": "shift_logs Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Complete historical shift records",
+        "writers": [
+          "Mobile",
+          "Functions"
+        ],
+        "readers": [
+          "Web"
+        ],
+        "growing": true
+      }
+    },
+    {
+      "id": "shift_groups",
+      "label": "shift_groups Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Shift schedule definitions",
+        "writers": [
+          "Web admin"
+        ],
+        "estimatedDocs": "5-15"
+      }
+    },
+    {
+      "id": "user_shift_assignments",
+      "label": "user_shift_assignments Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Agent-to-schedule assignments",
+        "writers": [
+          "Web admin"
+        ],
+        "estimatedDocs": "30-80"
+      }
+    },
+    {
+      "id": "vehicles",
+      "label": "vehicles Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Vehicle registry (read-only for clients)",
+        "writers": [
+          "Functions (Admin SDK)"
+        ],
+        "estimatedDocs": "10-30"
+      }
+    },
+    {
+      "id": "health_logs",
+      "label": "health_logs Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Global health event logs",
+        "writers": [
+          "Mobile",
+          "Web"
+        ],
+        "limit": 500
+      }
+    },
+    {
+      "id": "documents",
+      "label": "documents Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Health documents (root level)"
+      }
+    },
+    {
+      "id": "health_events",
+      "label": "health_events Subcollection",
+      "type": "collection",
+      "properties": {
+        "description": "Health events per dog",
+        "path": "dogs/{dogId}/health_events"
+      }
+    },
+    {
+      "id": "weight_records",
+      "label": "weight_records Subcollection",
+      "type": "collection",
+      "properties": {
+        "description": "Weight records per dog",
+        "path": "dogs/{dogId}/weight_records",
+        "optimization": "OPT-FS-119 blocked"
+      }
+    },
+    {
+      "id": "dog-documents",
+      "label": "dog-documents Subcollection",
+      "type": "collection",
+      "properties": {
+        "description": "Documents per dog",
+        "path": "dogs/{dogId}/documents"
+      }
+    },
+    {
+      "id": "dogs",
+      "label": "dogs Collection",
+      "type": "collection",
+      "properties": {
+        "description": "K9 service dogs registry",
+        "filter": "active == true"
+      }
+    },
+    {
+      "id": "users",
+      "label": "users Collection",
+      "type": "collection",
+      "properties": {
+        "description": "User profiles",
+        "filter": "active == true"
+      }
+    },
+    {
+      "id": "occurrences",
+      "label": "occurrences Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Operational occurrences",
+        "filter": "started_at >= 31 days",
+        "limit": 500
+      }
+    },
+    {
+      "id": "notifications",
+      "label": "notifications Collection",
+      "type": "collection",
+      "properties": {
+        "description": "User notifications"
+      }
+    },
+    {
+      "id": "promotion_requests",
+      "label": "promotion_requests Collection",
+      "type": "collection",
+      "properties": {
+        "description": "K9 promotion requests"
+      }
+    },
+    {
+      "id": "shift-group-service",
+      "label": "shift-group-service.ts",
+      "type": "file",
+      "properties": {
+        "description": "Service for shift group subscriptions"
+      }
+    },
+    {
+      "id": "use-health-data",
+      "label": "useHealthData Hook",
+      "type": "hook",
+      "properties": {
+        "description": "Health data subscription hook",
+        "file": "src/features/health/hooks/use-health-data.ts"
+      }
+    },
+    {
+      "id": "use-crew-members",
+      "label": "useCrewMembers Hook",
+      "type": "hook",
+      "properties": {
+        "description": "Crew members subscription hook",
+        "file": "src/features/dashboard/hooks/use-crew-members.ts"
+      }
+    },
+    {
+      "id": "use-operational-center-data",
+      "label": "useOperationalCenterData Hook",
+      "type": "hook",
+      "properties": {
+        "description": "Operational center data hook",
+        "file": "src/features/operations/hooks/use-operational-center-data.ts"
+      }
+    },
+    {
+      "id": "use-entities",
+      "label": "useEntities Hook",
+      "type": "hook",
+      "properties": {
+        "description": "Global entities provider hook"
+      }
+    },
+    {
+      "id": "entities-provider",
+      "label": "EntitiesProvider",
+      "type": "concept",
+      "properties": {
+        "description": "Global provider for dogs, users, vehicles",
+        "file": "src/features/effective/providers/entities-provider.tsx"
+      }
+    },
+    {
+      "id": "subscribeCollection",
+      "label": "subscribeCollection",
+      "type": "concept",
+      "properties": {
+        "description": "Firestore subscription utility"
+      }
+    },
+    {
+      "id": "subscribeManyCollections",
+      "label": "subscribeManyCollections",
+      "type": "concept",
+      "properties": {
+        "description": "Multi-collection subscription utility for N+1 patterns"
+      }
+    },
+    {
+      "id": "onSnapshot",
+      "label": "onSnapshot",
+      "type": "concept",
+      "properties": {
+        "description": "Firestore real-time listener"
+      }
+    },
+    {
+      "id": "listeners",
+      "label": "Listeners",
+      "type": "concept",
+      "properties": {
+        "description": "Real-time Firestore subscriptions"
+      }
+    },
+    {
+      "id": "subscriptions",
+      "label": "Subscriptions",
+      "type": "concept",
+      "properties": {
+        "description": "Firestore subscription management"
+      }
+    },
+    {
+      "id": "cleanup",
+      "label": "Cleanup",
+      "type": "concept",
+      "properties": {
+        "description": "Listener cleanup on unmount"
+      }
+    },
+    {
+      "id": "N+1-problem",
+      "label": "N+1 Problem",
+      "type": "concept",
+      "properties": {
+        "description": "Multiple listeners per entity causing read amplification"
+      }
+    },
+    {
+      "id": "collectionGroup",
+      "label": "collectionGroup",
+      "type": "concept",
+      "properties": {
+        "description": "Firestore query across all subcollections of same name"
+      }
+    },
+    {
+      "id": "denormalization",
+      "label": "Denormalization",
+      "type": "concept",
+      "properties": {
+        "description": "Data redundancy strategy for reducing queries"
+      }
+    },
+    {
+      "id": "lazy-loading",
+      "label": "Lazy Loading",
+      "type": "concept",
+      "properties": {
+        "description": "Load data only when needed (tab visibility, expansion)"
+      }
+    },
+    {
+      "id": "pagination",
+      "label": "Pagination",
+      "type": "concept",
+      "properties": {
+        "description": "Cursor-based pagination for large result sets"
+      }
+    },
+    {
+      "id": "aggregation",
+      "label": "Aggregation",
+      "type": "concept",
+      "properties": {
+        "description": "Server-side count/sum aggregations using Firestore count()"
+      }
+    },
+    {
+      "id": "OPT-FS-101",
+      "label": "OPT-FS-101",
+      "type": "task",
+      "properties": {
+        "description": "Filter vehicle_crews by active == true",
+        "status": "IMPLEMENTED",
+        "phase": 1,
+        "priority": "P1",
+        "domain": "Dashboard"
+      }
+    },
+    {
+      "id": "OPT-FS-102",
+      "label": "OPT-FS-102",
+      "type": "task",
+      "properties": {
+        "description": "Filter shift_groups by active == true",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P1",
+        "domain": "Dashboard"
+      }
+    },
+    {
+      "id": "OPT-FS-103",
+      "label": "OPT-FS-103",
+      "type": "task",
+      "properties": {
+        "description": "Filter user_shift_assignments by active == true",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P1",
+        "domain": "Dashboard"
+      }
+    },
+    {
+      "id": "OPT-FS-104",
+      "label": "OPT-FS-104",
+      "type": "task",
+      "properties": {
+        "description": "Create index active + shiftGroupId for user_shift_assignments",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P1",
+        "domain": "Infrastructure",
+        "depends_on": "OPT-FS-103"
+      }
+    },
+    {
+      "id": "OPT-FS-105",
+      "label": "OPT-FS-105",
+      "type": "task",
+      "properties": {
+        "description": "Filter shift_logs by period",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Reports"
+      }
+    },
+    {
+      "id": "OPT-FS-106",
+      "label": "OPT-FS-106",
+      "type": "task",
+      "properties": {
+        "description": "Filter vehicle_crew_history by period",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Reports"
+      }
+    },
+    {
+      "id": "OPT-FS-107",
+      "label": "OPT-FS-107",
+      "type": "task",
+      "properties": {
+        "description": "Verify dashboard listener cleanup",
+        "status": "CONCLUDED",
+        "phase": 1,
+        "priority": "P0",
+        "domain": "Infrastructure",
+        "result": "No memory leak found"
+      }
+    },
+    {
+      "id": "OPT-FS-108",
+      "label": "OPT-FS-108",
+      "type": "task",
+      "properties": {
+        "description": "Verify useHealthData listener cleanup",
+        "status": "CONCLUDED",
+        "phase": 1,
+        "priority": "P0",
+        "domain": "Infrastructure",
+        "result": "No memory leak found"
+      }
+    },
+    {
+      "id": "OPT-FS-109",
+      "label": "OPT-FS-109",
+      "type": "task",
+      "properties": {
+        "description": "Centralize dogs, users, vehicles listeners",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Infrastructure"
+      }
+    },
+    {
+      "id": "OPT-FS-110",
+      "label": "OPT-FS-110",
+      "type": "task",
+      "properties": {
+        "description": "Lazy loading of useHealthData by tabs",
+        "status": "CANCELLED",
+        "phase": 1,
+        "priority": "P1",
+        "domain": "Health",
+        "reason": "Page /health has no tabs - single page with scroll"
+      }
+    },
+    {
+      "id": "OPT-FS-111",
+      "label": "OPT-FS-111",
+      "type": "task",
+      "properties": {
+        "description": "Remove duplicate queries in useBinomialProfileData",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Binomial"
+      }
+    },
+    {
+      "id": "OPT-FS-112",
+      "label": "OPT-FS-112",
+      "type": "task",
+      "properties": {
+        "description": "Verify existing pagination in occurrences",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P1",
+        "domain": "Dashboard",
+        "result": "Limit 500 exists, no pagination"
+      }
+    },
+    {
+      "id": "OPT-FS-113",
+      "label": "OPT-FS-113",
+      "type": "task",
+      "properties": {
+        "description": "Add explicit orderBy in queries",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Infrastructure"
+      }
+    },
+    {
+      "id": "OPT-FS-114",
+      "label": "OPT-FS-114",
+      "type": "task",
+      "properties": {
+        "description": "Verify cleanup in useEffectiveData",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P0",
+        "domain": "Infrastructure",
+        "result": "Cleanup implemented"
+      }
+    },
+    {
+      "id": "OPT-FS-115",
+      "label": "OPT-FS-115",
+      "type": "task",
+      "properties": {
+        "description": "Consolidate shift_groups and shift_assignments listeners",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Shifts"
+      }
+    },
+    {
+      "id": "OPT-FS-116",
+      "label": "OPT-FS-116",
+      "type": "task",
+      "properties": {
+        "description": "Lazy loading of useCrewMembers",
+        "status": "INVESTIGATION_NEEDED",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Teams",
+        "question": "Does crew card show members directly without expand/collapse?"
+      }
+    },
+    {
+      "id": "OPT-FS-117",
+      "label": "OPT-FS-117",
+      "type": "task",
+      "properties": {
+        "description": "Verify filters in useAccessProfiles",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Access"
+      }
+    },
+    {
+      "id": "OPT-FS-118",
+      "label": "OPT-FS-118",
+      "type": "task",
+      "properties": {
+        "description": "Verify filters in useAccessUsers",
+        "status": "BACKLOG",
+        "phase": 1,
+        "priority": "P2",
+        "domain": "Access"
+      }
+    },
+    {
+      "id": "OPT-FS-119",
+      "label": "OPT-FS-119",
+      "type": "task",
+      "properties": {
+        "description": "Limit weight_records to latest record per K9",
+        "status": "BLOCKED",
+        "phase": 1,
+        "priority": "P1",
+        "domain": "Health",
+        "blocker": "Schema validation required",
+        "requires": [
+          "weight_records schema mapping",
+          "temporal fields validation",
+          "legacy data compatibility"
+        ]
+      }
+    },
+    {
+      "id": "FIRESTORE_BASELINE",
+      "label": "FIRESTORE_BASELINE.md",
+      "type": "file",
+      "properties": {
+        "description": "Firestore baseline measurement document",
+        "date": "2026-07-10",
+        "scope": "Dashboard + Health Module"
+      }
+    },
+    {
+      "id": "FIRESTORE_OPTIMIZATION_PLAN",
+      "label": "FIRESTORE_OPTIMIZATION_PLAN.md",
+      "type": "file",
+      "properties": {
+        "description": "Complete Firestore optimization plan",
+        "date": "2026-07-10",
+        "totalTasks": 52,
+        "phases": 5
+      }
+    },
+    {
+      "id": "FIRESTORE_SCHEMA",
+      "label": "FIRESTORE_SCHEMA.md",
+      "type": "file",
+      "properties": {
+        "description": "Firestore schema documentation",
+        "date": "2026-07-10",
+        "scope": "Shifts, crews, K9 operations"
+      }
+    },
+    {
+      "id": "dashboard-page",
+      "label": "dashboard/page.tsx",
+      "type": "file",
+      "properties": {
+        "description": "Main dashboard page component",
+        "path": "src/app/(app)/dashboard/page.tsx"
+      }
+    },
+    {
+      "id": "firestore-rules",
+      "label": "firestore.rules",
+      "type": "file",
+      "properties": {
+        "description": "Firestore security rules (2140 lines)",
+        "source": "repo mobile"
+      }
+    },
+    {
+      "id": "firestore-indexes",
+      "label": "firestore.indexes.json",
+      "type": "file",
+      "properties": {
+        "description": "Firestore composite indexes configuration"
+      }
+    },
+    {
+      "id": "react-strict-mode",
+      "label": "React Strict Mode",
+      "type": "concept",
+      "properties": {
+        "description": "React 18 development feature that double-invokes effects"
+      }
+    },
+    {
+      "id": "memory-leak",
+      "label": "Memory Leak",
+      "type": "concept",
+      "properties": {
+        "description": "Unreleased Firestore listeners causing memory growth"
+      }
+    },
+    {
+      "id": "baseline-measurement",
+      "label": "Baseline Measurement",
+      "type": "concept",
+      "properties": {
+        "description": "Pre-optimization metrics for comparison"
+      }
+    },
+    {
+      "id": "optimization-phase-0",
+      "label": "Phase 0 - Baseline",
+      "type": "concept",
+      "properties": {
+        "description": "Establish measurement baseline and observability",
+        "tasks": 15
+      }
+    },
+    {
+      "id": "optimization-phase-1",
+      "label": "Phase 1 - Safe Gains",
+      "type": "concept",
+      "properties": {
+        "description": "Safe gains without schema changes",
+        "tasks": 19
+      }
+    },
+    {
+      "id": "optimization-phase-2",
+      "label": "Phase 2 - Reports",
+      "type": "concept",
+      "properties": {
+        "description": "Reports and aggregations optimization",
+        "tasks": 8
+      }
+    },
+    {
+      "id": "optimization-phase-3",
+      "label": "Phase 3 - N+1",
+      "type": "concept",
+      "properties": {
+        "description": "N+1 problem and read architecture",
+        "tasks": 6
+      }
+    },
+    {
+      "id": "optimization-phase-4",
+      "label": "Phase 4 - Standardization",
+      "type": "concept",
+      "properties": {
+        "description": "Standardization and future migrations",
+        "tasks": 5
+      }
+    },
+    {
+      "id": "dual-casing",
+      "label": "Dual Casing",
+      "type": "concept",
+      "properties": {
+        "description": "snake_case + camelCase field naming across platforms"
+      }
+    },
+    {
+      "id": "binomials",
+      "label": "binomials Collection",
+      "type": "collection",
+      "properties": {
+        "description": "K9 handler-dog pairs",
+        "filter": "active == true"
+      }
+    },
+    {
+      "id": "specialties",
+      "label": "specialties Subcollection",
+      "type": "collection",
+      "properties": {
+        "description": "Dog specialty certifications",
+        "path": "dogs/{dogId}/specialties",
+        "n+1Issue": true
+      }
+    },
+    {
+      "id": "use-effective-data",
+      "label": "useEffectiveData Hook",
+      "type": "hook",
+      "properties": {
+        "description": "Effective data subscription hook",
+        "file": "src/features/effective/hooks/use-effective-data.ts"
+      }
+    },
+    {
+      "id": "use-shift-groups",
+      "label": "useShiftGroups Hook",
+      "type": "hook",
+      "properties": {
+        "description": "Shift groups subscription hook",
+        "file": "src/features/effective/hooks/use-shift-groups.ts"
+      }
+    },
+    {
+      "id": "use-reports-data",
+      "label": "useReportsData Hook",
+      "type": "hook",
+      "properties": {
+        "description": "Reports data hook with 16 getDocs()",
+        "file": "src/features/reports/hooks/use-reports-data.ts"
+      }
+    },
+    {
+      "id": "cloud-functions",
+      "label": "Cloud Functions",
+      "type": "concept",
+      "properties": {
+        "description": "Firebase Cloud Functions (37 exports identified)",
+        "purpose": "Invitations, reminders, vehicle admin"
+      }
+    },
+    {
+      "id": "mobile-app",
+      "label": "Mobile App (canil-gcm)",
+      "type": "concept",
+      "properties": {
+        "description": "Flutter mobile app - primary writer for shifts/crews"
+      }
+    },
+    {
+      "id": "web-panel",
+      "label": "Web Panel (k9-ops)",
+      "type": "concept",
+      "properties": {
+        "description": "Next.js web panel - reader and admin"
+      }
+    },
+    {
+      "id": "firebase-console",
+      "label": "Firebase Console",
+      "type": "concept",
+      "properties": {
+        "description": "Firebase management console for metrics"
+      }
+    },
+    {
+      "id": "firebase-edition",
+      "label": "Firebase Edition",
+      "type": "concept",
+      "properties": {
+        "description": "Standard vs Enterprise edition",
+        "needsValidation": true
+      }
+    },
+    {
+      "id": "firebase-plan",
+      "label": "Firebase Plan",
+      "type": "concept",
+      "properties": {
+        "description": "Spark/Blaze/Flame billing plan",
+        "needsValidation": true
+      }
+    },
+    {
+      "id": "crew-history",
+      "label": "vehicle_crew_history Collection",
+      "type": "collection",
+      "properties": {
+        "description": "Immutable snapshots when crew closes",
+        "writers": [
+          "Mobile"
+        ]
+      }
+    },
+    {
+      "id": "use-binomial-profile-data",
+      "label": "useBinomialProfileData Hook",
+      "type": "hook",
+      "properties": {
+        "description": "Binomial profile data hook with duplicate queries",
+        "file": "src/features/effective/hooks/use-binomial-profile-data.ts"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "gen_js_gen_21ee6e",
+      "target": "ref_fs",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\gen.js",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "gen_js_gen_21ee6e",
+      "target": "gen_fs",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\gen.js",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "gen_js_gen_21ee6e",
+      "target": "gen_l",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\gen.js",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "gen_js_gen_21ee6e",
+      "target": "gen_t",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs\\gen.js",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "dashboard",
+      "target": "vehicle_crews",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "active_shifts",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "occurrences",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "notifications",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "promotion_requests",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "shift_groups",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "user_shift_assignments",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "dogs",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "users",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "dashboard",
+      "target": "vehicles",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "health-module",
+      "target": "health_logs",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "health-module",
+      "target": "documents",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "health-module",
+      "target": "health_events",
+      "label": "subscribes to (N per dog)",
+      "type": "uses"
+    },
+    {
+      "source": "health-module",
+      "target": "weight_records",
+      "label": "subscribes to (N per dog)",
+      "type": "uses"
+    },
+    {
+      "source": "health-module",
+      "target": "dog-documents",
+      "label": "subscribes to (N per dog)",
+      "type": "uses"
+    },
+    {
+      "source": "use-health-data",
+      "target": "health_logs",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-health-data",
+      "target": "health_events",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-health-data",
+      "target": "weight_records",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-health-data",
+      "target": "dog-documents",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-health-data",
+      "target": "subscribeManyCollections",
+      "label": "uses",
+      "type": "uses"
+    },
+    {
+      "source": "use-crew-members",
+      "target": "members",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-crew-members",
+      "target": "vehicle_crews",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-operational-center-data",
+      "target": "vehicle_crews",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-entities",
+      "target": "dogs",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-entities",
+      "target": "users",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-entities",
+      "target": "vehicles",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "entities-provider",
+      "target": "dogs",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "entities-provider",
+      "target": "users",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "entities-provider",
+      "target": "vehicles",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "shift-group-service",
+      "target": "shift_groups",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "shift-group-service",
+      "target": "user_shift_assignments",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-effective-data",
+      "target": "binomials",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-effective-data",
+      "target": "specialties",
+      "label": "subscribes to (N+1)",
+      "type": "uses"
+    },
+    {
+      "source": "use-shift-groups",
+      "target": "shift_groups",
+      "label": "subscribes to",
+      "type": "uses"
+    },
+    {
+      "source": "use-reports-data",
+      "target": "shift_logs",
+      "label": "queries",
+      "type": "uses"
+    },
+    {
+      "source": "use-reports-data",
+      "target": "vehicle_crew_history",
+      "label": "queries",
+      "type": "uses"
+    },
+    {
+      "source": "use-binomial-profile-data",
+      "target": "shift_logs",
+      "label": "subscribes to (duplicate)",
+      "type": "uses"
+    },
+    {
+      "source": "onSnapshot",
+      "target": "listeners",
+      "label": "creates",
+      "type": "uses"
+    },
+    {
+      "source": "subscribeCollection",
+      "target": "onSnapshot",
+      "label": "wraps",
+      "type": "uses"
+    },
+    {
+      "source": "subscribeManyCollections",
+      "target": "onSnapshot",
+      "label": "creates multiple",
+      "type": "uses"
+    },
+    {
+      "source": "cleanup",
+      "target": "listeners",
+      "label": "manages lifecycle of",
+      "type": "uses"
+    },
+    {
+      "source": "vehicle_crews",
+      "target": "members",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "dogs",
+      "target": "health_events",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "dogs",
+      "target": "weight_records",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "dogs",
+      "target": "specialties",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "dogs",
+      "target": "dog-documents",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "vehicles",
+      "target": "documents",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-0",
+      "target": "FIRESTORE_BASELINE",
+      "label": "produces",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-101",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-102",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-103",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-104",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-105",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-106",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-107",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-108",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-109",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-110",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-111",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-112",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-113",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-114",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-115",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-116",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-117",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-118",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "optimization-phase-1",
+      "target": "OPT-FS-119",
+      "label": "contains",
+      "type": "contains"
+    },
+    {
+      "source": "OPT-FS-103",
+      "target": "OPT-FS-104",
+      "label": "depends on",
+      "type": "depends"
+    },
+    {
+      "source": "OPT-FS-116",
+      "target": "OPT-FS-303",
+      "label": "depends on",
+      "type": "depends"
+    },
+    {
+      "source": "OPT-FS-119",
+      "target": "OPT-FS-304",
+      "label": "relates to",
+      "type": "depends"
+    },
+    {
+      "source": "OPT-FS-101",
+      "target": "dashboard-page",
+      "label": "implemented in",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-101",
+      "target": "use-operational-center-data",
+      "label": "extends to",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_BASELINE",
+      "target": "dashboard",
+      "label": "documents",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_BASELINE",
+      "target": "health-module",
+      "label": "documents",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_BASELINE",
+      "target": "listeners",
+      "label": "measures",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_BASELINE",
+      "target": "baseline-measurement",
+      "label": "defines",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_OPTIMIZATION_PLAN",
+      "target": "firestore",
+      "label": "optimizes",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_OPTIMIZATION_PLAN",
+      "target": "optimization-phase-0",
+      "label": "contains",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_OPTIMIZATION_PLAN",
+      "target": "optimization-phase-1",
+      "label": "contains",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_OPTIMIZATION_PLAN",
+      "target": "optimization-phase-2",
+      "label": "contains",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_OPTIMIZATION_PLAN",
+      "target": "optimization-phase-3",
+      "label": "contains",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_OPTIMIZATION_PLAN",
+      "target": "optimization-phase-4",
+      "label": "contains",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_SCHEMA",
+      "target": "active_shifts",
+      "label": "documents",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_SCHEMA",
+      "target": "vehicle_crews",
+      "label": "documents",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_SCHEMA",
+      "target": "shift_logs",
+      "label": "documents",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_SCHEMA",
+      "target": "shift_groups",
+      "label": "documents",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_SCHEMA",
+      "target": "vehicles",
+      "label": "documents",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_SCHEMA",
+      "target": "mobile-app",
+      "label": "documents writer",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_SCHEMA",
+      "target": "web-panel",
+      "label": "documents reader",
+      "type": "documents"
+    },
+    {
+      "source": "FIRESTORE_SCHEMA",
+      "target": "cloud-functions",
+      "label": "documents writer",
+      "type": "documents"
+    },
+    {
+      "source": "dashboard-page",
+      "target": "dashboard",
+      "label": "implements",
+      "type": "documents"
+    },
+    {
+      "source": "entities-provider",
+      "target": "entities-provider",
+      "label": "implements",
+      "type": "documents"
+    },
+    {
+      "source": "firestore-rules",
+      "target": "firestore",
+      "label": "secures",
+      "type": "documents"
+    },
+    {
+      "source": "firestore-indexes",
+      "target": "firestore",
+      "label": "configures",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-107",
+      "target": "cleanup",
+      "label": "investigates",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-108",
+      "target": "cleanup",
+      "label": "investigates",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-101",
+      "target": "N+1-problem",
+      "label": "addresses",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-116",
+      "target": "lazy-loading",
+      "label": "proposes",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-119",
+      "target": "weight_records",
+      "label": "optimizes",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-119",
+      "target": "N+1-problem",
+      "label": "addresses",
+      "type": "documents"
+    },
+    {
+      "source": "N+1-problem",
+      "target": "health_events",
+      "label": "affects",
+      "type": "documents"
+    },
+    {
+      "source": "N+1-problem",
+      "target": "specialties",
+      "label": "affects",
+      "type": "documents"
+    },
+    {
+      "source": "N+1-problem",
+      "target": "members",
+      "label": "affects",
+      "type": "documents"
+    },
+    {
+      "source": "N+1-problem",
+      "target": "weight_records",
+      "label": "affects",
+      "type": "documents"
+    },
+    {
+      "source": "collectionGroup",
+      "target": "N+1-problem",
+      "label": "solves",
+      "type": "documents"
+    },
+    {
+      "source": "denormalization",
+      "target": "N+1-problem",
+      "label": "solves",
+      "type": "documents"
+    },
+    {
+      "source": "lazy-loading",
+      "target": "N+1-problem",
+      "label": "solves",
+      "type": "documents"
+    },
+    {
+      "source": "collectionGroup",
+      "target": "OPT-FS-301",
+      "label": "proposed in",
+      "type": "documents"
+    },
+    {
+      "source": "collectionGroup",
+      "target": "OPT-FS-305",
+      "label": "evaluated in",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-301",
+      "target": "health_events",
+      "label": "resolves N+1 for",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-302",
+      "target": "specialties",
+      "label": "resolves N+1 for",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-303",
+      "target": "members",
+      "label": "resolves N+1 for",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-304",
+      "target": "weight_records",
+      "label": "resolves N+1 for",
+      "type": "documents"
+    },
+    {
+      "source": "dual-casing",
+      "target": "OPT-FS-401",
+      "label": "addresses",
+      "type": "documents"
+    },
+    {
+      "source": "dual-casing",
+      "target": "OPT-FS-402",
+      "label": "addresses",
+      "type": "documents"
+    },
+    {
+      "source": "pagination",
+      "target": "OPT-FS-207",
+      "label": "proposed in",
+      "type": "documents"
+    },
+    {
+      "source": "aggregation",
+      "target": "OPT-FS-208",
+      "label": "proposed in",
+      "type": "documents"
+    },
+    {
+      "source": "memory-leak",
+      "target": "cleanup",
+      "label": "prevented by",
+      "type": "documents"
+    },
+    {
+      "source": "react-strict-mode",
+      "target": "listeners",
+      "label": "double-invokes in dev",
+      "type": "documents"
+    },
+    {
+      "source": "mobile-app",
+      "target": "firestore",
+      "label": "writes to",
+      "type": "uses"
+    },
+    {
+      "source": "web-panel",
+      "target": "firestore",
+      "label": "reads/writes to",
+      "type": "uses"
+    },
+    {
+      "source": "cloud-functions",
+      "target": "firestore",
+      "label": "writes to",
+      "type": "uses"
+    },
+    {
+      "source": "firebase-console",
+      "target": "firestore",
+      "label": "manages",
+      "type": "uses"
+    },
+    {
+      "source": "OPT-FS-107",
+      "target": "dashboard",
+      "label": "investigates",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-107",
+      "target": "entities-provider",
+      "label": "investigates",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-107",
+      "target": "use-crew-members",
+      "label": "investigates",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-108",
+      "target": "use-health-data",
+      "label": "investigates",
+      "type": "documents"
+    },
+    {
+      "source": "OPT-FS-108",
+      "target": "health-module",
+      "label": "investigates",
+      "type": "documents"
+    }
+  ],
+  "hyperedges": [],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

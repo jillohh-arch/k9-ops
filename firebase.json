@@ -3,7 +3,7 @@
   "functions": [
     {
       "source": "functions",
-      "codebase": "shift-reminders",
+      "codebase": "k9-ops-functions",
       "runtime": "nodejs22"
     }
   ],

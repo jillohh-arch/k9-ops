@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions/v2";
 
@@ -213,6 +215,106 @@ async function hasRecentNotification(
 
   return !snapshot.empty;
 }
+
+// ─── decidePromotionRequest ────────────────────────────────────────────────────
+
+interface DecidePromotionPayload {
+  requestId: string;
+  decision: "approved" | "rejected";
+  reason?: string;
+  note?: string;
+}
+
+export const decidePromotionRequest = onCall(
+  { region: "southamerica-east1", memory: "256MiB", timeoutSeconds: 30 },
+  async (request) => {
+    const auth = request.auth;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Autenticação necessária.");
+    }
+
+    const { requestId, decision, reason, note } = request.data as DecidePromotionPayload;
+
+    if (!requestId || typeof requestId !== "string") {
+      throw new HttpsError("invalid-argument", "requestId é obrigatório.");
+    }
+    if (!decision || !["approved", "rejected"].includes(decision)) {
+      throw new HttpsError("invalid-argument", "decision deve ser 'approved' ou 'rejected'.");
+    }
+    if (decision === "rejected" && (!reason || reason.trim().length < 3)) {
+      throw new HttpsError("invalid-argument", "Justificativa obrigatória para rejeição (mínimo 3 caracteres).");
+    }
+
+    const uid = auth.uid;
+    let deciderName = "Usuário";
+    try {
+      const userAuth = getAuth();
+      const userRecord = await userAuth.getUser(uid);
+      deciderName = userRecord.displayName ?? userRecord.email ?? "Usuário";
+    } catch {
+      logger.warn("Could not resolve display name for UID", { uid });
+    }
+
+    const docRef = db.collection("promotion_requests").doc(requestId);
+
+    const result = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists) {
+        throw new HttpsError("not-found", "Solicitação não encontrada.");
+      }
+
+      const data = snap.data()!;
+      if (data.status !== "pending") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Esta solicitação já foi analisada."
+        );
+      }
+
+      const now = new Date();
+      const decisionReason = decision === "rejected" ? reason?.trim() : (note?.trim() || reason?.trim() || null);
+
+      const update: Record<string, unknown> = {
+        status: decision,
+        decision,
+        decision_by: deciderName,
+        decision_uid: uid,
+        decision_reason: decisionReason || null,
+        decided_at: now,
+        updated_at: now,
+      };
+
+      if (decision === "approved") {
+        update.approved_by = deciderName;
+      } else {
+        update.rejected_by = deciderName;
+        update.rejection_reason = reason?.trim() || null;
+      }
+
+      const auditEntry = {
+        action: decision === "approved" ? "evolution_approved" : "request_rejected",
+        at: now,
+        by: deciderName,
+        by_uid: uid,
+        note: decisionReason || undefined,
+      };
+
+      update.audit_trail = FieldValue.arrayUnion(auditEntry);
+
+      tx.update(docRef, update as FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>);
+
+      return { id: requestId, status: decision };
+    });
+
+    logger.info("Promotion request decided", {
+      requestId,
+      decision,
+      by: uid,
+    });
+
+    return result;
+  }
+);
 
 // ─── Scheduler ─────────────────────────────────────────────────────────────────
 

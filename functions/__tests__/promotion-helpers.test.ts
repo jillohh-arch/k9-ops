@@ -285,6 +285,7 @@ describe("buildProgressUpdate", () => {
     expect(result.current_module).toBeNull();
     expect(result.completed_module_ids).toEqual(["mod-1", "mod-2", "mod-3"]);
     expect(result.status).toBe("operational");
+    expect(result.operational_since).toEqual(decidedAt);
   });
 
   it("does NOT set operational when already operational", () => {
@@ -292,6 +293,7 @@ describe("buildProgressUpdate", () => {
     const promotion = makePromotion({ module_id: "mod-3", module_order: 3 });
     const result = buildProgressUpdate(progress, promotion, baseModules, "12345", decidedAt);
     expect(result.status).toBeUndefined();
+    expect(result.operational_since).toBeUndefined();
   });
 
   it("does not duplicate module_id in completed_module_ids", () => {

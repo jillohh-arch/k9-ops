@@ -174,6 +174,7 @@ export function buildProgressUpdate(
 
   if (isLastModule && progress.status === "in_formation") {
     update.status = "operational";
+    update.operational_since = decidedAt;
   }
 
   return update;

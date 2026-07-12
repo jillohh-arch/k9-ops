@@ -383,6 +383,10 @@ export const decidePromotionRequest = onCall(
           progressWrite.status = progressUpdate.status;
         }
 
+        if (progressUpdate.operational_since) {
+          progressWrite.operational_since = progressUpdate.operational_since;
+        }
+
         tx.update(progressRef, progressWrite as FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>);
       }
 

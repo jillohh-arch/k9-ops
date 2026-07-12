@@ -1,5 +1,4 @@
 {
- 
   "functions": [
     {
       "source": "functions",
@@ -17,6 +16,11 @@
     ],
     "frameworksBackend": {
       "region": "southamerica-east1"
+    }
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
     }
   }
 }

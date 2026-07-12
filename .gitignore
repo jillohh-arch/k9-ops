@@ -38,6 +38,7 @@ firebase-debug.log*
 
 # local reference artifacts
 temp/
+graphify-out/
 
 # env files (can opt-in for committing if needed)
 .env*

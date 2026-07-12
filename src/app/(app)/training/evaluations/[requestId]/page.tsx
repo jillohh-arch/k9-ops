@@ -91,6 +91,11 @@ function formatDateLong(date: Date | null): string {
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
+function formatDateTimeLong(date: Date | null): string {
+  if (!date) return "—";
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 function formatWaiting(days: number | null): string {
   if (days === null) return "";
   if (days === 0) return "Hoje";
@@ -110,6 +115,61 @@ function statusTone(s: string): "yellow" | "green" | "red" | "slate" {
   if (s === "approved") return "green";
   if (s === "rejected") return "red";
   return "slate";
+}
+
+// ─── Audit Trail Translation ─────────────────────────────────────────────────
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  request_created: "Solicitação criada",
+  created: "Solicitação criada",
+  evolution_approved: "Evolução aprovada",
+  approved: "Evolução aprovada",
+  request_rejected: "Solicitação rejeitada",
+  rejected: "Solicitação rejeitada",
+  note_added: "Observação registrada",
+  status_changed: "Status alterado",
+};
+
+function translateAuditAction(action: string): string {
+  const key = action.toLowerCase().trim();
+  if (AUDIT_ACTION_LABELS[key]) return AUDIT_ACTION_LABELS[key];
+  return action
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function isUid(value: string): boolean {
+  return /^[A-Za-z0-9]{20,}$/.test(value) && !/\s/.test(value);
+}
+
+function friendlyAuditBy(by: string | null): string {
+  if (!by) return "";
+  if (isUid(by)) return "Usuário não identificado";
+  return by;
+}
+
+// ─── Error Mapping ───────────────────────────────────────────────────────────
+
+export function friendlyDecisionError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("permission-denied") || lower.includes("permission")) {
+    return "Você não possui permissão para analisar esta solicitação.";
+  }
+  if (lower.includes("failed-precondition") || lower.includes("already") || lower.includes("já")) {
+    return "Esta solicitação já foi analisada ou alterada por outro avaliador.";
+  }
+  if (lower.includes("not-found") || lower.includes("não encontrad")) {
+    return "A solicitação não foi encontrada.";
+  }
+  if (lower.includes("unauthenticated") || lower.includes("auth")) {
+    return "Sua sessão expirou. Entre novamente para continuar.";
+  }
+  if (lower.includes("invalid-argument")) {
+    return raw.replace(/^.*?:\s*/, "");
+  }
+  return "Não foi possível concluir a decisão. Tente novamente. Se o problema continuar, consulte o log do sistema.";
 }
 
 // ─── Detail Field ─────────────────────────────────────────────────────────────
@@ -291,9 +351,9 @@ export default function EvaluationDetailPage() {
       if (snap.exists()) setRawDoc(snap.data() as Record<string, unknown>);
       setDialog(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao registrar decisão.";
-      if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("já")) {
-        setDecisionError("Esta solicitação já foi analisada por outro avaliador.");
+      const msg = friendlyDecisionError(err);
+      if (msg.includes("já foi analisada") || msg.includes("alterada por outro")) {
+        setDecisionError(msg);
         setDialog(null);
         const ref = doc(collection(db, "promotion_requests"), requestId);
         const snap = await getDoc(ref);
@@ -368,12 +428,18 @@ export default function EvaluationDetailPage() {
             <Field label="K9" value={detail.dogName} />
             <Field label="Modalidade" value={detail.modalityLabel} />
             {detail.conductorName ? <Field label="Condutor" value={detail.conductorName} /> : null}
+            {detail.conductorRa ? <Field label="RA do Condutor" value={detail.conductorRa} /> : null}
             {detail.currentModuleName ? <Field label="Módulo atual" value={detail.currentModuleName} /> : null}
             {detail.nextModuleName ? <Field label="Próximo módulo" value={detail.nextModuleName} /> : null}
             {detail.createdAt ? <Field label="Data da solicitação" value={formatDateLong(detail.createdAt)} /> : null}
             {detail.decisionBy ? <Field label="Avaliador" value={detail.decisionBy} /> : null}
             {detail.decidedAt ? <Field label="Data da decisão" value={formatDateLong(detail.decidedAt)} /> : null}
           </div>
+          {!detail.currentModuleName && !detail.nextModuleName ? (
+            <p className="mt-4 text-xs text-slate-500 italic">
+              Os dados do avanço solicitado não foram registrados neste documento.
+            </p>
+          ) : null}
         </section>
 
         {/* Advance + decision panel */}
@@ -392,7 +458,11 @@ export default function EvaluationDetailPage() {
                   <p className="mt-1 text-sm font-semibold text-white">{detail.nextModuleName}</p>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <p className="text-xs text-slate-500 italic">
+                Os dados do avanço solicitado não foram registrados neste documento.
+              </p>
+            )}
 
             {detail.decisionReason ? (
               <div>
@@ -415,10 +485,10 @@ export default function EvaluationDetailPage() {
                       <Clock className="mt-0.5 h-3 w-3 shrink-0 text-slate-600" />
                       <div>
                         <span className="font-medium text-slate-300">
-                          {entry.action.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                          {translateAuditAction(entry.action)}
                         </span>
-                        {entry.by ? <span> por {entry.by}</span> : null}
-                        {entry.at ? <span> em {formatDateLong(entry.at)}</span> : null}
+                        {entry.by ? <span> por {friendlyAuditBy(entry.by)}</span> : null}
+                        {entry.at ? <span className="text-slate-500"> · {formatDateTimeLong(entry.at)}</span> : null}
                         {entry.note ? <p className="mt-0.5 text-slate-500">{entry.note}</p> : null}
                       </div>
                     </div>

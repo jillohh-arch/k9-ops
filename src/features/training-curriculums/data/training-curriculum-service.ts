@@ -2,10 +2,10 @@
 
 import {
   Timestamp,
-  addDoc,
   collection,
   doc,
   getDoc,
+  increment,
   runTransaction,
   setDoc,
   type DocumentData,
@@ -38,7 +38,6 @@ export type ProgramInput = {
   description: string;
   modality: string;
   name: string;
-  version: string;
 };
 
 export type ModuleInput = {
@@ -60,7 +59,7 @@ function slug(value: string) {
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replaceAll("&", " e ")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
@@ -108,7 +107,6 @@ function programPayload(input: ProgramInput) {
     modality,
     name: input.name.trim(),
     updated_at: Timestamp.now(),
-    version: input.version.trim() || "v1",
   };
 }
 
@@ -161,6 +159,7 @@ export async function createTrainingProgram(
   const entry = auditEntry("create_program", profile);
   await setDoc(ref, {
     ...programPayload(input),
+    version: 1,
     created_at: Timestamp.now(),
     audit_trail: [entry],
   });
@@ -191,12 +190,25 @@ export async function createTrainingModule(
   input: ModuleInput,
   profile: AuthProfile | null,
 ) {
+  const programRef = doc(db, "training_programs", programId);
+  const modulesRef = collection(db, "training_programs", programId, "modules");
   const entry = auditEntry("create_module", profile);
-  const ref = collection(db, "training_programs", programId, "modules");
-  await addDoc(ref, {
-    ...modulePayload(input),
-    created_at: Timestamp.now(),
-    audit_trail: [entry],
+
+  await runTransaction(db, async (transaction) => {
+    const programSnap = await transaction.get(programRef);
+    if (!programSnap.exists()) throw new Error("Programa não encontrado.");
+
+    const moduleRef = doc(modulesRef);
+    transaction.set(moduleRef, {
+      ...modulePayload(input),
+      created_at: Timestamp.now(),
+      audit_trail: [entry],
+    });
+
+    transaction.update(programRef, {
+      version: increment(1),
+      updated_at: Timestamp.now(),
+    });
   });
 }
 
@@ -206,15 +218,26 @@ export async function updateTrainingModule(
   input: ModuleInput,
   profile: AuthProfile | null,
 ) {
-  const ref = doc(db, "training_programs", programId, "modules", moduleId);
+  const programRef = doc(db, "training_programs", programId);
+  const moduleRef = doc(db, "training_programs", programId, "modules", moduleId);
   const entry = auditEntry("update_module", profile);
 
   await runTransaction(db, async (transaction) => {
-    const snapshot = await transaction.get(ref);
-    if (!snapshot.exists()) throw new Error("Módulo não encontrado.");
-    transaction.update(ref, {
+    const [programSnap, moduleSnap] = await Promise.all([
+      transaction.get(programRef),
+      transaction.get(moduleRef),
+    ]);
+    if (!programSnap.exists()) throw new Error("Programa não encontrado.");
+    if (!moduleSnap.exists()) throw new Error("Módulo não encontrado.");
+
+    transaction.update(moduleRef, {
       ...modulePayload(input),
-      audit_trail: appendAudit(snapshot.data(), entry),
+      audit_trail: appendAudit(moduleSnap.data(), entry),
+    });
+
+    transaction.update(programRef, {
+      version: increment(1),
+      updated_at: Timestamp.now(),
     });
   });
 }
@@ -225,8 +248,8 @@ export async function createTrainingMilestone(
   input: MilestoneInput,
   profile: AuthProfile | null,
 ) {
-  const entry = auditEntry("create_milestone", profile);
-  const ref = collection(
+  const programRef = doc(db, "training_programs", programId);
+  const milestonesRef = collection(
     db,
     "training_programs",
     programId,
@@ -234,10 +257,23 @@ export async function createTrainingMilestone(
     moduleId,
     "milestones",
   );
-  await addDoc(ref, {
-    ...milestonePayload(input),
-    created_at: Timestamp.now(),
-    audit_trail: [entry],
+  const entry = auditEntry("create_milestone", profile);
+
+  await runTransaction(db, async (transaction) => {
+    const programSnap = await transaction.get(programRef);
+    if (!programSnap.exists()) throw new Error("Programa não encontrado.");
+
+    const milestoneRef = doc(milestonesRef);
+    transaction.set(milestoneRef, {
+      ...milestonePayload(input),
+      created_at: Timestamp.now(),
+      audit_trail: [entry],
+    });
+
+    transaction.update(programRef, {
+      version: increment(1),
+      updated_at: Timestamp.now(),
+    });
   });
 }
 
@@ -248,7 +284,8 @@ export async function updateTrainingMilestone(
   input: MilestoneInput,
   profile: AuthProfile | null,
 ) {
-  const ref = doc(
+  const programRef = doc(db, "training_programs", programId);
+  const milestoneRef = doc(
     db,
     "training_programs",
     programId,
@@ -260,11 +297,21 @@ export async function updateTrainingMilestone(
   const entry = auditEntry("update_milestone", profile);
 
   await runTransaction(db, async (transaction) => {
-    const snapshot = await transaction.get(ref);
-    if (!snapshot.exists()) throw new Error("Marco não encontrado.");
-    transaction.update(ref, {
+    const [programSnap, milestoneSnap] = await Promise.all([
+      transaction.get(programRef),
+      transaction.get(milestoneRef),
+    ]);
+    if (!programSnap.exists()) throw new Error("Programa não encontrado.");
+    if (!milestoneSnap.exists()) throw new Error("Marco não encontrado.");
+
+    transaction.update(milestoneRef, {
       ...milestonePayload(input),
-      audit_trail: appendAudit(snapshot.data(), entry),
+      audit_trail: appendAudit(milestoneSnap.data(), entry),
+    });
+
+    transaction.update(programRef, {
+      version: increment(1),
+      updated_at: Timestamp.now(),
     });
   });
 }

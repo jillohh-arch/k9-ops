@@ -209,3 +209,25 @@ export interface MetricItem {
   icon: LucideIcon;
   tone: string;
 }
+
+/* ─── Training metrics ─── */
+
+export interface DogTrainingAttention {
+  dogId: string;
+  dogName: string;
+  issues: Array<{
+    label: string;
+    detail: string;
+    severity: "critical" | "warning" | "missing";
+  }>;
+}
+
+export interface TrainingMetrics {
+  total: number;
+  activeCount: number;
+  totalSessions: number;
+  attention: DogTrainingAttention[];
+  attentionCount: number;
+  byType: Array<{ label: string; value: number }>;
+  averagePerDog: number;
+}

@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions/v2";
 
@@ -213,6 +215,189 @@ async function hasRecentNotification(
 
   return !snapshot.empty;
 }
+
+// ─── decidePromotionRequest ────────────────────────────────────────────────────
+
+import {
+  buildDecisionFields,
+  buildProgressUpdate,
+  extractRaFromEmail,
+  isTrainingInstructorClaims,
+  validatePromotionState,
+  type ModuleEntry,
+  type ProgressDoc,
+  type PromotionDoc,
+} from "./promotion-helpers";
+
+interface DecidePromotionPayload {
+  requestId: string;
+  decision: "approved" | "rejected";
+  reason?: string;
+  note?: string;
+}
+
+export const decidePromotionRequest = onCall(
+  { region: "southamerica-east1", memory: "256MiB", timeoutSeconds: 30 },
+  async (request) => {
+    const auth = request.auth;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "Autenticação necessária.");
+    }
+
+    const uid = auth.uid;
+    const email = auth.token.email as string | undefined;
+    const ra = extractRaFromEmail(email);
+
+    if (!ra) {
+      throw new HttpsError("permission-denied", "Usuário sem RA vinculado.");
+    }
+
+    if (!isTrainingInstructorClaims(auth.token as unknown as Record<string, unknown>)) {
+      throw new HttpsError("permission-denied", "Permissão de instrutor K9 necessária.");
+    }
+
+    const { requestId, decision, reason, note } = request.data as DecidePromotionPayload;
+
+    if (!requestId || typeof requestId !== "string") {
+      throw new HttpsError("invalid-argument", "requestId é obrigatório.");
+    }
+    if (!decision || !["approved", "rejected"].includes(decision)) {
+      throw new HttpsError("invalid-argument", "decision deve ser 'approved' ou 'rejected'.");
+    }
+    if (decision === "rejected" && (!reason || !reason.trim())) {
+      throw new HttpsError("invalid-argument", "Justificativa obrigatória para rejeição.");
+    }
+
+    let deciderName = ra;
+    try {
+      const userDoc = await db.collection("users").doc(ra).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data()!;
+        deciderName = (userData.displayName ?? userData.name ?? userData.nome ?? ra) as string;
+      } else {
+        const userRecord = await getAuth().getUser(uid);
+        deciderName = userRecord.displayName ?? ra;
+      }
+    } catch {
+      logger.warn("Could not resolve display name", { uid, ra });
+    }
+
+    const docRef = db.collection("promotion_requests").doc(requestId);
+
+    const result = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists) {
+        throw new HttpsError("not-found", "Solicitação não encontrada.");
+      }
+
+      const data = snap.data()!;
+      const promotion: PromotionDoc = {
+        dog_id: data.dog_id as string,
+        modality: data.modality as string,
+        module_id: data.module_id as string,
+        module_name: data.module_name as string | undefined,
+        module_order: data.module_order as number | undefined,
+        program_id: data.program_id as string,
+        program_version: data.program_version as number,
+        status: data.status as string,
+        next_module_id: data.next_module_id as string | null | undefined,
+      };
+
+      if (promotion.status !== "pending") {
+        throw new HttpsError("failed-precondition", "Esta solicitação já foi analisada.");
+      }
+
+      const nowDate = new Date();
+      const now = FieldValue.serverTimestamp();
+      const fields = buildDecisionFields(decision, ra, uid, email ?? "", reason ?? null, note ?? null);
+
+      const auditEntry = {
+        action: decision === "approved" ? "evolution_approved" : "request_rejected",
+        at: nowDate,
+        by: deciderName,
+        by_uid: uid,
+        by_ra: ra,
+        by_email: email,
+        note: fields.decision_reason || undefined,
+      };
+
+      const requestUpdate: Record<string, unknown> = {
+        ...fields,
+        decided_at: now,
+        updated_at: now,
+        audit_trail: FieldValue.arrayUnion(auditEntry),
+      };
+
+      tx.update(docRef, requestUpdate as FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>);
+
+      if (decision === "approved") {
+        const { dog_id: dogId, modality, program_id: programId } = promotion;
+
+        if (!dogId || !modality || !programId || !promotion.module_id) {
+          throw new HttpsError("failed-precondition", "Dados incompletos na solicitação para aprovação.");
+        }
+
+        const progressRef = db.doc(`dogs/${dogId}/training/${modality}`);
+        const progressSnap = await tx.get(progressRef);
+
+        if (!progressSnap.exists) {
+          throw new HttpsError("failed-precondition", "Progresso de treinamento não encontrado para este K9 e modalidade.");
+        }
+
+        const progressData = progressSnap.data()!;
+        const progress: ProgressDoc = {
+          current_module: (progressData.current_module ?? null) as string | null,
+          completed_module_ids: Array.isArray(progressData.completed_module_ids) ? progressData.completed_module_ids : [],
+          completed_modules: Array.isArray(progressData.completed_modules) ? progressData.completed_modules : [],
+          program_version: typeof progressData.program_version === "number" ? progressData.program_version : null,
+          status: (progressData.status ?? "in_formation") as string,
+          achieved_milestones: (progressData.achieved_milestones ?? {}) as Record<string, unknown>,
+        };
+
+        const modulesSnap = await tx.get(db.collection(`training_programs/${programId}/modules`));
+        const modules: ModuleEntry[] = modulesSnap.docs.map((doc) => ({
+          id: doc.id,
+          order: typeof doc.data().order === "number" ? doc.data().order : 0,
+          title: doc.data().title as string | undefined,
+        }));
+
+        if (modules.length === 0) {
+          throw new HttpsError("failed-precondition", "Programa sem módulos cadastrados.");
+        }
+
+        const validation = validatePromotionState(promotion, progress, modules);
+        if (!validation.valid) {
+          throw new HttpsError("failed-precondition", validation.error!);
+        }
+
+        const progressUpdate = buildProgressUpdate(progress, promotion, modules, ra, nowDate);
+
+        const progressWrite: Record<string, unknown> = {
+          current_module: progressUpdate.current_module,
+          completed_module_ids: progressUpdate.completed_module_ids,
+          completed_modules: progressUpdate.completed_modules,
+          updated_at: now,
+        };
+
+        if (progressUpdate.status) {
+          progressWrite.status = progressUpdate.status;
+        }
+
+        if (progressUpdate.operational_since) {
+          progressWrite.operational_since = progressUpdate.operational_since;
+        }
+
+        tx.update(progressRef, progressWrite as FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>);
+      }
+
+      return { id: requestId, status: decision };
+    });
+
+    logger.info("Promotion request decided", { requestId, decision, by: ra, uid });
+
+    return result;
+  }
+);
 
 // ─── Scheduler ─────────────────────────────────────────────────────────────────
 

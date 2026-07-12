@@ -1,359 +1,410 @@
+/**
+ * Real Firestore Emulator integration tests for decidePromotionRequest.
+ *
+ * These tests connect to a real Firestore Emulator, seed documents,
+ * execute the core transaction, and verify persisted state.
+ *
+ * Run with: FIRESTORE_EMULATOR_HOST=localhost:8080 npx vitest run __tests__/decide-promotion-emulator.test.ts
+ * Or via:   npx firebase emulators:exec --only firestore "cd functions && npx vitest run __tests__/decide-promotion-emulator.test.ts"
+ */
+
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { initializeApp, deleteApp, type App } from "firebase-admin/app";
-import { FieldValue, getFirestore, type Firestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
+import { decidePromotionCore, type AuthContext, type DecidePayload } from "../src/decide-promotion-core";
 
-import { decidePromotionCore, type DeciderContext, type DecisionPayload } from "../src/decide-promotion-core";
+// ─── Skip if emulator not running ───────────────────────────────────────────
+
+const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST;
+const describeEmulator = EMULATOR_HOST ? describe : describe.skip;
 
 // ─── Setup ──────────────────────────────────────────────────────────────────
 
 let app: App;
 let db: Firestore;
 
-const DECIDER: DeciderContext = {
-  uid: "uid-12345",
+const AUTH: AuthContext = {
+  uid: "uid-instructor-1",
   ra: "12345",
   email: "12345@gcm.com.br",
-  deciderName: "Sgt. Silva",
+  deciderName: "Instrutor Silva",
 };
 
-function approvePayload(requestId = "req-001"): DecisionPayload {
-  return { requestId, decision: "approved", note: "Bom desempenho" };
+function makePayload(overrides: Partial<DecidePayload> = {}): DecidePayload {
+  return {
+    requestId: "req-1",
+    decision: "approved",
+    ...overrides,
+  };
 }
 
-function rejectPayload(requestId = "req-001"): DecisionPayload {
-  return { requestId, decision: "rejected", reason: "Não atende critérios mínimos" };
-}
-
-beforeAll(() => {
-  process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
-  app = initializeApp({ projectId: "k9-ops-test" }, "emulator-test");
-  db = getFirestore(app);
-});
-
-afterAll(async () => {
-  await deleteApp(app);
-});
-
-async function clearCollection(path: string) {
-  const snap = await db.collection(path).get();
-  const batch = db.batch();
-  snap.docs.forEach((doc) => batch.delete(doc.ref));
-  await batch.commit();
-}
-
-async function seedScenario(opts: {
-  requestId?: string;
-  dogId?: string;
-  modality?: string;
-  programId?: string;
-  moduleId?: string;
-  programVersion?: number;
-  progressVersion?: number;
-  currentModule?: string;
-  completedModuleIds?: string[];
-  status?: string;
-  promotionStatus?: string;
-  modules?: Array<{ id: string; order: number; title: string }>;
-}) {
-  const {
-    requestId = "req-001",
-    dogId = "dog-bono",
-    modality = "busca_captura",
-    programId = "prog-bc",
-    moduleId = "mod-1",
-    programVersion = 1,
-    progressVersion = 1,
-    currentModule = "mod-1",
-    completedModuleIds = [],
-    status = "in_formation",
-    promotionStatus = "pending",
-    modules = [
-      { id: "mod-1", order: 1, title: "Fundamentos" },
-      { id: "mod-2", order: 2, title: "Controle" },
-      { id: "mod-3", order: 3, title: "Operacional" },
-    ],
-  } = opts;
-
-  await db.collection("promotion_requests").doc(requestId).set({
-    dog_id: dogId,
-    modality,
-    module_id: moduleId,
-    module_name: modules.find((m) => m.id === moduleId)?.title ?? "Módulo",
-    module_order: modules.find((m) => m.id === moduleId)?.order ?? 1,
-    program_id: programId,
-    program_version: programVersion,
-    status: promotionStatus,
-    created_at: new Date(),
+async function seedProgram(programId = "prog-bc", version = 1) {
+  await db.doc(`training_programs/${programId}`).set({
+    active: true,
+    modality: "busca_captura",
+    name: "Busca e Captura",
+    version,
+    created_at: Timestamp.now(),
+    updated_at: Timestamp.now(),
   });
-
-  await db.doc(`dogs/${dogId}/training/${modality}`).set({
-    current_module: currentModule,
-    completed_module_ids: completedModuleIds,
-    completed_modules: [],
-    program_version: progressVersion,
-    status,
-    achieved_milestones: {},
-  });
-
-  for (const mod of modules) {
-    await db.doc(`training_programs/${programId}/modules/${mod.id}`).set({
-      order: mod.order,
-      title: mod.title,
+  const modules = [
+    { id: "mod-1", order: 1, title: "Fundamentos" },
+    { id: "mod-2", order: 2, title: "Controle" },
+    { id: "mod-3", order: 3, title: "Busca Avançada" },
+  ];
+  for (const m of modules) {
+    await db.doc(`training_programs/${programId}/modules/${m.id}`).set({
+      order: m.order,
+      title: m.title,
+      active: true,
     });
   }
 }
 
-async function cleanup() {
-  await clearCollection("promotion_requests");
+async function seedProgress(dogId = "dog-bono", modality = "busca_captura", overrides: Record<string, unknown> = {}) {
+  await db.doc(`dogs/${dogId}/training/${modality}`).set({
+    modality,
+    current_module: "mod-1",
+    completed_module_ids: [],
+    completed_modules: [],
+    program_version: 1,
+    status: "in_formation",
+    achieved_milestones: {},
+    updated_at: Timestamp.now(),
+    ...overrides,
+  });
+}
 
-  const dogs = await db.collection("dogs").get();
-  for (const dog of dogs.docs) {
-    const training = await db.collection(`dogs/${dog.id}/training`).get();
-    const b = db.batch();
-    training.docs.forEach((d) => b.delete(d.ref));
-    await b.commit();
-    await dog.ref.delete();
-  }
+async function seedRequest(requestId = "req-1", overrides: Record<string, unknown> = {}) {
+  await db.doc(`promotion_requests/${requestId}`).set({
+    dog_id: "dog-bono",
+    dog_name: "Bono",
+    modality: "busca_captura",
+    module_id: "mod-1",
+    module_name: "Fundamentos",
+    module_order: 1,
+    program_id: "prog-bc",
+    program_version: 1,
+    status: "pending",
+    direct_instructor: false,
+    requester_ra: "67890",
+    requester_name: "Operador Santos",
+    requested_by_uid: "uid-operator-1",
+    requested_by_email: "67890@gcm.com.br",
+    requested_at: Timestamp.now(),
+    created_at: Timestamp.now(),
+    updated_at: Timestamp.now(),
+    marks_snapshot: [
+      { milestone_id: "ms-1", label: "Obediência", required: true, achieved: true },
+    ],
+    audit_trail: [],
+    ...overrides,
+  });
+}
 
-  const programs = await db.collection("training_programs").get();
-  for (const prog of programs.docs) {
-    const mods = await db.collection(`training_programs/${prog.id}/modules`).get();
-    const b = db.batch();
-    mods.docs.forEach((d) => b.delete(d.ref));
-    await b.commit();
-    await prog.ref.delete();
+async function clearAll() {
+  // Delete all docs in collections used by tests
+  const collections = ["promotion_requests", "training_programs", "dogs"];
+  for (const col of collections) {
+    const snap = await db.collection(col).listDocuments();
+    for (const docRef of snap) {
+      await db.recursiveDelete(docRef);
+    }
   }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe("decidePromotionCore: Firestore Emulator", () => {
-  beforeEach(async () => {
-    await cleanup();
+describeEmulator("decidePromotionRequest — Emulator", () => {
+  beforeAll(() => {
+    app = initializeApp({ projectId: "k9-ops-test" }, "emulator-test");
+    db = getFirestore(app);
   });
 
-  it("1. approves intermediate module and advances to next", async () => {
-    await seedScenario({ moduleId: "mod-1", currentModule: "mod-1" });
+  afterAll(async () => {
+    await deleteApp(app);
+  });
 
-    const result = await decidePromotionCore(db, FieldValue, DECIDER, approvePayload());
+  beforeEach(async () => {
+    await clearAll();
+    await seedProgram();
+    await seedProgress();
+    await seedRequest();
+  });
 
-    expect(result).toMatchObject({ id: "req-001", status: "approved" });
+  // ─── 1. Intermediate module approval ─────────────────────────────────
+
+  it("1. approves intermediate module — advances current_module", async () => {
+    const result = await decidePromotionCore(db, FieldValue, AUTH, makePayload());
+
+    expect(result).toEqual({ id: "req-1", status: "approved" });
 
     const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
     expect(progress.current_module).toBe("mod-2");
-    expect(progress.completed_module_ids).toContain("mod-1");
+    expect(progress.completed_module_ids).toEqual(["mod-1"]);
     expect(progress.status).toBe("in_formation");
+    expect(progress.operational_since).toBeUndefined();
   });
 
-  it("2. approves last module and marks operational", async () => {
-    await seedScenario({
-      moduleId: "mod-3",
-      currentModule: "mod-3",
-      completedModuleIds: ["mod-1", "mod-2"],
+  // ─── 2. Last module approval ────────────────────────────────────────
+
+  it("2. approves last module — sets operational", async () => {
+    await seedProgress("dog-bono", "busca_captura", {
+      current_module: "mod-3",
+      completed_module_ids: ["mod-1", "mod-2"],
     });
+    await seedRequest("req-1", { module_id: "mod-3", module_name: "Busca Avançada", module_order: 3 });
 
-    const result = await decidePromotionCore(db, FieldValue, DECIDER, approvePayload());
+    const result = await decidePromotionCore(db, FieldValue, AUTH, makePayload());
 
-    expect(result).toMatchObject({ id: "req-001", status: "approved" });
+    expect(result).toEqual({ id: "req-1", status: "approved" });
 
     const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
     expect(progress.current_module).toBeNull();
-    expect(progress.completed_module_ids).toContain("mod-3");
+    expect(progress.completed_module_ids).toEqual(["mod-1", "mod-2", "mod-3"]);
     expect(progress.status).toBe("operational");
+    // Firestore converts Date to Timestamp on write; reads back as Timestamp
     expect(progress.operational_since).toBeDefined();
+    expect(progress.operational_since.toDate()).toBeInstanceOf(Date);
   });
 
-  it("3. rejects validly without altering progress", async () => {
-    await seedScenario({});
+  // ─── 3. Rejection ───────────────────────────────────────────────────
 
-    const result = await decidePromotionCore(db, FieldValue, DECIDER, rejectPayload());
+  it("3. rejection — does not modify progress", async () => {
+    const result = await decidePromotionCore(db, FieldValue, AUTH, makePayload({
+      decision: "rejected",
+      reason: "Desempenho insuficiente",
+    }));
 
-    expect(result).toMatchObject({ id: "req-001", status: "rejected" });
+    expect(result).toEqual({ id: "req-1", status: "rejected" });
 
-    const request = (await db.doc("promotion_requests/req-001").get()).data()!;
-    expect(request.status).toBe("rejected");
-    expect(request.decision_reason).toContain("Não atende");
-
+    // Progress unchanged
     const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
     expect(progress.current_module).toBe("mod-1");
     expect(progress.completed_module_ids).toEqual([]);
+
+    // Request updated
+    const request = (await db.doc("promotion_requests/req-1").get()).data()!;
+    expect(request.status).toBe("rejected");
+    expect(request.decision_reason).toBe("Desempenho insuficiente");
   });
 
-  it("4. rejects stale program version", async () => {
-    await seedScenario({ programVersion: 1, progressVersion: 2 });
+  // ─── 4. Request not found ──────────────────────────────────────────
+
+  it("4. request not found — throws", async () => {
+    await expect(
+      decidePromotionCore(db, FieldValue, AUTH, makePayload({ requestId: "nonexistent" })),
+    ).rejects.toMatchObject({ code: "not-found" });
+  });
+
+  // ─── 5. Progress not found ─────────────────────────────────────────
+
+  it("5. progress not found — throws", async () => {
+    await db.doc("dogs/dog-bono/training/busca_captura").delete();
 
     await expect(
-      decidePromotionCore(db, FieldValue, DECIDER, approvePayload()),
-    ).rejects.toMatchObject({ message: expect.stringContaining("Versão") });
-  });
+      decidePromotionCore(db, FieldValue, AUTH, makePayload()),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
 
-  it("5. rejects divergent current_module", async () => {
-    await seedScenario({ moduleId: "mod-1", currentModule: "mod-2" });
-
-    await expect(
-      decidePromotionCore(db, FieldValue, DECIDER, approvePayload()),
-    ).rejects.toMatchObject({ message: expect.stringContaining("Módulo atual") });
-  });
-
-  it("6. rejects when progress doc is missing", async () => {
-    await db.collection("promotion_requests").doc("req-missing").set({
-      dog_id: "dog-ghost",
-      modality: "faro",
-      module_id: "mod-1",
-      program_id: "prog-bc",
-      program_version: 1,
-      status: "pending",
-    });
-    await db.doc("training_programs/prog-bc/modules/mod-1").set({ order: 1, title: "X" });
-
-    await expect(
-      decidePromotionCore(db, FieldValue, DECIDER, approvePayload("req-missing")),
-    ).rejects.toMatchObject({ message: expect.stringContaining("Progresso") });
-  });
-
-  it("7. concurrent approvals: only first succeeds", async () => {
-    await seedScenario({ requestId: "req-a" });
-    await db.collection("promotion_requests").doc("req-b").set({
-      dog_id: "dog-bono",
-      modality: "busca_captura",
-      module_id: "mod-1",
-      program_id: "prog-bc",
-      program_version: 1,
-      status: "pending",
-    });
-
-    const [resultA, resultB] = await Promise.allSettled([
-      decidePromotionCore(db, FieldValue, DECIDER, approvePayload("req-a")),
-      decidePromotionCore(db, FieldValue, DECIDER, approvePayload("req-b")),
-    ]);
-
-    const successes = [resultA, resultB].filter((r) => r.status === "fulfilled");
-
-    // At least one succeeds; the other may fail due to current_module mismatch after first advances
-    expect(successes.length).toBeGreaterThanOrEqual(1);
-    // If both succeed, progress should still be consistent
-    if (successes.length === 2) {
-      const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
-      expect(progress.completed_module_ids).toContain("mod-1");
-    }
-  });
-
-  it("8. exactly one approval persisted after concurrent race", async () => {
-    await seedScenario({ requestId: "req-race" });
-
-    const promises = Array.from({ length: 3 }, () =>
-      decidePromotionCore(db, FieldValue, DECIDER, approvePayload("req-race")).catch(() => null),
-    );
-    await Promise.all(promises);
-
-    const request = (await db.doc("promotion_requests/req-race").get()).data()!;
-    expect(request.status).toBe("approved");
-
-    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
-    expect(progress.completed_module_ids.filter((id: string) => id === "mod-1").length).toBe(1);
-  });
-
-  it("9. rollback on failure: no partial writes", async () => {
-    // Seed without modules to force failure after reading promotion+progress
-    await db.collection("promotion_requests").doc("req-rollback").set({
-      dog_id: "dog-bono",
-      modality: "busca_captura",
-      module_id: "mod-1",
-      program_id: "prog-empty",
-      program_version: 1,
-      status: "pending",
-    });
-    await db.doc("dogs/dog-bono/training/busca_captura").set({
-      current_module: "mod-1",
-      completed_module_ids: [],
-      completed_modules: [],
-      program_version: 1,
-      status: "in_formation",
-      achieved_milestones: {},
-    });
-
-    await expect(
-      decidePromotionCore(db, FieldValue, DECIDER, approvePayload("req-rollback")),
-    ).rejects.toThrow();
-
-    // Request should still be pending (transaction rolled back)
-    const request = (await db.doc("promotion_requests/req-rollback").get()).data()!;
+    // Request should NOT be updated (transaction rolled back)
+    const request = (await db.doc("promotion_requests/req-1").get()).data()!;
     expect(request.status).toBe("pending");
   });
 
-  it("10. audit trail is persisted on approval", async () => {
-    await seedScenario({});
+  // ─── 6. Program not found ──────────────────────────────────────────
 
-    await decidePromotionCore(db, FieldValue, DECIDER, approvePayload());
+  it("6. program not found — throws", async () => {
+    await db.recursiveDelete(db.doc("training_programs/prog-bc"));
 
-    const request = (await db.doc("promotion_requests/req-001").get()).data()!;
-    expect(request.audit_trail).toBeDefined();
-    expect(request.audit_trail.length).toBeGreaterThanOrEqual(1);
+    await expect(
+      decidePromotionCore(db, FieldValue, AUTH, makePayload()),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  // ─── 7. Module not in program ──────────────────────────────────────
+
+  it("7. module not in program — throws", async () => {
+    await seedRequest("req-1", { module_id: "mod-nonexistent" });
+    await seedProgress("dog-bono", "busca_captura", { current_module: "mod-nonexistent" });
+
+    await expect(
+      decidePromotionCore(db, FieldValue, AUTH, makePayload()),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  // ─── 8. Version divergence ─────────────────────────────────────────
+
+  it("8. program version divergence — throws", async () => {
+    // Update program version to 2 while request is version 1
+    await db.doc("training_programs/prog-bc").update({ version: 2 });
+
+    await expect(
+      decidePromotionCore(db, FieldValue, AUTH, makePayload()),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    // Request unchanged
+    const request = (await db.doc("promotion_requests/req-1").get()).data()!;
+    expect(request.status).toBe("pending");
+  });
+
+  // ─── 9. Current module divergence ──────────────────────────────────
+
+  it("9. current_module divergence — throws", async () => {
+    await seedProgress("dog-bono", "busca_captura", { current_module: "mod-2" });
+
+    await expect(
+      decidePromotionCore(db, FieldValue, AUTH, makePayload()),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  // ─── 10. Already decided ───────────────────────────────────────────
+
+  it("10. already decided — throws", async () => {
+    await seedRequest("req-1", { status: "approved" });
+
+    await expect(
+      decidePromotionCore(db, FieldValue, AUTH, makePayload()),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+  });
+
+  // ─── 11. Concurrent decisions ──────────────────────────────────────
+
+  it("11. two concurrent approvals — only one succeeds", async () => {
+    const p1 = decidePromotionCore(db, FieldValue, AUTH, makePayload());
+    const p2 = decidePromotionCore(db, FieldValue, { ...AUTH, ra: "99999", deciderName: "Outro" }, makePayload());
+
+    const results = await Promise.allSettled([p1, p2]);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+
+    // Exactly one succeeds, one fails
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    // 12. Only one decision persisted
+    const request = (await db.doc("promotion_requests/req-1").get()).data()!;
+    expect(["approved"]).toContain(request.status);
+  });
+
+  // ─── 13. Rollback — no partial update ──────────────────────────────
+
+  it("13. validation failure — complete rollback, no partial state", async () => {
+    // Request with module that does not match current_module
+    await seedProgress("dog-bono", "busca_captura", { current_module: "mod-2" });
+    // Request asks for mod-1 which differs from current
+
+    await expect(
+      decidePromotionCore(db, FieldValue, AUTH, makePayload()),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    // Request must remain pending
+    const request = (await db.doc("promotion_requests/req-1").get()).data()!;
+    expect(request.status).toBe("pending");
+
+    // Progress must remain unchanged
+    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
+    expect(progress.current_module).toBe("mod-2");
+    expect(progress.completed_module_ids).toEqual([]);
+  });
+
+  // ─── 14. completed_module_ids no duplication ───────────────────────
+
+  it("14. completed_module_ids persisted without duplication", async () => {
+    await decidePromotionCore(db, FieldValue, AUTH, makePayload());
+
+    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
+    const counts = progress.completed_module_ids.reduce((acc: Record<string, number>, id: string) => {
+      acc[id] = (acc[id] || 0) + 1;
+      return acc;
+    }, {});
+    expect(Object.values(counts).every((c: number) => c === 1)).toBe(true);
+  });
+
+  // ─── 15. completed_modules canonical format ────────────────────────
+
+  it("15. completed_modules in canonical format with milestones snapshot", async () => {
+    await decidePromotionCore(db, FieldValue, AUTH, makePayload());
+
+    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
+    const entry = progress.completed_modules[0];
+    expect(entry.module_id).toBe("mod-1");
+    expect(entry.module_name).toBe("Fundamentos");
+    expect(entry.module_order).toBe(1);
+    expect(entry.program_version).toBe(1);
+    expect(entry.completed_by).toBe("12345");
+    expect(entry.completed_at).toBeDefined();
+    expect(entry.milestones).toHaveLength(1);
+    expect(entry.milestones[0].milestone_id).toBe("ms-1");
+  });
+
+  // ─── 16. current_module intermediate ───────────────────────────────
+
+  it("16. intermediate approval sets current_module to next", async () => {
+    await decidePromotionCore(db, FieldValue, AUTH, makePayload());
+
+    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
+    expect(progress.current_module).toBe("mod-2");
+    expect(typeof progress.current_module).toBe("string");
+  });
+
+  // ─── 17. current_module null on last ───────────────────────────────
+
+  it("17. last module sets current_module = null", async () => {
+    await seedProgress("dog-bono", "busca_captura", {
+      current_module: "mod-3",
+      completed_module_ids: ["mod-1", "mod-2"],
+    });
+    await seedRequest("req-1", { module_id: "mod-3", module_name: "Busca Avançada", module_order: 3 });
+
+    await decidePromotionCore(db, FieldValue, AUTH, makePayload());
+
+    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
+    expect(progress.current_module).toBeNull();
+  });
+
+  // ─── 18. operational_since persisted as Timestamp ──────────────────
+
+  it("18. operational_since persisted as Date (Firestore converts to Timestamp)", async () => {
+    await seedProgress("dog-bono", "busca_captura", {
+      current_module: "mod-3",
+      completed_module_ids: ["mod-1", "mod-2"],
+    });
+    await seedRequest("req-1", { module_id: "mod-3", module_name: "Busca Avançada", module_order: 3 });
+
+    await decidePromotionCore(db, FieldValue, AUTH, makePayload());
+
+    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
+    // Firestore stores Dates as Timestamps; when read back they're Timestamps
+    expect(progress.operational_since).toBeDefined();
+    expect(progress.operational_since.toDate).toBeDefined(); // is a Timestamp
+  });
+
+  // ─── 19. Audit trail ───────────────────────────────────────────────
+
+  it("19. audit trail persisted on request", async () => {
+    await decidePromotionCore(db, FieldValue, AUTH, makePayload({ note: "Excelente" }));
+
+    const request = (await db.doc("promotion_requests/req-1").get()).data()!;
+    expect(request.audit_trail).toHaveLength(1);
     const entry = request.audit_trail[0];
     expect(entry.action).toBe("evolution_approved");
-    expect(entry.by).toBe("Sgt. Silva");
     expect(entry.by_ra).toBe("12345");
+    expect(entry.by_uid).toBe("uid-instructor-1");
   });
 
-  it("11. completed_module_ids is updated correctly", async () => {
-    await seedScenario({ completedModuleIds: ["mod-prev"] });
+  // ─── 20. Rejection does not alter progress ─────────────────────────
 
-    await decidePromotionCore(db, FieldValue, DECIDER, approvePayload());
+  it("20. rejection does not alter progress document", async () => {
+    const before = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
 
-    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
-    expect(progress.completed_module_ids).toContain("mod-prev");
-    expect(progress.completed_module_ids).toContain("mod-1");
-  });
+    await decidePromotionCore(db, FieldValue, AUTH, makePayload({
+      decision: "rejected",
+      reason: "Motivo válido",
+    }));
 
-  it("12. completed_modules has mobile-compatible entry format", async () => {
-    await seedScenario({});
-
-    await decidePromotionCore(db, FieldValue, DECIDER, approvePayload());
-
-    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
-    expect(progress.completed_modules.length).toBeGreaterThanOrEqual(1);
-    const entry = progress.completed_modules[0];
-    expect(entry).toHaveProperty("module_id", "mod-1");
-    expect(entry).toHaveProperty("module_name");
-    expect(entry).toHaveProperty("completed_at");
-    expect(entry).toHaveProperty("decided_by", "12345");
-  });
-
-  it("13. current_module advances to next module", async () => {
-    await seedScenario({ moduleId: "mod-2", currentModule: "mod-2", completedModuleIds: ["mod-1"] });
-
-    await decidePromotionCore(db, FieldValue, DECIDER, approvePayload());
-
-    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
-    expect(progress.current_module).toBe("mod-3");
-  });
-
-  it("14. operational_since is persisted on last-module graduation", async () => {
-    await seedScenario({
-      moduleId: "mod-3",
-      currentModule: "mod-3",
-      completedModuleIds: ["mod-1", "mod-2"],
-    });
-
-    await decidePromotionCore(db, FieldValue, DECIDER, approvePayload());
-
-    const progress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
-    expect(progress.operational_since).toBeDefined();
-    // Should be a Date or Timestamp
-    const since = progress.operational_since;
-    expect(since instanceof Date || (since && typeof since.toDate === "function")).toBe(true);
-  });
-
-  it("15. rejection does not modify progress document", async () => {
-    await seedScenario({ completedModuleIds: ["mod-prev"] });
-
-    const beforeProgress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
-
-    await decidePromotionCore(db, FieldValue, DECIDER, rejectPayload());
-
-    const afterProgress = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
-    expect(afterProgress.current_module).toBe(beforeProgress.current_module);
-    expect(afterProgress.completed_module_ids).toEqual(beforeProgress.completed_module_ids);
-    expect(afterProgress.status).toBe(beforeProgress.status);
+    const after = (await db.doc("dogs/dog-bono/training/busca_captura").get()).data()!;
+    expect(after.current_module).toBe(before.current_module);
+    expect(after.completed_module_ids).toEqual(before.completed_module_ids);
+    expect(after.status).toBe(before.status);
   });
 });

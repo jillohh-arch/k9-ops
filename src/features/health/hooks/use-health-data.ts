@@ -468,7 +468,10 @@ function sortDateDesc(a: Date | null, b: Date | null) {
 
 export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
   const { dogs: entityDogs, dogsLoading } = useEntities();
-  const [dogsState, setDogsState] = useState<SourceState>(emptySource);
+  const dogsState: SourceState = useMemo(
+    () => ({ error: null, loading: dogsLoading, records: entityDogs }),
+    [entityDogs, dogsLoading],
+  );
   const [rootHealthLogsState, setRootHealthLogsState] =
     useState<SourceState>(emptySource);
   const [healthEventsState, setHealthEventsState] =
@@ -478,10 +481,6 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
   const [documentsState, setDocumentsState] = useState<SourceState>(emptySource);
   const [rootDocumentsState, setRootDocumentsState] =
     useState<SourceState>(emptySource);
-
-  useEffect(() => {
-    setDogsState({ error: null, loading: dogsLoading, records: entityDogs });
-  }, [entityDogs, dogsLoading]);
 
   useEffect(() => {
     const unsubscribes = [

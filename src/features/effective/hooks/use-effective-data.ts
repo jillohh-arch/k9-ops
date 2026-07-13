@@ -331,28 +331,24 @@ export function useEffectiveData() {
   const { dogs: entityDogs, dogsLoading, users: entityUsers, usersLoading, vehicles: entityVehicles, vehiclesLoading } = useEntities();
   const [binomialsState, setBinomialsState] =
     useState<CollectionState>(initialState);
-  const [dogsState, setDogsState] = useState<CollectionState>(initialState);
-  const [usersState, setUsersState] = useState<CollectionState>(initialState);
-  const [vehiclesState, setVehiclesState] =
-    useState<CollectionState>(initialState);
+  const dogsState: CollectionState = useMemo(
+    () => ({ error: null, loading: dogsLoading, records: entityDogs }),
+    [entityDogs, dogsLoading],
+  );
+  const usersState: CollectionState = useMemo(
+    () => ({ error: null, loading: usersLoading, records: entityUsers }),
+    [entityUsers, usersLoading],
+  );
+  const vehiclesState: CollectionState = useMemo(
+    () => ({ error: null, loading: vehiclesLoading, records: entityVehicles }),
+    [entityVehicles, vehiclesLoading],
+  );
   const [shiftsState, setShiftsState] = useState<CollectionState>(initialState);
   const [specialtiesByDog, setSpecialtiesByDog] = useState<
     Record<string, K9Specialty[]>
   >({});
   const [specialtiesLoading, setSpecialtiesLoading] = useState(true);
   const [specialtiesError, setSpecialtiesError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDogsState({ error: null, loading: dogsLoading, records: entityDogs });
-  }, [entityDogs, dogsLoading]);
-
-  useEffect(() => {
-    setUsersState({ error: null, loading: usersLoading, records: entityUsers });
-  }, [entityUsers, usersLoading]);
-
-  useEffect(() => {
-    setVehiclesState({ error: null, loading: vehiclesLoading, records: entityVehicles });
-  }, [entityVehicles, vehiclesLoading]);
 
   useEffect(() => {
     const unsubscribes = [

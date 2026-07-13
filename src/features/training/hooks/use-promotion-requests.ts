@@ -150,7 +150,7 @@ export function usePromotionRequests() {
 
   useEffect(() => {
     mountedRef.current = true;
-    load();
+    queueMicrotask(load);
     return () => { mountedRef.current = false; };
   }, [load]);
 

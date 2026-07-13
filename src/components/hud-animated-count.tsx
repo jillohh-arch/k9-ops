@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { animate, useMotionValue, useReducedMotion, type MotionValue } from "framer-motion";
 
 export interface HudAnimatedCountProps {
@@ -32,27 +32,31 @@ export function HudAnimatedCount({
   // MotionValue criados incondicionalmente (Rules of Hooks)
   const motionValue = useMotionValue(value);
   const spanRef = useRef<HTMLSpanElement>(null);
-  const [display, setDisplay] = useState(() => format(Math.round(value)));
+  const [animatedDisplay, setAnimatedDisplay] = useState(() => format(Math.round(value)));
   const prefersReducedMotion = useReducedMotion();
 
-  // Sincronizar o MotionValue com o novo value
-  useEffect(() => {
-    const node = spanRef.current;
-    if (!node) return;
+  // Reduced motion: valor derivado diretamente, sem effect
+  const reducedMotionDisplay = useMemo(
+    () => format(Math.round(value)),
+    [format, value],
+  );
 
+  // Sincronizar o MotionValue com o novo value (apenas quando animação ativa)
+  useEffect(() => {
     if (prefersReducedMotion) {
-      // Reduced motion: atualizar direto sem animação
-      setDisplay(format(Math.round(value)));
       motionValue.set(value);
       return;
     }
+
+    const node = spanRef.current;
+    if (!node) return;
 
     // Cancelar animações anteriores e animar do valor atual até o novo
     const controls = animate(motionValue, value, {
       duration: 0.3,
       ease: [0.215, 0.61, 0.355, 1],
       onUpdate: (latest) => {
-        setDisplay(format(Math.round(latest)));
+        setAnimatedDisplay(format(Math.round(latest)));
       },
     });
 
@@ -63,7 +67,7 @@ export function HudAnimatedCount({
 
   return (
     <span className={className} ref={spanRef}>
-      {display}
+      {prefersReducedMotion ? reducedMotionDisplay : animatedDisplay}
     </span>
   );
 }

@@ -125,9 +125,22 @@ async function cleanup() {
   }
 }
 
+// ─── Skip when emulator is not running ─────────────────────────────────────
+
+async function isEmulatorRunning(): Promise<boolean> {
+  try {
+    const resp = await fetch("http://127.0.0.1:8080/", { signal: AbortSignal.timeout(1000) });
+    return resp.ok || resp.status === 200 || resp.status === 404;
+  } catch {
+    return false;
+  }
+}
+
+const emulatorAvailable = await isEmulatorRunning();
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe("decidePromotionCore: Firestore Emulator", () => {
+describe.skipIf(!emulatorAvailable)("decidePromotionCore: Firestore Emulator", () => {
   beforeEach(async () => {
     await cleanup();
   });

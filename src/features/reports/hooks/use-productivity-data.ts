@@ -291,7 +291,7 @@ export function useProductivityData(
 
   useEffect(() => {
     mountedRef.current = true;
-    load();
+    queueMicrotask(() => { load(); });
     return () => { mountedRef.current = false; };
   }, [load]);
 

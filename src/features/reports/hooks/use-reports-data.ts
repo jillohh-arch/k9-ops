@@ -627,7 +627,7 @@ export function useReportsData(periodDays: DashboardPeriodDays): ReportsData & {
 
   useEffect(() => {
     mountedRef.current = true;
-    load();
+    queueMicrotask(load);
     return () => { mountedRef.current = false; };
   }, [load]);
 

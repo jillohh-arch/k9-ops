@@ -13,10 +13,16 @@ import { useEffect, useMemo, useState } from "react";
 import { parseBinomialId } from "@/features/effective/data/binomial-admin-service";
 import { db } from "@/lib/firebase/client";
 
-export type BinomialRecord = Record<string, unknown> & {
-  _id: string;
-  _source: string;
-};
+import {
+  canonicalSource,
+  countValidFields,
+  mergeRecords,
+  type BinomialRecord,
+} from "../lib/binomial-deduplication";
+
+// Re-export for consumers
+export type { BinomialRecord };
+export { canonicalSource, countValidFields, mergeRecords };
 
 type RecordState = {
   error: string | null;
@@ -107,7 +113,7 @@ function useRecords(source: Query, sourceName: string) {
     () =>
       onSnapshot(
         source,
-        (snapshot) =>
+        (snapshot) => {
           setState({
             error: null,
             loading: false,
@@ -118,7 +124,8 @@ function useRecords(source: Query, sourceName: string) {
                 _source: sourceName,
               }))
               .filter((item) => !isArchived(item)),
-          }),
+          });
+        },
         (error) =>
           setState({ error: error.message, loading: false, records: [] }),
       ),
@@ -128,11 +135,19 @@ function useRecords(source: Query, sourceName: string) {
 }
 
 function matchesRa(record: BinomialRecord, ra: string) {
+  if (!ra) return false;
   return [
+    // Handler fields
     "handlerId",
     "handler_id",
     "handlerRa",
     "handler_ra",
+    // Primary handler (occurrences)
+    "primaryHandlerId",
+    "primary_handler_id",
+    "primaryHandlerRa",
+    "primary_handler_ra",
+    // Other fields
     "conductorRa",
     "performed_by",
     "created_by",
@@ -218,12 +233,27 @@ export function useBinomialProfileData(binomialId: string) {
 
   const dogId = identity?.dogId ?? "";
   const handlerRa = identity?.handlerRa ?? "";
-  const trainingsDogQuery = useMemo(
+
+  // BUG-FS-002: Mobile grava em dogs/{dogId}/training_sessions (subcoleção)
+  // e em trainings (raiz), não em training_sessions (raiz).
+  // Adicionar fontes correspondentes para recuperar os dados.
+  const trainingsSubcollectionQuery = useMemo(
+    () =>
+      dogId
+        ? query(collection(db, "dogs", dogId, "training_sessions"))
+        : null,
+    [dogId],
+  );
+  const trainingsQuery = useMemo(
     () => query(collection(db, "training_sessions"), where("dogId", "==", dogId)),
     [dogId],
   );
-  const trainingsDogLegacyQuery = useMemo(
+  const trainingsLegacyQuery = useMemo(
     () => query(collection(db, "training_sessions"), where("dog_id", "==", dogId)),
+    [dogId],
+  );
+  const trainingsRootQuery = useMemo(
+    () => query(collection(db, "trainings"), where("dogId", "==", dogId)),
     [dogId],
   );
   const occurrencesDogQuery = useMemo(
@@ -239,11 +269,17 @@ export function useBinomialProfileData(binomialId: string) {
     [dogId],
   );
 
-  const trainingsDog = useRecords(trainingsDogQuery, "training_sessions");
+  // BUG-FS-002: Registrar listeners para cada fonte de treino
+  const trainingsSubcollection = useRecords(
+    trainingsSubcollectionQuery!,
+    "dogs_training_sessions", // BUG-FS-002: nome consistente com SOURCE_FAMILY_MAP
+  );
+  const trainingsDog = useRecords(trainingsQuery, "training_sessions");
   const trainingsDogLegacy = useRecords(
-    trainingsDogLegacyQuery,
+    trainingsLegacyQuery,
     "training_sessions_legacy",
   );
+  const trainingsRoot = useRecords(trainingsRootQuery, "trainings");
   const occurrencesDog = useRecords(occurrencesDogQuery, "occurrences");
   const occurrencesDogLegacy = useRecords(
     occurrencesLegacyDogQuery,
@@ -253,6 +289,8 @@ export function useBinomialProfileData(binomialId: string) {
 
   return useMemo(() => {
     const records = [
+      ...trainingsSubcollection.records, // BUG-FS-002: Subcoleção do cão (FONTE CANÔNICA DO MOBILE)
+      ...trainingsRoot.records,           // BUG-FS-002: Coleção trainings (raiz)
       ...trainingsDog.records,
       ...trainingsDogLegacy.records,
       ...occurrencesDog.records,
@@ -261,7 +299,12 @@ export function useBinomialProfileData(binomialId: string) {
     ];
     const byIdentity = new Map<string, BinomialRecord>();
     for (const record of records) {
-      byIdentity.set(`${record._source}:${record._id}`, record);
+      // BUG-FS-001: Usar fonte canônica para evitar duplicação
+      // Quando mobile grava {dogId, dog_id}, o mesmo documento é retornado
+      // por dois listeners com _source diferente. Canonical source normaliza.
+      const key = `${canonicalSource(record._source)}:${record._id}`;
+      const existing = byIdentity.get(key);
+      byIdentity.set(key, existing ? mergeRecords(existing, record) : record);
     }
     const events = Array.from(byIdentity.values())
       .filter((record) => !handlerRa || matchesRa(record, handlerRa))
@@ -292,7 +335,10 @@ export function useBinomialProfileData(binomialId: string) {
       occurrences: events.filter((event) => event._source.startsWith("occurrences")),
       shifts: events.filter((event) => event._source === "shift_logs"),
       trainings: events.filter((event) =>
-        event._source.startsWith("training_sessions"),
+        // BUG-FS-002: Incluir todas as fontes de treino
+        event._source.startsWith("training_sessions") ||
+        event._source === "trainings" ||
+        event._source === "dogs_training_sessions",
       ),
     };
   }, [
@@ -308,5 +354,7 @@ export function useBinomialProfileData(binomialId: string) {
     shiftLogsDog,
     trainingsDog,
     trainingsDogLegacy,
+    trainingsSubcollection,
+    trainingsRoot,
   ]);
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  Check,
+  Copy,
   KeyRound,
   LoaderCircle,
   ShieldAlert,
@@ -18,7 +20,7 @@ import {
   getUserRoles,
   getUserStatus,
   reactivateUser,
-  sendPasswordReset,
+  resetHumanPassword,
   toggleInstructorRole,
 } from "@/features/effective/data/human-management-service";
 
@@ -85,6 +87,10 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
   // Dialogs
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+
+  // Nova senha temporária gerada pelo reset
+  const [newTemporaryPassword, setNewTemporaryPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Feedback with auto-dismiss
   const showFeedback = useCallback((message: string, type: FeedbackType) => {
@@ -181,14 +187,26 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
     setActionLoading("reset");
     setFeedback(null);
     try {
-      const result = await sendPasswordReset(ra);
+      const result = await resetHumanPassword(ra);
       setResetDialogOpen(false);
-      showFeedback(result.message, result.success ? "success" : "error");
+      if (result.success && result.temporaryPassword) {
+        setNewTemporaryPassword(result.temporaryPassword);
+        setCopied(false);
+      } else {
+        showFeedback(result.message, "error");
+      }
     } catch {
-      showFeedback("Falha ao enviar reset de senha.", "error");
+      showFeedback("Falha ao gerar nova senha. Tente novamente.", "error");
     } finally {
       setActionLoading(null);
     }
+  }
+
+  function handleCopyPassword() {
+    if (!newTemporaryPassword) return;
+    navigator.clipboard.writeText(newTemporaryPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   }
 
   if (loading) {
@@ -329,10 +347,10 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
             <KeyRound className="h-4 w-4 text-cyan-300" />
             <div>
               <p className="text-sm font-semibold text-slate-100">
-                Reset de senha
+                Nova senha temporária
               </p>
               <p className="text-xs text-slate-500">
-                Envia e-mail de redefinição para o agente
+                Gera uma nova senha para o agente fazer login
               </p>
             </div>
           </div>
@@ -344,7 +362,7 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
           >
             <span className="flex items-center gap-2">
               <KeyRound className="h-4 w-4" />
-              Enviar reset
+              Gerar senha
             </span>
           </button>
         </div>
@@ -398,16 +416,18 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
         </div>
       ) : null}
 
-      {/* ------ Dialog: Reset de senha ------ */}
+      {/* ------ Dialog: Confirmar reset ------ */}
       {resetDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1b2a] p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">
-              Enviar reset de senha
+            <KeyRound className="h-7 w-7 text-cyan-300" />
+            <h3 className="mt-3 text-lg font-bold text-white">
+              Gerar nova senha temporária
             </h3>
             <p className="mt-2 text-sm text-slate-400">
-              Será enviado um e-mail de redefinição de senha para o agente
-              {userName ? ` ${userName}` : ""} (RA: {ra}).
+              Será gerada uma nova senha para o agente
+              {userName ? ` ${userName}` : ""} (RA: {ra}). A senha anterior será
+              invalidada imediatamente.
             </p>
             <div className="mt-5 flex gap-3">
               <button
@@ -423,11 +443,61 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
                 onClick={handlePasswordReset}
                 type="button"
               >
-                {actionLoading === "reset"
-                  ? "Enviando..."
-                  : "Confirmar envio"}
+                {actionLoading === "reset" ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Gerando...
+                  </span>
+                ) : (
+                  "Confirmar"
+                )}
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ------ Modal: Exibir nova senha ------ */}
+      {newTemporaryPassword ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5">
+          <div className="w-full max-w-md rounded-3xl border border-cyan-300/25 bg-[#091525] p-6 shadow-2xl">
+            <KeyRound className="h-8 w-8 text-cyan-300" />
+            <h3 className="mt-4 text-xl font-black text-white">
+              Nova senha gerada
+            </h3>
+            <p className="mt-2 text-sm text-slate-400">
+              Entregue esta senha ao agente{userName ? ` ${userName}` : ""}. Ela
+              não será exibida novamente.
+            </p>
+            <div className="mt-5 flex items-center gap-3 rounded-xl border border-cyan-300/20 bg-black/25 p-4">
+              <span className="flex-1 font-mono text-lg font-black text-cyan-200">
+                {newTemporaryPassword}
+              </span>
+              <button
+                className="shrink-0 rounded-lg border border-cyan-300/25 bg-cyan-300/10 p-2 text-cyan-200 transition hover:bg-cyan-300/20"
+                onClick={handleCopyPassword}
+                title="Copiar senha"
+                type="button"
+              >
+                {copied ? (
+                  <Check className="h-4 w-4 text-emerald-300" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            {copied ? (
+              <p className="mt-2 text-center text-xs text-emerald-300">
+                Senha copiada!
+              </p>
+            ) : null}
+            <button
+              className="mt-5 w-full rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200"
+              onClick={() => setNewTemporaryPassword(null)}
+              type="button"
+            >
+              Fechar
+            </button>
           </div>
         </div>
       ) : null}

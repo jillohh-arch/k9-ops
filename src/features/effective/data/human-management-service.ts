@@ -3,11 +3,10 @@
 import { doc, getDoc, updateDoc, arrayUnion, Timestamp } from "firebase/firestore";
 
 import { auth, db } from "@/lib/firebase/client";
-import { callSetK9InstructorRole } from "@/lib/firebase/functions";
 import {
-  sendPasswordResetForRa,
-  getAuthErrorMessage,
-} from "@/features/auth/services/auth-service";
+  callAdminResetHumanPassword,
+  callSetK9InstructorRole,
+} from "@/lib/firebase/functions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,20 +151,35 @@ export async function getUserStatus(ra: string) {
 // 3. Password Reset
 // ---------------------------------------------------------------------------
 
-export async function sendPasswordReset(ra: string): Promise<{ success: boolean; message: string }> {
+export async function resetHumanPassword(
+  ra: string,
+): Promise<{ success: boolean; message: string; temporaryPassword?: string }> {
   try {
-    await sendPasswordResetForRa(ra);
+    const result = await callAdminResetHumanPassword({ ra });
+    const temporaryPassword = result.data.temporary_password;
 
     const actor = currentActorInfo();
     await appendAuditTrail(ra, {
-      action: "password_reset_sent",
+      action: "password_reset",
       actor_ra: actor.ra,
       actor_name: actor.name,
       details: {},
     });
 
-    return { success: true, message: "E-mail de reset de senha enviado com sucesso." };
+    return {
+      success: true,
+      message: "Nova senha temporária gerada com sucesso.",
+      temporaryPassword,
+    };
   } catch (error) {
-    return { success: false, message: getAuthErrorMessage(error) };
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "";
+    const message =
+      code === "functions/not-found" || code === "functions/unimplemented"
+        ? "Função de reset ainda não disponível no servidor."
+        : "Falha ao gerar nova senha. Tente novamente.";
+    return { success: false, message };
   }
 }

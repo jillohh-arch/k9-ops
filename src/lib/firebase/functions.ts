@@ -82,6 +82,11 @@ export const callAdminArchiveHuman = httpsCallable<
   Record<string, unknown>
 >(functions, "adminArchiveHuman");
 
+export const callAdminResetHumanPassword = httpsCallable<
+  { ra: string },
+  { temporary_password: string }
+>(functions, "adminResetHumanPassword");
+
 export const callAdminSaveHumanCertification = httpsCallable<
   { id?: string; payload: Record<string, unknown>; ra: string },
   { id?: string; ra?: string }

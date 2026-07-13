@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 
 import type { DashboardPeriodDays } from "@/features/dashboard/providers/dashboard-period-provider";
 
@@ -68,8 +68,8 @@ export function OccurrenceSparkline({
   const lastX = toX(points.length - 1);
   const lastY = toY(lastCount);
 
-  // Unique gradient id (per render)
-  const gradId = `spark-grad-${Math.random().toString(36).slice(2, 8)}`;
+  // Unique gradient id (stable across renders)
+  const gradId = useId();
 
   return (
     <div className="flex items-center gap-3">

@@ -655,14 +655,12 @@ export function useOperationalCenterData(
   const [collections, setCollections] = useState(createCollections);
   const { dogs: entityDogs, dogsLoading, users: entityUsers, usersLoading, vehicles: entityVehicles, vehiclesLoading } = useEntities();
 
-  useEffect(() => {
-    setCollections((current) => ({
-      ...current,
-      dogs: { error: null, loading: dogsLoading, records: entityDogs },
-      users: { error: null, loading: usersLoading, records: entityUsers },
-      vehicles: { error: null, loading: vehiclesLoading, records: entityVehicles },
-    }));
-  }, [entityDogs, dogsLoading, entityUsers, usersLoading, entityVehicles, vehiclesLoading]);
+  // Derive entity-backed collection slices without a syncing effect
+  const entityCollections = useMemo(() => ({
+    dogs: { error: null, loading: dogsLoading, records: entityDogs },
+    users: { error: null, loading: usersLoading, records: entityUsers },
+    vehicles: { error: null, loading: vehiclesLoading, records: entityVehicles },
+  }), [entityDogs, dogsLoading, entityUsers, usersLoading, entityVehicles, vehiclesLoading]);
 
   useEffect(() => {
     const paths = centerCollectionPaths.filter(
@@ -690,11 +688,16 @@ export function useOperationalCenterData(
     };
   }, []);
 
+  const mergedCollections = useMemo(
+    () => ({ ...collections, ...entityCollections }),
+    [collections, entityCollections],
+  );
+
   return useMemo<OperationalCenterData>(() => {
-    const allOccurrences = visibleRecords(collections.occurrences.records);
-    const dogs = visibleRecords(collections.dogs.records);
-    const users = visibleRecords(collections.users.records);
-    const vehicles = visibleRecords(collections.vehicles.records);
+    const allOccurrences = visibleRecords(mergedCollections.occurrences.records);
+    const dogs = visibleRecords(mergedCollections.dogs.records);
+    const users = visibleRecords(mergedCollections.users.records);
+    const vehicles = visibleRecords(mergedCollections.vehicles.records);
     const dogMap = lookupById(dogs);
     const userMap = lookupUsers(users);
     const vehicleMap = lookupById(vehicles);
@@ -705,10 +708,10 @@ export function useOperationalCenterData(
       return date != null && date >= periodFrom;
     });
 
-    const activeShifts = visibleRecords(collections.activeShifts.records).filter(
+    const activeShifts = visibleRecords(mergedCollections.activeShifts.records).filter(
       isActiveShift,
     );
-    const activeCrews = visibleRecords(collections.vehicleCrews.records).filter(
+    const activeCrews = visibleRecords(mergedCollections.vehicleCrews.records).filter(
       isActiveCrew,
     );
 
@@ -722,7 +725,7 @@ export function useOperationalCenterData(
     );
 
     const signaturePending = allOccurrences.filter(isSignaturePending);
-    const criticalInventory = visibleRecords(collections.inventoryItems.records).filter(
+    const criticalInventory = visibleRecords(mergedCollections.inventoryItems.records).filter(
       isInventoryCritical,
     );
 
@@ -889,17 +892,17 @@ export function useOperationalCenterData(
       },
       errors: centerCollectionPaths
         .map(({ key, path }) =>
-          collections[key].error ? `${path}: ${collections[key].error}` : null,
+          mergedCollections[key].error ? `${path}: ${mergedCollections[key].error}` : null,
         )
         .filter((item): item is string => Boolean(item)),
       integrity,
-      loading: centerCollectionPaths.some(({ key }) => collections[key].loading),
+      loading: centerCollectionPaths.some(({ key }) => mergedCollections[key].loading),
       managerQueue,
       occurrences: openOccurrences,
       recentRecords,
       summary,
     };
-  }, [collections, periodDays]);
+  }, [mergedCollections, periodDays]);
 }
 
 function formatStatus(value: string) {

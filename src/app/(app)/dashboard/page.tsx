@@ -181,14 +181,17 @@ export default function DashboardPage() {
     return () => { for (const unsub of unsubscribes) unsub(); };
   }, []);
 
-  useEffect(() => {
-    setDashboardCollections((current) => ({
-      ...current,
-      dogs: { error: null, loading: dogsLoading, records: entityDogs },
-      users: { error: null, loading: usersLoading, records: entityUsers },
-      vehicles: { error: null, loading: vehiclesLoading, records: entityVehicles },
-    }));
-  }, [entityDogs, dogsLoading, entityUsers, usersLoading, entityVehicles, vehiclesLoading]);
+  // Derive entity-backed slices without a syncing effect
+  const entitySlices = useMemo(() => ({
+    dogs: { error: null, loading: dogsLoading, records: entityDogs },
+    users: { error: null, loading: usersLoading, records: entityUsers },
+    vehicles: { error: null, loading: vehiclesLoading, records: entityVehicles },
+  }), [entityDogs, dogsLoading, entityUsers, usersLoading, entityVehicles, vehiclesLoading]);
+
+  const mergedDashboard = useMemo(
+    () => ({ ...dashboardCollections, ...entitySlices }),
+    [dashboardCollections, entitySlices],
+  );
 
   useEffect(() => {
     const thirtyOneDaysAgo = new Date();
@@ -269,26 +272,26 @@ export default function DashboardPage() {
   const occurrenceMetrics = useMemo(() => computeOccurrenceMetrics(occurrences.records, periodOccurrences), [occurrences.records, periodOccurrences]);
   const pendingMetrics = useMemo(() => computePendingMetrics(occurrences.records, notifications.records, promotionRequests.records), [notifications.records, occurrences.records, promotionRequests.records]);
   const integrityMetrics = useMemo(() => computeIntegrityMetrics(occurrences.records), [occurrences.records]);
-  const healthMetrics = useMemo(() => computeHealthMetrics(dashboardCollections.dogs.records, [], [], periodDays), [dashboardCollections.dogs.records, periodDays]);
-  const summaryCards = useMemo(() => computeSummaryCards(dashboardCollections), [dashboardCollections]);
+  const healthMetrics = useMemo(() => computeHealthMetrics(mergedDashboard.dogs.records, [], [], periodDays), [mergedDashboard.dogs.records, periodDays]);
+  const summaryCards = useMemo(() => computeSummaryCards(mergedDashboard), [mergedDashboard]);
 
-  const healthLoading = dashboardCollections.dogs.loading;
-  const healthError = dashboardCollections.dogs.error;
+  const healthLoading = mergedDashboard.dogs.loading;
+  const healthError = mergedDashboard.dogs.error;
   const readinessPercent = healthMetrics.total > 0 ? Math.round((healthMetrics.ready / healthMetrics.total) * 100) : 0;
 
   const shiftPayload = useShiftPayload({
     shiftGroups,
     shiftAssignments,
-    users: dashboardCollections.users,
+    users: mergedDashboard.users,
   });
 
-  const crewMembers = useCrewMembers(dashboardCollections.vehicleCrews.records);
+  const crewMembers = useCrewMembers(mergedDashboard.vehicleCrews.records);
 
   const crewPayload = useCrewPayload({
-    vehicleCrews: dashboardCollections.vehicleCrews,
-    activeShifts: dashboardCollections.activeShifts,
-    dogs: dashboardCollections.dogs,
-    users: dashboardCollections.users,
+    vehicleCrews: mergedDashboard.vehicleCrews,
+    activeShifts: mergedDashboard.activeShifts,
+    dogs: mergedDashboard.dogs,
+    users: mergedDashboard.users,
     crewMembers,
   });
 

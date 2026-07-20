@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:health-permission-backfill": "npx firebase-tools emulators:exec --project canil-gcm --only firestore \"node tools/backfill_health_nutrition_plan_permission_emulator_test.mjs\"",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

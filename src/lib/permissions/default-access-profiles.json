@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "actions": [
     {
       "id": "view",
@@ -35,6 +35,11 @@
       "id": "audit",
       "label": "Auditar",
       "description": "Permite consultar trilhas e evidências de auditoria."
+    },
+    {
+      "id": "manage_nutrition_plan",
+      "label": "Gerenciar planos alimentares",
+      "description": "Permite criar, substituir, atualizar administrativamente e cancelar planos alimentares dos K9."
     }
   ],
   "modules": [
@@ -227,7 +232,7 @@
         "occurrences": ["view", "edit", "archive", "export", "approve", "audit"],
         "training": ["view", "edit", "approve", "export", "audit"],
         "training_matrix": ["view", "edit", "approve", "export", "audit"],
-        "health": ["view", "edit", "archive", "export", "audit"],
+        "health": ["view", "edit", "archive", "export", "audit", "manage_nutrition_plan"],
         "inventory": ["view", "export"],
         "reports": ["view", "export", "audit"],
         "audit": ["view", "export", "audit"],
@@ -255,7 +260,7 @@
         "occurrences": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "training": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "training_matrix": ["view", "create", "edit", "archive", "export", "approve", "audit"],
-        "health": ["view", "create", "edit", "archive", "export", "approve", "audit"],
+        "health": ["view", "create", "edit", "archive", "export", "approve", "audit", "manage_nutrition_plan"],
         "inventory": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "reports": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "audit": ["view", "create", "edit", "archive", "export", "approve", "audit"],

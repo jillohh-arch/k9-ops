@@ -134,8 +134,14 @@ export const levelActions: Record<ModuleAccessLevel, AccessAction[]> = {
   gestão: ["view", "create", "edit", "export", "approve", "audit"],
   none: [],
   operacional: ["view", "create", "edit", "approve"],
-  total: accessActions.map((action) => action.id),
+  total: accessActions
+    .map((action) => action.id)
+    .filter((action) => action !== "manage_nutrition_plan"),
 };
+
+const genericAccessActions = accessActions.filter(
+  (action) => action.id !== "manage_nutrition_plan",
+);
 
 export const moduleViews: ModuleView[] = [
   { id: "dashboard", icon: LayoutGrid },
@@ -180,12 +186,12 @@ export function moduleLabel(moduleId: AccessModuleId) {
 
 export function moduleLevel(profile: AccessProfile, moduleId: AccessModuleId): ModuleAccessLevel {
   const permissions = profile.permissions[moduleId] ?? {};
-  const enabled = accessActions
+  const enabled = genericAccessActions
     .map((action) => action.id)
     .filter((action) => permissions[action] === true);
 
   if (!enabled.length) return "none";
-  if (enabled.length === accessActions.length) return "total";
+  if (enabled.length === genericAccessActions.length) return "total";
   if (
     ["view", "create", "edit", "export", "approve", "audit"].every(
       (action) => permissions[action as AccessAction] === true,
@@ -212,12 +218,15 @@ export function setModuleAccessLevel(
     ...profile,
     permissions: {
       ...profile.permissions,
-      [moduleId]: Object.fromEntries(
-        accessActions.map((action) => [
+      [moduleId]: {
+        ...(profile.permissions[moduleId] ?? {}),
+        ...Object.fromEntries(
+        genericAccessActions.map((action) => [
           action.id,
           levelActions[level].includes(action.id),
         ]),
-      ) as Partial<Record<AccessAction, boolean>>,
+        ) as Partial<Record<AccessAction, boolean>>,
+      },
     },
   };
 }

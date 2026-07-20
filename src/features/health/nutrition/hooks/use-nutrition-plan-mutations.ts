@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { functions as defaultFunctions } from "@/lib/firebase/client";
 import type { Functions } from "firebase/functions";
 import {
   buildCreateNutritionPlanRequest,
@@ -120,7 +121,7 @@ export interface UseNutritionPlanMutationsOptions {
    * Firebase Functions instance.
    * Can be provided directly (e.g., from props) or imported from @/lib/firebase/client.
    */
-  functions: Functions;
+  functions?: Functions;
 }
 
 // =============================================================================
@@ -271,9 +272,9 @@ export interface UseNutritionPlanMutationsReturn {
  * - Race safety: stale responses are discarded via operationId comparison
  */
 export function useNutritionPlanMutations(
-  options: UseNutritionPlanMutationsOptions
+  options: UseNutritionPlanMutationsOptions = {}
 ): UseNutritionPlanMutationsReturn {
-  const { functions } = options;
+  const functions = options.functions ?? defaultFunctions;
 
   // ─── CREATE state ───────────────────────────────────────────────────────
   const [createState, setCreateState] = useState<CreateMutationState>({ status: "idle" });

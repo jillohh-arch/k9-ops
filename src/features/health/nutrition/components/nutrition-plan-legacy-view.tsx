@@ -1,12 +1,15 @@
 "use client";
 
-import { AlertCircle, Clock, FileSpreadsheet, Lock, Scale, Utensils } from "lucide-react";
+import { AlertCircle, Clock, FileSpreadsheet, Lock, Plus, Scale, Utensils } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { LegacyNutritionPlanView } from "../types";
 
 interface NutritionPlanLegacyViewProps {
   plan: LegacyNutritionPlanView;
   dogName?: string;
+  canManage?: boolean;
+  onOpenCreate?: () => void;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -31,6 +34,8 @@ function formatWeight(grams: number | undefined | null) {
 export function NutritionPlanLegacyView({
   plan,
   dogName,
+  canManage = false,
+  onOpenCreate,
 }: NutritionPlanLegacyViewProps) {
   return (
     <div
@@ -38,21 +43,36 @@ export function NutritionPlanLegacyView({
       className="space-y-6"
     >
       {/* Notice Banner */}
-      <div className="flex items-start gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 shadow-[0_12px_40px_rgba(245,158,11,0.08)]">
-        <AlertCircle className="h-6 w-6 shrink-0 text-amber-400 mt-0.5" />
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h4 className="font-bold text-amber-200">
-              Plano Alimentar Legado em Exibição {dogName ? `— ${dogName}` : ""}
-            </h4>
-            <Badge tone="yellow">
-              SOMENTE LEITURA
-            </Badge>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 shadow-[0_12px_40px_rgba(245,158,11,0.08)]">
+        <div className="flex items-start gap-4">
+          <AlertCircle className="h-6 w-6 shrink-0 text-amber-400 mt-0.5" />
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <h4 className="font-bold text-amber-200">
+                Plano Alimentar Legado em Exibição {dogName ? `— ${dogName}` : ""}
+              </h4>
+              <Badge tone="yellow">
+                SOMENTE LEITURA
+              </Badge>
+            </div>
+            <p className="text-xs text-amber-200/80 leading-relaxed max-w-2xl">
+              Este registro provém da base de dados legada ({plan.legacySource || "legacy"}). Ele é exibido em modo somente leitura e não pode ser alterado por mutações canônicas. O registro legado continuará integralmente preservado. Para atualizar a nutrição deste K9, registre um novo plano canônico.
+            </p>
           </div>
-          <p className="text-xs text-amber-200/80 leading-relaxed">
-            Este registro provém da base de dados legada ({plan.legacySource || "legacy"}). Ele é exibido em modo somente leitura e não pode ser editado via mutações canônicas. Para atualizar o plano deste K9, será necessário registrar um novo plano canônico.
-          </p>
         </div>
+
+        {canManage && onOpenCreate && (
+          <div className="shrink-0 self-start sm:self-center">
+            <Button
+              variant="primary"
+              onClick={onOpenCreate}
+              className="text-xs font-bold shadow-md"
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Criar Novo Plano Canônico
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Main Container */}

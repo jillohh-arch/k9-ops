@@ -20,6 +20,7 @@ import { NutritionPlanLegacyView } from "./nutrition-plan-legacy-view";
 import { NutritionPlanConflictState } from "./nutrition-plan-conflict-state";
 import { NutritionPlanEmptyState } from "./nutrition-plan-empty-state";
 import { NutritionPlanDegradedState } from "./nutrition-plan-degraded-state";
+import { NutritionPlanCreateDialog } from "./nutrition-plan-create-dialog";
 import type { NutritionPlan, LegacyNutritionPlanView } from "../types";
 
 export interface NutritionPlanManagementProps {
@@ -41,6 +42,9 @@ export function NutritionPlanManagement({
 }: NutritionPlanManagementProps) {
   const { can } = useAccessControl();
   const canManage = can("health", "manage_nutrition_plan") || can("health", "edit");
+
+  // Create Dialog Modal State
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   // Fetch K9 dogs from entities provider
   const { dogs: entityDogs, dogsLoading } = useEntities();
@@ -227,6 +231,7 @@ export function NutritionPlanManagement({
         <NutritionPlanEmptyState
           dogName={dogName}
           canManage={canManage}
+          onOpenCreate={() => setCreateDialogOpen(true)}
         />
       )}
 
@@ -246,6 +251,8 @@ export function NutritionPlanManagement({
             <NutritionPlanLegacyView
               plan={planState.activePlan as LegacyNutritionPlanView}
               dogName={dogName}
+              canManage={canManage}
+              onOpenCreate={() => setCreateDialogOpen(true)}
             />
           )}
         </div>
@@ -262,6 +269,19 @@ export function NutritionPlanManagement({
         <NutritionPlanLegacyView
           plan={planState.activePlan as LegacyNutritionPlanView}
           dogName={dogName}
+          canManage={canManage}
+          onOpenCreate={() => setCreateDialogOpen(true)}
+        />
+      )}
+
+      {/* CREATE AND ACTIVATE DIALOG */}
+      {canManage && (
+        <NutritionPlanCreateDialog
+          open={createDialogOpen}
+          onClose={() => setCreateDialogOpen(false)}
+          dogId={currentDogId}
+          dogName={dogName}
+          isLegacyContext={planState.status === "legacy"}
         />
       )}
     </div>

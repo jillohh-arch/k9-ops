@@ -1,15 +1,18 @@
 "use client";
 
-import { UtensilsCrossed, ShieldAlert } from "lucide-react";
+import { UtensilsCrossed, ShieldAlert, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface NutritionPlanEmptyStateProps {
   dogName?: string;
   canManage?: boolean;
+  onOpenCreate?: () => void;
 }
 
 export function NutritionPlanEmptyState({
   dogName,
   canManage = false,
+  onOpenCreate,
 }: NutritionPlanEmptyStateProps) {
   return (
     <div
@@ -30,9 +33,23 @@ export function NutritionPlanEmptyState({
           : "Este K9 ainda não possui um plano alimentar canônico ou legado cadastrado no sistema."}
       </p>
 
-      {canManage ? (
+      {canManage && onOpenCreate ? (
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <Button
+            variant="primary"
+            onClick={onOpenCreate}
+            className="text-xs font-bold px-6 shadow-lg"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Criar Plano Alimentar
+          </Button>
+          <span className="text-[11px] text-slate-500">
+            Cadastrar nova dieta canônica e cronograma de refeições
+          </span>
+        </div>
+      ) : canManage ? (
         <div className="mt-6 flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-300">
-          <span>Modo Gestão Ativo — As funcionalidades de criação de plano alimentar estão sendo preparadas.</span>
+          <span>Modo Gestão Ativo — Opção de criação pronta para acionamento</span>
         </div>
       ) : (
         <div className="mt-6 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs text-slate-400">

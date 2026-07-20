@@ -9,6 +9,10 @@ import type { NutritionPlanState, NutritionPlan, LegacyNutritionPlanView } from 
 // MOCK SETUP
 // =============================================================================
 
+vi.mock("@/lib/firebase/client", () => ({
+  functions: {},
+}));
+
 const mockCan = vi.fn();
 vi.mock("@/features/access/providers/access-control-provider", () => ({
   useAccessControl: () => ({
@@ -35,9 +39,12 @@ vi.mock("../hooks/use-nutrition-plans", () => ({
 }));
 
 // Mock mutation executors / services to ensure NO mutation executor is ever called
-const mockExecuteCreate = vi.fn();
-const mockExecuteUpdate = vi.fn();
-const mockExecuteCancel = vi.fn();
+const { mockExecuteCreate, mockExecuteUpdate, mockExecuteCancel } = vi.hoisted(() => ({
+  mockExecuteCreate: vi.fn(),
+  mockExecuteUpdate: vi.fn(),
+  mockExecuteCancel: vi.fn(),
+}));
+
 vi.mock("../data/nutrition-plan-mutation-service", () => ({
   executeCreateNutritionPlan: mockExecuteCreate,
   executeUpdateNutritionPlan: mockExecuteUpdate,

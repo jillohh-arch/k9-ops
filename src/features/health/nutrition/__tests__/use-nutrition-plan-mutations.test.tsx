@@ -17,6 +17,10 @@ import type {
 // MOCK SETUP
 // =============================================================================
 
+vi.mock("@/lib/firebase/client", () => ({
+  functions: {},
+}));
+
 // Mock the mutation service — NOT Firebase
 vi.mock("../data/nutrition-plan-mutation-service", () => ({
   generateNutritionPlanOperationId: vi.fn(() => `op-${Math.random().toString(36).slice(2, 10)}`),
@@ -95,7 +99,7 @@ const mockBuildCancel = buildCancelNutritionPlanRequest as ReturnType<typeof vi.
 const mockGenOpId = generateNutritionPlanOperationId as ReturnType<typeof vi.fn>;
 
 // Mock Firebase functions
-const mockFunctions = {} as Parameters<typeof useNutritionPlanMutations>[0]["functions"];
+const mockFunctions = {} as NonNullable<Parameters<typeof useNutritionPlanMutations>[0]>["functions"];
 
 // =============================================================================
 // MANUAL MOCK STATE — avoids vitest queue pitfalls
@@ -1321,5 +1325,26 @@ describe("resetAll", () => {
     expect(result.current.createState.status).toBe("idle");
     expect(result.current.updateState.status).toBe("idle");
     expect(result.current.cancelState.status).toBe("idle");
+  });
+});
+
+// =============================================================================
+// TESTS: FUNCTIONS RESOLUTION & DEFAULT SIGNATURE
+// =============================================================================
+
+describe("Functions Instance Resolution", () => {
+  it("should allow calling useNutritionPlanMutations() without options and default to client functions", () => {
+    const { result } = renderHook(() => useNutritionPlanMutations());
+
+    expect(result.current.createState.status).toBe("idle");
+    expect(result.current.updateState.status).toBe("idle");
+    expect(result.current.cancelState.status).toBe("idle");
+  });
+
+  it("should prioritize injected functions instance when options.functions is provided", () => {
+    const customFunctions = { app: "custom" } as unknown as NonNullable<Parameters<typeof useNutritionPlanMutations>[0]>["functions"];
+    const { result } = renderHook(() => useNutritionPlanMutations({ functions: customFunctions }));
+
+    expect(result.current.createState.status).toBe("idle");
   });
 });

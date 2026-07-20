@@ -132,7 +132,13 @@ export interface NutritionPlan {
   specialInstructions?: string;
   professional?: {
     name?: string;
+    registration_type?: string;
+    registration_number?: string;
+    registrationType?: string;
+    registrationNumber?: string;
     crmv?: string;
+    clinic?: string;
+    specialty?: string;
     [key: string]: unknown;
   };
   sourceDocument?: {
@@ -157,6 +163,8 @@ export interface LegacyNutritionPlanView {
   hydrationMl?: number;
   notes?: string;
   professionalName?: string;
+  professionalRegistrationType?: string;
+  professionalRegistrationNumber?: string;
   professionalCrmv?: string;
   rawStatus?: string;
   legacySource: string;

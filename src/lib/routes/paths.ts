@@ -20,6 +20,7 @@ export const paths = {
   trainingCurriculums: "/training/curriculums",
   trainingMatrix: "/training-matrix",
   health: "/health",
+  healthNutrition: "/health/nutrition",
   inventory: "/inventory",
   reports: "/reports",
   access: "/access",

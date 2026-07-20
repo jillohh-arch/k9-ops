@@ -21,6 +21,7 @@ import { NutritionPlanConflictState } from "./nutrition-plan-conflict-state";
 import { NutritionPlanEmptyState } from "./nutrition-plan-empty-state";
 import { NutritionPlanDegradedState } from "./nutrition-plan-degraded-state";
 import { NutritionPlanCreateDialog } from "./nutrition-plan-create-dialog";
+import { NutritionPlanEditDialog } from "./nutrition-plan-edit-dialog";
 import type { NutritionPlan, LegacyNutritionPlanView } from "../types";
 
 export interface NutritionPlanManagementProps {
@@ -41,10 +42,11 @@ export function NutritionPlanManagement({
   initialDogId,
 }: NutritionPlanManagementProps) {
   const { can } = useAccessControl();
-  const canManage = can("health", "manage_nutrition_plan") || can("health", "edit");
+  const canManage = can("health", "manage_nutrition_plan");
 
-  // Create Dialog Modal State
+  // Dialog Modals State
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // Fetch K9 dogs from entities provider
   const { dogs: entityDogs, dogsLoading } = useEntities();
@@ -262,6 +264,8 @@ export function NutritionPlanManagement({
         <NutritionPlanActiveView
           plan={planState.activePlan as NutritionPlan}
           dogName={dogName}
+          canManage={canManage}
+          onOpenEdit={() => setEditDialogOpen(true)}
         />
       )}
 
@@ -282,6 +286,16 @@ export function NutritionPlanManagement({
           dogId={currentDogId}
           dogName={dogName}
           isLegacyContext={planState.status === "legacy"}
+        />
+      )}
+
+      {/* EDIT ADMINISTRATIVE FIELDS DIALOG */}
+      {canManage && editDialogOpen && planState.status === "canonical" && planState.activePlan && (
+        <NutritionPlanEditDialog
+          open={editDialogOpen}
+          onClose={() => setEditDialogOpen(false)}
+          plan={planState.activePlan as NutritionPlan}
+          dogName={dogName}
         />
       )}
     </div>

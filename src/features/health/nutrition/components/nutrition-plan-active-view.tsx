@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock,
   Droplets,
+  Edit3,
   FileCheck2,
   FileText,
   Pill,
@@ -14,11 +15,14 @@ import {
   Utensils,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { NutritionPlan } from "../types";
 
 interface NutritionPlanActiveViewProps {
   plan: NutritionPlan;
   dogName?: string;
+  canManage?: boolean;
+  onOpenEdit?: () => void;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -71,6 +75,8 @@ function formatProfessionalRegistration(prof?: {
 export function NutritionPlanActiveView({
   plan,
   dogName,
+  canManage = false,
+  onOpenEdit,
 }: NutritionPlanActiveViewProps) {
   return (
     <div
@@ -111,11 +117,24 @@ export function NutritionPlanActiveView({
             </p>
           </div>
 
-          {/* Identification badge */}
-          <div className="flex flex-col items-start md:items-end gap-1 rounded-2xl border border-cyan-500/20 bg-slate-900/80 p-3.5 px-5">
-            <div className="text-xs font-medium text-slate-400">ID do Plano</div>
-            <div className="font-mono text-xs text-cyan-300 select-all font-semibold">
-              {plan.id}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            {canManage && onOpenEdit && (
+              <Button
+                variant="secondary"
+                onClick={onOpenEdit}
+                className="text-xs font-bold border-cyan-500/30 text-cyan-200 shadow-md"
+              >
+                <Edit3 className="mr-1.5 h-3.5 w-3.5 text-cyan-400" />
+                Editar Informações
+              </Button>
+            )}
+
+            {/* Identification badge */}
+            <div className="flex flex-col items-start md:items-end gap-1 rounded-2xl border border-cyan-500/20 bg-slate-900/80 p-3.5 px-5">
+              <div className="text-xs font-medium text-slate-400">ID do Plano</div>
+              <div className="font-mono text-xs text-cyan-300 select-all font-semibold">
+                {plan.id}
+              </div>
             </div>
           </div>
         </div>

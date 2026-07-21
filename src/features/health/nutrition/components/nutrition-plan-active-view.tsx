@@ -9,6 +9,7 @@ import {
   FileCheck2,
   FileText,
   Pill,
+  RefreshCw,
   Scale,
   ShieldCheck,
   UserCheck,
@@ -23,6 +24,7 @@ interface NutritionPlanActiveViewProps {
   dogName?: string;
   canManage?: boolean;
   onOpenEdit?: () => void;
+  onOpenReplace?: () => void;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -77,6 +79,7 @@ export function NutritionPlanActiveView({
   dogName,
   canManage = false,
   onOpenEdit,
+  onOpenReplace,
 }: NutritionPlanActiveViewProps) {
   return (
     <div
@@ -126,6 +129,17 @@ export function NutritionPlanActiveView({
               >
                 <Edit3 className="mr-1.5 h-3.5 w-3.5 text-cyan-400" />
                 Editar Informações
+              </Button>
+            )}
+
+            {canManage && onOpenReplace && (
+              <Button
+                variant="secondary"
+                onClick={onOpenReplace}
+                className="text-xs font-bold border-cyan-500/30 text-cyan-200 shadow-md"
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5 text-cyan-400" />
+                Substituir Plano
               </Button>
             )}
 

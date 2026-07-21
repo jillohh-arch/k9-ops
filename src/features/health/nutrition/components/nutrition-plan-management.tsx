@@ -22,6 +22,7 @@ import { NutritionPlanEmptyState } from "./nutrition-plan-empty-state";
 import { NutritionPlanDegradedState } from "./nutrition-plan-degraded-state";
 import { NutritionPlanCreateDialog } from "./nutrition-plan-create-dialog";
 import { NutritionPlanEditDialog } from "./nutrition-plan-edit-dialog";
+import { NutritionPlanReplaceDialog } from "./nutrition-plan-replace-dialog";
 import type { NutritionPlan, LegacyNutritionPlanView } from "../types";
 
 export interface NutritionPlanManagementProps {
@@ -47,6 +48,7 @@ export function NutritionPlanManagement({
   // Dialog Modals State
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
 
   // Fetch K9 dogs from entities provider
   const { dogs: entityDogs, dogsLoading } = useEntities();
@@ -266,6 +268,7 @@ export function NutritionPlanManagement({
           dogName={dogName}
           canManage={canManage}
           onOpenEdit={() => setEditDialogOpen(true)}
+          onOpenReplace={() => setReplaceDialogOpen(true)}
         />
       )}
 
@@ -294,6 +297,16 @@ export function NutritionPlanManagement({
         <NutritionPlanEditDialog
           open={editDialogOpen}
           onClose={() => setEditDialogOpen(false)}
+          plan={planState.activePlan as NutritionPlan}
+          dogName={dogName}
+        />
+      )}
+
+      {/* REPLACE STRUCTURAL PLAN DIALOG */}
+      {canManage && replaceDialogOpen && planState.status === "canonical" && planState.activePlan && (
+        <NutritionPlanReplaceDialog
+          open={replaceDialogOpen}
+          onClose={() => setReplaceDialogOpen(false)}
           plan={planState.activePlan as NutritionPlan}
           dogName={dogName}
         />

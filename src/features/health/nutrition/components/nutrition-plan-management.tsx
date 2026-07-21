@@ -6,6 +6,7 @@ import {
   Apple,
   Dog,
   Lock,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -194,9 +195,17 @@ export function NutritionPlanManagement({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <Badge tone="cyan" className="text-[11px]">
-              {canManage ? "Mapeamento Nutricional K9 Ops" : "Requer permissão health.manage_nutrition_plan"}
-            </Badge>
+            {canManage ? (
+              <Badge tone="cyan" className="text-[11px]">
+                <ShieldCheck className="mr-1 h-3 w-3" />
+                Gestão Habilitada
+              </Badge>
+            ) : (
+              <Badge tone="yellow" className="text-[11px]">
+                <ShieldAlert className="mr-1 h-3 w-3" />
+                Somente Leitura
+              </Badge>
+            )}
           </div>
         </div>
       </div>

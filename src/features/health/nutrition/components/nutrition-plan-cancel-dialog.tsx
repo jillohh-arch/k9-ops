@@ -14,7 +14,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNutritionPlanMutations } from "../hooks/use-nutrition-plan-mutations";
 import type {
@@ -439,17 +438,15 @@ export function NutritionPlanCancelDialog({
             >
               Motivo do cancelamento <span className="text-red-400">*</span>
             </Label>
-            <Input
+            <textarea
               id={`${idPrefix}-cancel-reason`}
-              placeholder="Informe por que este plano deixará de ser utilizado como referência ativa."
+              rows={4}
+              placeholder="Informe por que este plano deixará de ser utilizado como referência ativa. Este motivo será registrado no histórico de auditoria do plano."
               value={reason}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReason(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setReason(e.target.value)}
               disabled={isExecuting || isStale}
-              className="bg-slate-900/80 border-slate-700 text-slate-100 text-sm"
+              className="w-full rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500/50 resize-none"
             />
-            <p className="text-[11px] text-slate-500">
-              Este motivo será registrado no histórico de auditoria do plano.
-            </p>
           </div>
         )}
 

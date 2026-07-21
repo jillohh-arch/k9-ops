@@ -225,6 +225,29 @@ describe("Gate 5D.2 — Create & Activate Nutrition Plan UI", () => {
       expect(screen.getByText(/Criar e Ativar Plano Alimentar/i)).toBeInTheDocument();
     });
 
+    it("should not show meal sum validation before daily amount is defined", () => {
+      render(
+        <NutritionPlanCreateDialog
+          open={true}
+          onClose={vi.fn()}
+          dogId="dog-1"
+          dogName="Thor"
+        />
+      );
+
+      // Default state: amountGramsPerDay is empty, mealSchedule has 2 slots totaling 500g
+      // The validation bar should NOT appear when amountGramsPerDay is not set
+      expect(screen.queryByTestId("meal-sum-validation-bar")).not.toBeInTheDocument();
+
+      // Now set the daily amount to 600g - validation bar should appear
+      const amountInput = screen.getByLabelText(/Quantidade Diária/i);
+      fireEvent.change(amountInput, { target: { value: "600" } });
+
+      // Now the validation bar should be visible showing "Faltam 100 g"
+      expect(screen.getByTestId("meal-sum-validation-bar")).toBeInTheDocument();
+      expect(screen.getByTestId("meal-sum-validation-bar")).toHaveTextContent("Faltam 100 g");
+    });
+
     it("should perform continuous validation of meal schedule sum matching amountGramsPerDay", () => {
       render(
         <NutritionPlanCreateDialog

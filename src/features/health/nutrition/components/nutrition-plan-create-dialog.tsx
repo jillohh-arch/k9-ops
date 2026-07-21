@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock,
   Droplets,
+  FileText,
   Plus,
   RefreshCw,
   ShieldAlert,
@@ -294,7 +295,9 @@ export function NutritionPlanCreateDialog({
       description="Formulário de cadastro e ativação de plano nutricional canônico K9"
       className="max-w-4xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(100vh-12rem)]">
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto px-5 py-1 space-y-6 min-h-0">
         {/* Banner de Contexto Legado */}
         {isLegacyContext && (
           <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
@@ -388,14 +391,14 @@ export function NutritionPlanCreateDialog({
         {/* FORMULÁRIO PRINCIPAL (Bloqueado em executing ou success) */}
         <fieldset disabled={isExecuting || isSuccess} className="space-y-6">
           {/* Seção 1: Dados Principais */}
-          <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
               <Apple className="h-4 w-4" />
               <span>Dieta & Meta Diária</span>
             </h4>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="sm:col-span-2 space-y-1.5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="foodType" className="text-xs text-slate-300">
                   Alimento / Dieta Prescrita <span className="text-red-400">*</span>
                 </Label>
@@ -454,7 +457,7 @@ export function NutritionPlanCreateDialog({
           </div>
 
           {/* Seção 2: Cronograma de Refeições com Validação Contínua */}
-          <div className="space-y-3 border-t border-slate-800/80 pt-5">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
                 <Utensils className="h-4 w-4" />
@@ -465,7 +468,7 @@ export function NutritionPlanCreateDialog({
                 type="button"
                 variant="secondary"
                 onClick={handleAddMealSlot}
-                className="text-xs"
+                className="text-xs border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/10"
               >
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Adicionar Refeição
@@ -473,10 +476,12 @@ export function NutritionPlanCreateDialog({
             </div>
 
             {/* Barra de Validação Contínua de Soma */}
+            {/* Só exibe quando amountGramsPerDay tem valor */}
+            {Number(amountGramsPerDay) > 0 && (
             <div
               data-testid="meal-sum-validation-bar"
               className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3.5 text-xs transition ${
-                totalAmount > 0 && isSumValid
+                isSumValid
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-200"
               }`}
@@ -506,6 +511,7 @@ export function NutritionPlanCreateDialog({
                 )}
               </div>
             </div>
+            )}
 
             {/* Lista de Refeições */}
             <div className="space-y-2.5">
@@ -580,7 +586,7 @@ export function NutritionPlanCreateDialog({
           </div>
 
           {/* Seção 3: Suplementação (Opcional) */}
-          <div className="space-y-3 border-t border-slate-800/80 pt-5">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
                 <Droplets className="h-4 w-4" />
@@ -591,7 +597,7 @@ export function NutritionPlanCreateDialog({
                 type="button"
                 variant="secondary"
                 onClick={handleAddSupplement}
-                className="text-xs"
+                className="text-xs border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/10"
               >
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Adicionar Suplemento
@@ -686,9 +692,11 @@ export function NutritionPlanCreateDialog({
           </div>
 
           {/* Seção 4: Orientações Especiais */}
-          <div className="space-y-2 border-t border-slate-800/80 pt-5">
-            <Label htmlFor="specialInstructions" className="text-xs text-slate-300">
-              Orientações Nutricionais Especiais <span className="text-slate-500">(opcional)</span>
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 space-y-3">
+            <Label htmlFor="specialInstructions" className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span>Orientações Nutricionais Especiais</span>
+              <span className="text-slate-500 font-normal normal-case tracking-normal">(opcional)</span>
             </Label>
             <textarea
               id="specialInstructions"
@@ -696,12 +704,12 @@ export function NutritionPlanCreateDialog({
               placeholder="Ex: Oferecer água fresca à vontade. Respeitar tempo de descanso pós-refeição antes do treino."
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
-              className="w-full rounded-xl border border-slate-800 bg-slate-900/80 p-3 text-xs text-slate-100 focus:outline-none"
+              className="w-full rounded-xl border border-slate-800 bg-slate-900/80 p-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
             />
           </div>
 
           {/* Seção 5: Profissional Responsável (Opcional Collapsible) */}
-          <div className="border-t border-slate-800/80 pt-5 space-y-3">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2 cursor-pointer">
                 <UserCheck className="h-4 w-4" />
@@ -779,7 +787,8 @@ export function NutritionPlanCreateDialog({
         </fieldset>
 
         {/* RODAPÉ E BOTÕES DE AÇÃO DO FORMULÁRIO */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-800 pt-5">
+        </div>
+        <div className="flex-shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-800 pt-5 px-5 pb-5 bg-[#081321]">
           <Button
             type="button"
             variant="ghost"
@@ -813,7 +822,7 @@ export function NutritionPlanCreateDialog({
             )}
           </div>
         </div>
-      </form>
+        </form>
     </Dialog>
   );
 }

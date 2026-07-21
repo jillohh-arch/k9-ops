@@ -138,8 +138,8 @@ describe("K9 Nutrition Plan WEB-N1 Foundation", () => {
         {
           id: "sup-1",
           name: "Condroitina + Glucosamina",
-          dose: "1",
-          unit: "capsule",
+          dose: 1,
+          unit: "tablet",
           frequency: "QD",
           instructions: "Junto com a primeira refeição",
         },
@@ -262,12 +262,55 @@ describe("K9 Nutrition Plan WEB-N1 Foundation", () => {
       doc.supplements = [
         {
           name: "Vitamina C",
-          // dose ausente
+          // id, dose, unit, and frequency missing
           unit: "g",
+        },
+      ];
+      expect(() => parseNutritionPlan("id", "dog", doc)).toThrow(/(id|name|frequency)/);
+    });
+
+    it("should fail parsing on invalid unit", () => {
+      const doc = validPlanDoc();
+      doc.supplements = [
+        {
+          id: "sup-1",
+          name: "Vitamina C",
+          dose: 500,
+          unit: "cápsulas", // invalid canonical unit
           frequency: "QD",
         },
       ];
-      expect(() => parseNutritionPlan("id", "dog", doc)).toThrow(/dose/);
+      expect(() => parseNutritionPlan("id", "dog", doc)).toThrow(/canonical/);
+    });
+
+    it("should reject string dose in canonical path (F-02 strict)", () => {
+      // Canonical contract requires dose: number.
+      // String values indicate legacy/malformed documents — rejected.
+      const doc = validPlanDoc();
+      doc.supplements = [
+        {
+          id: "sup-1",
+          name: "Vitamina C",
+          dose: "500", // string — not allowed in canonical
+          unit: "mg",
+          frequency: "QD",
+        },
+      ];
+      expect(() => parseNutritionPlan("id", "dog", doc)).toThrow(/positive number/);
+    });
+
+    it("should reject string numeric dose in canonical path", () => {
+      const doc = validPlanDoc();
+      doc.supplements = [
+        {
+          id: "sup-1",
+          name: "Vitamina C",
+          dose: "2.5", // string numeric — not allowed in canonical
+          unit: "ml",
+          frequency: "QD",
+        },
+      ];
+      expect(() => parseNutritionPlan("id", "dog", doc)).toThrow(/positive number/);
     });
   });
 

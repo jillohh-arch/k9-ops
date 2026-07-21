@@ -165,8 +165,8 @@ export function NutritionPlanCreateDialog({
     const newSupp: NutritionPlanSupplementRegimen = {
       id: `${idPrefix}-supp-${Date.now()}-${supplements.length + 1}`,
       name: "",
-      dose: "1",
-      unit: "cápsulas",
+      dose: 1,
+      unit: "tablet",
       frequency: "1x ao dia",
       instructions: "",
     };
@@ -178,15 +178,19 @@ export function NutritionPlanCreateDialog({
     setSupplements(supplements.filter((s) => s.id !== suppId));
   };
 
-  // Update Supplement
+  // Update Supplement - handles numeric dose and string fields
   const handleUpdateSupplement = (
     suppId: string,
     field: keyof NutritionPlanSupplementRegimen,
-    value: string
+    value: string | number
   ) => {
     setSupplements(
       supplements.map((supp) => {
         if (supp.id !== suppId) return supp;
+        // Convert dose to number
+        if (field === "dose") {
+          return { ...supp, [field]: typeof value === "number" ? value : Number(value) || 0 };
+        }
         return { ...supp, [field]: value };
       })
     );
@@ -627,10 +631,13 @@ export function NutritionPlanCreateDialog({
                       <div>
                         <Label className="text-[10px] text-slate-400">Dose</Label>
                         <Input
+                          type="number"
                           placeholder="Ex: 2"
                           value={supp.dose}
+                          min={0.1}
+                          step={0.1}
                           onChange={(e) =>
-                            handleUpdateSupplement(supp.id, "dose", e.target.value)
+                            handleUpdateSupplement(supp.id, "dose", parseFloat(e.target.value) || 0)
                           }
                           className="bg-slate-900 border-slate-700 text-xs"
                         />
@@ -638,14 +645,21 @@ export function NutritionPlanCreateDialog({
 
                       <div>
                         <Label className="text-[10px] text-slate-400">Unidade</Label>
-                        <Input
-                          placeholder="Ex: cápsulas"
+                        <select
                           value={supp.unit}
                           onChange={(e) =>
                             handleUpdateSupplement(supp.id, "unit", e.target.value)
                           }
-                          className="bg-slate-900 border-slate-700 text-xs"
-                        />
+                          className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded px-2 py-1.5 text-xs"
+                        >
+                          <option value="mg">mg</option>
+                          <option value="g">g</option>
+                          <option value="ml">ml</option>
+                          <option value="scoop">Medida</option>
+                          <option value="tablet">Comprimido</option>
+                          <option value="drop">Gota</option>
+                          <option value="other">Outro</option>
+                        </select>
                       </div>
                     </div>
 

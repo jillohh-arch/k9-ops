@@ -15,13 +15,15 @@ import {
   createNutritionPlan,
   updateNutritionPlan,
   cancelNutritionPlan,
-  // Error helpers
+  // Normalize only (error classifiers are in the errors barrel)
   normalizeNutritionMutationError,
+} from "../data/nutrition-plan-mutation-service";
+import {
   isNutritionPlanConflictError,
   isPermissionError,
   isValidationError,
   isTransportError,
-} from "../data/nutrition-plan-mutation-service";
+} from "../errors/nutrition-mutation-errors";
 import type {
   CreateNutritionPlanCommand,
   UpdateNutritionPlanCommand,
@@ -140,8 +142,8 @@ describe("Create Request Builder", () => {
         {
           id: "supp-1",
           name: "Omega 3",
-          dose: "1",
-          unit: "capsule",
+          dose: 1,
+          unit: "tablet",
           frequency: "QD",
           instructions: "Junto com almoço",
         },
@@ -342,10 +344,10 @@ describe("Update Request Builder", () => {
     expect(request.planId).toBe("plan-1");
     expect(request.operationId).toBe("op-abc");
     expect(request.expectedRevision).toBe(3);
-    expect(request.changes?.special_instructions).toBe("Novas instruções");
-    expect(request.changes?.professional).toEqual(professional);
-    expect(request.changes?.source_document).toEqual(sourceDoc);
-    expect(request.changes?.attachment_refs).toEqual(["ref-1", "ref-2"]);
+    expect(request.planData.special_instructions).toBe("Novas instruções");
+    expect(request.planData.professional).toEqual(professional);
+    expect(request.planData.source_document).toEqual(sourceDoc);
+    expect(request.planData.attachment_refs).toEqual(["ref-1", "ref-2"]);
   });
 
   it("should include only provided fields (absent = preserve)", () => {
@@ -360,10 +362,10 @@ describe("Update Request Builder", () => {
 
     const request = buildUpdateNutritionPlanRequest(command, "op-1");
 
-    expect(request.changes).toHaveProperty("special_instructions");
-    expect(request.changes).not.toHaveProperty("professional");
-    expect(request.changes).not.toHaveProperty("source_document");
-    expect(request.changes).not.toHaveProperty("attachment_refs");
+    expect(request.planData).toHaveProperty("special_instructions");
+    expect(request.planData).not.toHaveProperty("professional");
+    expect(request.planData).not.toHaveProperty("source_document");
+    expect(request.planData).not.toHaveProperty("attachment_refs");
   });
 
   it("should send null to explicitly clear a field", () => {
@@ -379,8 +381,8 @@ describe("Update Request Builder", () => {
 
     const request = buildUpdateNutritionPlanRequest(command, "op-1");
 
-    expect(request.changes?.special_instructions).toBeNull();
-    expect(request.changes?.attachment_refs).toBeNull();
+    expect(request.planData.special_instructions).toBeNull();
+    expect(request.planData.attachment_refs).toBeNull();
   });
 
   it("should allow empty array for attachmentRefs (replace with empty)", () => {
@@ -395,7 +397,7 @@ describe("Update Request Builder", () => {
 
     const request = buildUpdateNutritionPlanRequest(command, "op-1");
 
-    expect(request.changes?.attachment_refs).toEqual([]);
+    expect(request.planData.attachment_refs).toEqual([]);
   });
 
   it("should not allow structural fields in changes", () => {
@@ -412,11 +414,31 @@ describe("Update Request Builder", () => {
     const request = buildUpdateNutritionPlanRequest(command, "op-1");
 
     // Structural fields should not exist
-    expect(request.changes).not.toHaveProperty("food_type");
-    expect(request.changes).not.toHaveProperty("amount_grams_per_day");
-    expect(request.changes).not.toHaveProperty("valid_from");
-    expect(request.changes).not.toHaveProperty("status");
-    expect(request.changes).not.toHaveProperty("revision");
+    expect(request.planData).not.toHaveProperty("food_type");
+    expect(request.planData).not.toHaveProperty("amount_grams_per_day");
+    expect(request.planData).not.toHaveProperty("valid_from");
+    expect(request.planData).not.toHaveProperty("status");
+    expect(request.planData).not.toHaveProperty("revision");
+  });
+
+  it("should send planData (not changes) per backend contract", () => {
+    const command: UpdateNutritionPlanCommand = {
+      dogId: "dog-1",
+      planId: "plan-1",
+      expectedRevision: 1,
+      changes: {
+        specialInstructions: "Test instructions",
+      },
+    };
+
+    const request = buildUpdateNutritionPlanRequest(command, "op-1");
+
+    // planData must exist and contain the field
+    expect(request.planData).toBeDefined();
+    expect(request.planData.special_instructions).toBe("Test instructions");
+
+    // changes must NOT exist (backend expects planData)
+    expect(request).not.toHaveProperty("changes");
   });
 });
 
@@ -1067,6 +1089,54 @@ describe("Error Normalization", () => {
     expect(normalized.firebaseCode).toBe("failed-precondition");
     expect(normalized.domainCode).toBeUndefined(); // Unknown code preserved in details
     expect(normalized.details?.code).toBe("plan-not-found");
+  });
+
+  it("should normalize backend revision-conflict to nutrition_plan_conflict", () => {
+    // Backend emits "revision-conflict", Web expects "nutrition_plan_conflict"
+    const error = mockCallableError(
+      "failed-precondition",
+      "Revision mismatch",
+      { code: "revision-conflict", message: "Document has been modified" }
+    );
+
+    const normalized = normalizeNutritionMutationError(error);
+
+    expect(normalized.firebaseCode).toBe("failed-precondition");
+    expect(normalized.domainCode).toBe("nutrition_plan_conflict"); // Normalized
+    expect(normalized.details?.code).toBe("revision-conflict"); // Original preserved
+    expect(normalized.retryable).toBe(false);
+  });
+
+  it("should normalize backend integrity-conflict to integrity", () => {
+    // Backend emits "integrity-conflict", Web expects "integrity"
+    const error = mockCallableError(
+      "failed-precondition",
+      "Concurrent modification",
+      { code: "integrity-conflict", message: "Multiple active plans" }
+    );
+
+    const normalized = normalizeNutritionMutationError(error);
+
+    expect(normalized.firebaseCode).toBe("failed-precondition");
+    expect(normalized.domainCode).toBe("integrity"); // Normalized
+    expect(normalized.details?.code).toBe("integrity-conflict"); // Original preserved
+    expect(normalized.retryable).toBe(false);
+  });
+
+  it("should normalize backend idempotency-conflict", () => {
+    // Backend emits "idempotency-conflict"
+    const error = mockCallableError(
+      "already-exists",
+      "Operation already processed",
+      { code: "idempotency-conflict", message: "OperationId reuse with different payload" }
+    );
+
+    const normalized = normalizeNutritionMutationError(error);
+
+    expect(normalized.firebaseCode).toBe("already-exists");
+    expect(normalized.domainCode).toBe("idempotency_conflict");
+    expect(normalized.details?.code).toBe("idempotency-conflict");
+    expect(normalized.retryable).toBe(false);
   });
 
   it("should correctly identify conflict errors", () => {

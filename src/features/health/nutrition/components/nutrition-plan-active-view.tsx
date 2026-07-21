@@ -18,7 +18,21 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { NutritionPlan } from "../types";
+import type { NutritionPlan, SupplementUnit } from "../types";
+
+/** Maps canonical unit to user-friendly label */
+function formatUnit(unit: SupplementUnit): string {
+  const labels: Record<SupplementUnit, string> = {
+    mg: "mg",
+    g: "g",
+    ml: "ml",
+    scoop: "Medida",
+    tablet: "Comprimido",
+    drop: "Gota",
+    other: "Outro",
+  };
+  return labels[unit] ?? unit;
+}
 
 interface NutritionPlanActiveViewProps {
   plan: NutritionPlan;
@@ -276,7 +290,7 @@ export function NutritionPlanActiveView({
                     </Badge>
                   </div>
                   <div className="text-xs text-slate-300 font-medium">
-                    Dose: {supp.dose} {supp.unit}
+                    Dose: {supp.dose} {formatUnit(supp.unit)}
                   </div>
                   {supp.instructions && (
                     <p className="text-xs text-slate-400 bg-slate-950/50 p-2 rounded border border-slate-800/80">

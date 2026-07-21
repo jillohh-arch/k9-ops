@@ -39,12 +39,14 @@ const TRANSPORT_NON_RETRYABLE: ReadonlySet<FirebaseFunctionsErrorCode> = new Set
 
 /**
  * Maps a domain code string to a typed NutritionMutationDomainCode.
+ * Handles both canonical domain codes and legacy/backend codes.
  * Returns undefined for unknown codes (preserved as-is in details).
  */
 export function mapDomainCode(code: string): NutritionMutationDomainCode | undefined {
   const normalized = code.toLowerCase().trim();
 
   switch (normalized) {
+    // Canonical domain codes
     case "validation":
     case "invalid_timezone":
     case "nutrition_plan_conflict":
@@ -55,6 +57,18 @@ export function mapDomainCode(code: string): NutritionMutationDomainCode | undef
     case "not-found":
     case "internal":
       return normalized as NutritionMutationDomainCode;
+
+    // Backend codes normalized to canonical domain codes
+    case "revision-conflict":
+      // Backend emits "revision-conflict", normalize to Web domain code
+      return "nutrition_plan_conflict";
+    case "integrity-conflict":
+      // Backend emits "integrity-conflict", normalize to Web domain code
+      return "integrity";
+    case "idempotency-conflict":
+      // Already recognized but explicit for clarity
+      return "idempotency_conflict";
+
     default:
       // Unknown domain code - return undefined, preserving the original in details
       return undefined;

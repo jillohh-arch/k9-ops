@@ -194,12 +194,23 @@ export function parseNutritionPlan(
       const suppObj = supp as FirestoreSupplementRegimen;
       const id = typeof suppObj.id === "string" ? suppObj.id.trim() : "";
       const name = typeof suppObj.name === "string" ? suppObj.name.trim() : "";
-      const dose = typeof suppObj.dose === "string" ? suppObj.dose.trim() : "";
-      const unit = typeof suppObj.unit === "string" ? suppObj.unit.trim() : "";
+      const unitRaw = typeof suppObj.unit === "string" ? suppObj.unit.trim() : "";
       const frequency = typeof suppObj.frequency === "string" ? suppObj.frequency.trim() : "";
 
-      if (!id || !name || !dose || !unit || !frequency) {
-        throw new Error("supplement regimen incompleto (id/name/dose/unit/frequency)");
+      if (!id || !name || !frequency) {
+        throw new Error("supplement regimen incompleto (id/name/frequency)");
+      }
+
+      // Parse dose: canonical contract requires number only
+      if (typeof suppObj.dose !== "number" || !isFinite(suppObj.dose) || suppObj.dose <= 0) {
+        throw new Error(`supplement regimen dose must be positive number (id=${id || i})`);
+      }
+      const dose = suppObj.dose;
+
+      // Parse unit: canonical enum validation
+      const CANONICAL_UNITS: readonly string[] = ["mg", "g", "ml", "scoop", "tablet", "drop", "other"];
+      if (!CANONICAL_UNITS.includes(unitRaw)) {
+        throw new Error(`supplement regimen unit must be canonical: ${CANONICAL_UNITS.join(", ")} (got "${unitRaw}")`);
       }
 
       const validFromSupp = suppObj.valid_from !== undefined && suppObj.valid_from !== null ? parseDateTime(suppObj.valid_from) : undefined;
@@ -209,7 +220,7 @@ export function parseNutritionPlan(
         id,
         name,
         dose,
-        unit,
+        unit: unitRaw as NutritionPlanSupplementRegimen["unit"],
         frequency,
         instructions: typeof suppObj.instructions === "string" ? suppObj.instructions.trim() : undefined,
         validFrom: validFromSupp || undefined,

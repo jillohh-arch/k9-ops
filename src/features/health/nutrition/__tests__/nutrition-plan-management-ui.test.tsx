@@ -78,7 +78,7 @@ const sampleCanonicalPlan: NutritionPlan = {
   sourceDocument: { id: "doc-99", name: "Laudo Nutricional Anual" },
   attachmentRefs: ["att-1", "att-2"],
   supplements: [
-    { id: "supp-1", name: "Ômega 3 K9", dose: "2", unit: "cápsulas", frequency: "1x ao dia", instructions: "Junto à refeição da manhã" },
+    { id: "supp-1", name: "Ômega 3 K9", dose: 2, unit: "tablet", frequency: "1x ao dia", instructions: "Junto à refeição da manhã" },
   ],
 };
 

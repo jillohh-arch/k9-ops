@@ -1,6 +1,12 @@
 export type MealPeriod = "morning" | "afternoon" | "evening" | "night" | "extra";
 export type NutritionPlanStatus = "active" | "superseded" | "cancelled";
 
+/**
+ * Canonical supplement unit enum.
+ * Used in domain model, wire format, and storage.
+ */
+export type SupplementUnit = "mg" | "g" | "ml" | "scoop" | "tablet" | "drop" | "other";
+
 // Firestore raw/wire format interfaces
 export interface FirestoreRecordedBy {
   uid?: string;
@@ -20,7 +26,7 @@ export interface FirestoreMealScheduleSlot {
 export interface FirestoreSupplementRegimen {
   id?: string;
   name?: string;
-  dose?: string;
+  dose?: number | string; // number for canonical, string for legacy compatibility
   unit?: string;
   frequency?: string;
   instructions?: string;
@@ -106,8 +112,8 @@ export interface MealScheduleSlot {
 export interface NutritionPlanSupplementRegimen {
   id: string;
   name: string;
-  dose: string;
-  unit: string;
+  dose: number;
+  unit: SupplementUnit;
   frequency: string;
   instructions?: string;
   validFrom?: Date;
@@ -310,12 +316,13 @@ export interface WireMealScheduleSlot {
 
 /**
  * Wire format for supplement regimen sent to callable.
+ * dose is numeric, unit is canonical enum.
  */
 export interface WireSupplementRegimen {
   id: string;
   name: string;
-  dose: string;
-  unit: string;
+  dose: number;
+  unit: SupplementUnit;
   frequency: string;
   instructions?: string;
   valid_from?: string;
@@ -348,13 +355,15 @@ export interface CreateNutritionPlanWireRequest {
 
 /**
  * Wire format for UpdateNutritionPlan callable request.
+ * Uses planData (not changes) per backend contract.
+ * Only administrative fields are allowed in UPDATE.
  */
 export interface UpdateNutritionPlanWireRequest {
   dogId: string;
   planId: string;
   operationId: string;
   expectedRevision: number;
-  changes?: {
+  planData: {
     special_instructions?: string | null;
     professional?: ProfessionalIdentity | null;
     source_document?: HealthDocumentRef | null;

@@ -13,19 +13,10 @@ import {
   UpdateNutritionPlanResult,
   CancelNutritionPlanResult,
   // Helper types
-  NutritionMutationError,
   WireMealScheduleSlot,
   WireSupplementRegimen,
 } from "../types";
-import {
-  normalizeNutritionMutationError,
-  isNutritionPlanConflictError,
-  isPermissionError,
-  isValidationError,
-  isTransportError,
-} from "../errors/nutrition-mutation-errors";
-
-// Re-export error helpers for convenience
+import { normalizeNutritionMutationError } from "../errors/nutrition-mutation-errors";
 export {
   normalizeNutritionMutationError,
   isNutritionPlanConflictError,
@@ -94,7 +85,7 @@ function mapMealScheduleSlot(slot: { id: string; period: string; scheduledTime: 
 function mapSupplement(supp: {
   id: string;
   name: string;
-  dose: string;
+  dose: number;
   unit: string;
   frequency: string;
   instructions?: string;
@@ -105,7 +96,7 @@ function mapSupplement(supp: {
     id: supp.id,
     name: supp.name,
     dose: supp.dose,
-    unit: supp.unit,
+    unit: supp.unit as WireSupplementRegimen["unit"],
     frequency: supp.frequency,
   };
 
@@ -149,7 +140,12 @@ export function buildCreateNutritionPlanRequest(
       hydration_ml: planData.hydrationMl ?? null,
       special_instructions: planData.specialInstructions ?? null,
       professional: planData.professional ?? null,
-      source_document: planData.sourceDocument ?? null,
+      source_document: planData.sourceDocument
+        ? {
+            health_document_id: planData.sourceDocument.health_document_id,
+            description: planData.sourceDocument.description ?? null,
+          }
+        : null,
       attachment_refs: planData.attachmentRefs ?? null,
     },
   };
@@ -158,6 +154,7 @@ export function buildCreateNutritionPlanRequest(
 /**
  * Builds a callable request for updating a NutritionPlan.
  *
+ * Sends planData (not changes) per backend contract.
  * Only includes fields that are explicitly provided in changes.
  * Absent field → preserve (not sent)
  * null explicit → clear
@@ -182,22 +179,28 @@ export function buildUpdateNutritionPlanRequest(
     throw new Error("Update command must include at least one change field");
   }
 
-  const wireChanges: UpdateNutritionPlanWireRequest["changes"] = {};
+  // Build planData with wire field names per backend contract
+  const planData: UpdateNutritionPlanWireRequest["planData"] = {};
 
   if (changes.specialInstructions !== undefined) {
-    wireChanges.special_instructions = changes.specialInstructions;
+    planData.special_instructions = changes.specialInstructions;
   }
 
   if (changes.professional !== undefined) {
-    wireChanges.professional = changes.professional;
+    planData.professional = changes.professional;
   }
 
   if (changes.sourceDocument !== undefined) {
-    wireChanges.source_document = changes.sourceDocument;
+    planData.source_document = changes.sourceDocument
+      ? {
+          health_document_id: changes.sourceDocument.health_document_id,
+          description: changes.sourceDocument.description ?? null,
+        }
+      : null;
   }
 
   if (changes.attachmentRefs !== undefined) {
-    wireChanges.attachment_refs = changes.attachmentRefs;
+    planData.attachment_refs = changes.attachmentRefs;
   }
 
   return {
@@ -205,7 +208,7 @@ export function buildUpdateNutritionPlanRequest(
     planId: command.planId,
     operationId,
     expectedRevision: command.expectedRevision,
-    changes: wireChanges,
+    planData,
   };
 }
 

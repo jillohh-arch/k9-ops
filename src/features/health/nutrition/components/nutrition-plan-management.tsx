@@ -23,6 +23,7 @@ import { NutritionPlanDegradedState } from "./nutrition-plan-degraded-state";
 import { NutritionPlanCreateDialog } from "./nutrition-plan-create-dialog";
 import { NutritionPlanEditDialog } from "./nutrition-plan-edit-dialog";
 import { NutritionPlanReplaceDialog } from "./nutrition-plan-replace-dialog";
+import { NutritionPlanCancelDialog } from "./nutrition-plan-cancel-dialog";
 import type { NutritionPlan, LegacyNutritionPlanView } from "../types";
 
 export interface NutritionPlanManagementProps {
@@ -49,6 +50,7 @@ export function NutritionPlanManagement({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   // Fetch K9 dogs from entities provider
   const { dogs: entityDogs, dogsLoading } = useEntities();
@@ -269,6 +271,7 @@ export function NutritionPlanManagement({
           canManage={canManage}
           onOpenEdit={() => setEditDialogOpen(true)}
           onOpenReplace={() => setReplaceDialogOpen(true)}
+          onOpenCancel={() => setCancelDialogOpen(true)}
         />
       )}
 
@@ -307,6 +310,16 @@ export function NutritionPlanManagement({
         <NutritionPlanReplaceDialog
           open={replaceDialogOpen}
           onClose={() => setReplaceDialogOpen(false)}
+          plan={planState.activePlan as NutritionPlan}
+          dogName={dogName}
+        />
+      )}
+
+      {/* CANCEL PLAN DIALOG */}
+      {canManage && cancelDialogOpen && planState.status === "canonical" && planState.activePlan && (
+        <NutritionPlanCancelDialog
+          open={cancelDialogOpen}
+          onClose={() => setCancelDialogOpen(false)}
           plan={planState.activePlan as NutritionPlan}
           dogName={dogName}
         />

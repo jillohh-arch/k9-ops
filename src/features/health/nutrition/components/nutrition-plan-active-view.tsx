@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   UserCheck,
   Utensils,
+  XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ interface NutritionPlanActiveViewProps {
   canManage?: boolean;
   onOpenEdit?: () => void;
   onOpenReplace?: () => void;
+  onOpenCancel?: () => void;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -80,6 +82,7 @@ export function NutritionPlanActiveView({
   canManage = false,
   onOpenEdit,
   onOpenReplace,
+  onOpenCancel,
 }: NutritionPlanActiveViewProps) {
   return (
     <div
@@ -140,6 +143,17 @@ export function NutritionPlanActiveView({
               >
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5 text-cyan-400" />
                 Substituir Plano
+              </Button>
+            )}
+
+            {canManage && onOpenCancel && (
+              <Button
+                variant="secondary"
+                onClick={onOpenCancel}
+                className="text-xs font-bold border-amber-500/30 text-amber-200 shadow-md hover:border-amber-400/50 hover:bg-amber-950/30"
+              >
+                <XCircle className="mr-1.5 h-3.5 w-3.5 text-amber-400" />
+                Cancelar Plano
               </Button>
             )}
 

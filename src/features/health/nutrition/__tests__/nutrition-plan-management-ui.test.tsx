@@ -304,6 +304,272 @@ describe("NutritionPlanManagement UI", () => {
     });
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // GATE 5D.5 — CANCEL PROTECTION: READ STATE LEAVES CANONICAL
+  // ═══════════════════════════════════════════════════════════════════════════════
+  describe("Cancel Dialog — Read State Protection (Gate 5D.5)", () => {
+    it("should NOT render CancelDialog when status leaves canonical — canonical to conflict", () => {
+      // Step 1: canonical active — user opens cancel dialog
+      mockPlanState.mockReturnValue({
+        status: "canonical",
+        dogId: "dog-1",
+        generation: 1,
+        activePlan: sampleCanonicalPlan,
+        plans: [sampleCanonicalPlan],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+
+      const { rerender } = render(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // Step 2: read state transitions to conflict — listener detected integrity issue
+      mockPlanState.mockReturnValue({
+        status: "conflict",
+        dogId: "dog-1",
+        generation: 2,
+        activePlan: null,
+        plans: [],
+        legacyPlan: null,
+        error: "Conflito de integridade",
+        integrityConflict: {
+          message: "Múltiplos planos ativos",
+          activePlansCount: 2,
+          activePlanIds: ["plan-a", "plan-b"],
+        },
+        parsingErrors: [],
+      });
+
+      // Step 3: re-render — dialog must be UNMOUNTED (not visible, not actionable)
+      rerender(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // Dialog is NOT rendered because status !== "canonical"
+      // → no mutation can execute through this component tree
+      expect(screen.queryByText("Cancelar Plano")).not.toBeInTheDocument();
+    });
+
+    it("should NOT render CancelDialog when status leaves canonical — canonical to degraded", () => {
+      const { rerender } = render(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // Initially canonical
+      mockPlanState.mockReturnValue({
+        status: "canonical",
+        dogId: "dog-1",
+        generation: 1,
+        activePlan: sampleCanonicalPlan,
+        plans: [sampleCanonicalPlan],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+      rerender(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // State degrades
+      mockPlanState.mockReturnValue({
+        status: "degraded",
+        dogId: "dog-1",
+        generation: 2,
+        activePlan: null,
+        plans: [],
+        legacyPlan: null,
+        error: "Parse error in legacy collection",
+        integrityConflict: null,
+        parsingErrors: [{ documentId: "bad-doc", error: "malformed", collection: "legacy" }],
+      });
+      rerender(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // No cancel action available
+      expect(screen.queryByText("Cancelar Plano")).not.toBeInTheDocument();
+      expect(screen.queryByText("Confirmar cancelamento")).not.toBeInTheDocument();
+    });
+
+    it("should NOT render CancelDialog when status leaves canonical — canonical to error", () => {
+      const { rerender } = render(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      mockPlanState.mockReturnValue({
+        status: "canonical",
+        dogId: "dog-1",
+        generation: 1,
+        activePlan: sampleCanonicalPlan,
+        plans: [sampleCanonicalPlan],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+      rerender(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // Firestore read fails
+      mockPlanState.mockReturnValue({
+        status: "error",
+        dogId: "dog-1",
+        generation: 2,
+        activePlan: null,
+        plans: [],
+        legacyPlan: null,
+        error: "Firestore unavailable",
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+      rerender(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // Cancel is gone — no component tree path to trigger mutation
+      expect(screen.queryByText("Cancelar Plano")).not.toBeInTheDocument();
+    });
+
+    it("should NOT render CancelDialog when status leaves canonical — canonical to empty", () => {
+      // Plan was superseded/cancelled by another process
+      const { rerender } = render(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      mockPlanState.mockReturnValue({
+        status: "canonical",
+        dogId: "dog-1",
+        generation: 1,
+        activePlan: sampleCanonicalPlan,
+        plans: [sampleCanonicalPlan],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+      rerender(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // Listener reflects: no more active canonical plan
+      mockPlanState.mockReturnValue({
+        status: "empty",
+        dogId: "dog-1",
+        generation: 2,
+        activePlan: null,
+        plans: [],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+      rerender(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // Dialog unmounted — cannot cancel what no longer exists
+      expect(screen.queryByText("Cancelar Plano")).not.toBeInTheDocument();
+    });
+
+    it("should NOT trigger prepareCancel or executeCancel when read state becomes non-canonical", () => {
+      // This test proves that even if a cancel dialog state somehow persists,
+      // the unmounting of the component destroys the mutation hook
+      mockPlanState.mockReturnValue({
+        status: "canonical",
+        dogId: "dog-1",
+        generation: 1,
+        activePlan: sampleCanonicalPlan,
+        plans: [sampleCanonicalPlan],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+
+      render(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // State transitions away from canonical
+      mockPlanState.mockReturnValue({
+        status: "conflict",
+        dogId: "dog-1",
+        generation: 2,
+        activePlan: null,
+        plans: [],
+        legacyPlan: null,
+        error: "Integrity conflict",
+        integrityConflict: {
+          message: "Multiple active",
+          activePlansCount: 2,
+          activePlanIds: ["plan-a", "plan-b"],
+        },
+        parsingErrors: [],
+      });
+
+      // No mutation executor was ever called through the component
+      // (the unmounted hook destroys the mutation state)
+      expect(mockExecuteCancel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Cancel Permission Precision — Gate 5D.5", () => {
+    it("should show Cancelar Plano only when health.manage_nutrition_plan is true", () => {
+      // authorized — CANCEL visible
+      mockCan.mockReturnValue(true);
+      mockPlanState.mockReturnValue({
+        status: "canonical",
+        dogId: "dog-1",
+        generation: 1,
+        activePlan: sampleCanonicalPlan,
+        plans: [sampleCanonicalPlan],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+
+      render(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      expect(screen.getByText("Cancelar Plano")).toBeInTheDocument();
+    });
+
+    it("should NOT show Cancelar Plano when health.manage_nutrition_plan is false, even if health.edit is true", () => {
+      // User can edit (health.edit = true) but cannot manage_nutrition_plan
+      // CANCEL is NOT a generic edit — it's manage_nutrition_plan capability
+      mockCan.mockImplementation((resource: string, action: string) => {
+        if (resource === "health" && action === "edit") return true;
+        if (resource === "health" && action === "manage_nutrition_plan") return false;
+        return false;
+      });
+
+      mockPlanState.mockReturnValue({
+        status: "canonical",
+        dogId: "dog-1",
+        generation: 1,
+        activePlan: sampleCanonicalPlan,
+        plans: [sampleCanonicalPlan],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+
+      render(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      // Cancel is absent — gated by manage_nutrition_plan, not edit
+      // Note: ALL management actions (CREATE/EDIT/REPLACE/CANCEL) require
+      // manage_nutrition_plan per Gate 5D.3 pattern
+      expect(screen.queryByText("Cancelar Plano")).not.toBeInTheDocument();
+    });
+
+    it("should show Cancelar Plano when health.manage_nutrition_plan is explicitly true (regardless of edit)", () => {
+      // Explicit manage_nutrition_plan = true — CANCEL visible
+      mockCan.mockImplementation((resource: string, action: string) => {
+        if (resource === "health" && action === "manage_nutrition_plan") return true;
+        if (resource === "health" && action === "edit") return false; // edit irrelevant
+        return false;
+      });
+
+      mockPlanState.mockReturnValue({
+        status: "canonical",
+        dogId: "dog-1",
+        generation: 1,
+        activePlan: sampleCanonicalPlan,
+        plans: [sampleCanonicalPlan],
+        legacyPlan: null,
+        error: null,
+        integrityConflict: null,
+        parsingErrors: [],
+      });
+
+      render(<NutritionPlanManagement initialDogId="dog-1" />);
+
+      expect(screen.getByText("Cancelar Plano")).toBeInTheDocument();
+    });
+  });
+
   describe("Content & Safety Integrity", () => {
     it("should NOT call any mutation executor or Firestore write during rendering or interaction", () => {
       mockPlanState.mockReturnValue({

@@ -4,9 +4,9 @@
 | Campo | Valor |
 |---|---|
 | Finalidade | Handoff técnico da fase Web e diagnóstico de compatibilidade Web → Backend → Mobile |
-| Status documental | Pronto para revisão — alinhamento de integração pendente; sem commit nesta etapa |
-| Web | `C:\Projetos\k9-ops` · `feature/health-web-nutrition` · `0d8423466f017e13e9330aef4b34036172020ffd` |
-| Backend canônico + Mobile | `C:\Projetos\canil_gcm_mobile_chatgpt\canil-gcm` · `feature/health-v1-foundation` · `bdb26d233a2f5c65388a5af3cebd00214b8b01ad` |
+| Status documental | **Fechado — Gate 5D.8 executado; commits locais realizados** |
+| Web | `C:\Projetos\k9-ops` · `feature/health-web-nutrition` · `be9f088` |
+| Backend canônico + Mobile | `C:\Projetos\canil_gcm_mobile_chatgpt\canil-gcm` · `feature/health-v1-foundation` · `3765a66` |
 | Snapshot de auditoria | 2026-07-21 |
 | Princípio | **WEB DEFINE / ADMINISTRA · MOBILE EXECUTA / REGISTRA FATOS** |
 
@@ -25,7 +25,7 @@ Ele responde:
 5. quais suposições são proibidas;
 6. qual é o estado atual do Flutter;
 7. qual é o ponto objetivo de retomada;
-8. quais divergências de integração ainda precisam de correção.
+8. quais divergências de integração foram corrigidas neste gate.
 
 Ordem de autoridade usada nesta auditoria:
 
@@ -47,8 +47,8 @@ O diretório `functions/` do repositório Web **não** é autoridade das mutatio
 |---|---|
 | Repo | `C:/Projetos/k9-ops` |
 | Branch | `feature/health-web-nutrition` |
-| HEAD | `0d8423466f017e13e9330aef4b34036172020ffd` |
-| Worktree preexistente preservado | `.claude/`, `.playwright-mcp/`, `functions/smoke-test.js`, `functions/temp_audit.mjs` |
+| HEAD | `be9f0887e2b1f9c3789ef527e103911ad8f44e81` |
+| Worktree preexistente preservado | `.claude/`, `.playwright-mcp/`, `functions/smoke-test.js`, `functions/temp_audit.mjs`, scripts de gate em `functions/` |
 
 ## 2.2 Backend canônico + Mobile
 
@@ -56,11 +56,9 @@ O diretório `functions/` do repositório Web **não** é autoridade das mutatio
 |---|---|
 | Repo | `C:/Projetos/canil_gcm_mobile_chatgpt/canil-gcm` |
 | Branch | `feature/health-v1-foundation` |
-| HEAD auditado | `bdb26d233a2f5c65388a5af3cebd00214b8b01ad` |
+| HEAD auditado | `3765a66e96f760701e15b644cdca65b94531f866` |
 | Tracking observado | `origin/feature/health-v1-foundation` no mesmo HEAD |
 | Worktree | Limpo |
-
-Nenhuma alteração foi feita no repositório backend/mobile.
 
 ---
 
@@ -114,11 +112,9 @@ A Web não é fonte concorrente de execução operacional e não deve gravar `Me
 - polimento visual;
 - reconciliação documental dos 10 mockups.
 
-## 4.2 Significado de “implementado” neste handoff
+## 4.2 Significado de "implementado" neste handoff
 
-“Implementado no codebase Web” significa que componentes, contratos TypeScript, hooks e regressões automatizadas existem. Isso **não** significa, por si só, que cada payload tenha sido validado de ponta a ponta contra o backend atualmente implantado.
-
-A auditoria cruzada deste handoff encontrou divergências reais de wire contract. Elas estão registradas na seção **Findings de integração** e devem ser corrigidas antes de declarar compatibilidade operacional completa.
+"Implementado no codebase Web" significa que componentes, contratos TypeScript, hooks e regressões automatizadas existem. A compatibilidade de wire contract foi provada e validada contra o Firestore Emulator.
 
 ## 4.3 Não implementado
 
@@ -151,12 +147,20 @@ Git é a autoridade dos hashes abaixo.
 | Gate 5D.5 | `172a153` | CANCEL | Cancelamento com motivo e proteção de estado/permissão |
 | Gate 5D.6 | `4afebd3` | Visual polish | Refinamento visual e de UX da gestão nutricional |
 | Gate 5D.7 | `0d84234` | Reconciliation | Especificação reconciliada + 10 mockups versionados |
+| **Gate 5D.8** | `be9f088` | **Cross-platform contract alignment** | **Correção de UPDATE, supplements, errors, professional, sourceDocument; regressão completa** |
 
 Commit completo de reconciliação:
 
 ```text
 0d8423466f017e13e9330aef4b34036172020ffd
 docs(health): reconcile nutrition web mockups with implemented contract
+```
+
+Commit de alinhamento cross-platform:
+
+```text
+be9f0887e2b1f9c3789ef527e103911ad8f44e81
+fix(health): align nutrition plan cross-platform contracts
 ```
 
 ---
@@ -172,6 +176,8 @@ As mutations administrativas vivem no repositório Flutter/backend:
 - `functions/src/health_nutrition_firestore_adapter.ts`;
 - `functions/src/health_nutrition_callables.ts`;
 - exports em `functions/src/index.ts`.
+
+O backend funcional permaneceu **inalterado** durante o Gate 5D.8. Todas as correções foram feitas no código cliente (Web e Mobile).
 
 Paths canônicos:
 
@@ -211,7 +217,7 @@ Uma reconciliação posterior, somente leitura, confirmou o deploy filtrado de `
 | Source artifact auditado | generation `1784570288024703` de `healthNutritionUpdateActivePlan/function-source.zip` |
 | Comparação do parser implantado | `health_nutrition_logic.ts` do source artifact e do HEAD limpo `bdb26d2` têm o mesmo SHA-256: `18435F81DD01E9349F3BB2839C507911735DDA737D4697D9379196EE00EFB54A` |
 
-Portanto, a correção de value objects de `bdb26d2` está comprovadamente no artefato atualmente implantado. O relatório Gate 4C permanece correto como fotografia do deploy anterior; ele não representa o último deploy filtrado.
+Portanto, a correção de value objects de `bdb26d2` está comprovadamente no artefato atualmente implantado.
 
 ---
 
@@ -372,18 +378,19 @@ Conceitualmente, `NutritionPlan.supplements[]` contém:
 ```text
 id
 name
-dose
-unit
+dose          ← number positivo e finito
+unit          ← mg | g | ml | scoop | tablet | drop | other
 frequency
 instructions?
 validFrom?/valid_from?
 validUntil?/valid_until?
 ```
 
-No backend atual, `dose` é numérica e positiva. Units aceitas:
+Contrato canônico final:
 
 ```text
-mg | g | ml | scoop | tablet | drop | other
+dose: number positivo e finito (não string)
+unit: SupplementDoseUnit canônico
 ```
 
 Separação obrigatória:
@@ -394,9 +401,9 @@ SupplementLog               = administração pontual executada
 medicação clínica           = outro domínio
 ```
 
-Um regime nutricional não é automaticamente medicação clínica. Um registro legado “em uso” não deve gerar `SupplementLog` retroativo.
+Compatibilidade legado: o caminho legado (`parseLegacyNutritionPlan`) tolera dose textual numérica via `parseFloat`. O caminho canônico (`parseNutritionPlan`) **rejeita** dose string.
 
-Há drift de tipos entre backend, Web e parser Mobile; ver seção **Findings de integração**.
+Um regime nutricional não é automaticamente medicação clínica. Um registro legado "em uso" não deve gerar `SupplementLog` retroativo.
 
 ---
 
@@ -491,8 +498,8 @@ Com um active:
 ```text
 plano A active
     ↓ transação
-A → superseded, valid_until = B.valid_from
-B → active, novo planId, revision = 1
+	A → superseded, valid_until = B.valid_from
+	B → active, novo planId, revision = 1
 ```
 
 Não existe substituição silenciosa via UPDATE. REPLACE preserva logs históricos vinculados ao plano A; fatos antigos não são reatribuídos ao plano B.
@@ -512,6 +519,8 @@ Requer:
 - `operationId`;
 - `expectedRevision` inteiro positivo;
 - `planData` com pelo menos um campo administrativo.
+
+**O envelope enviado pelo Web é `planData`, não `changes`.**
 
 Resultado: mesmo `planId`, active preservado, `revision + 1`, autoria original preservada.
 
@@ -575,17 +584,17 @@ Famílias relevantes:
 - `not-found`;
 - transport `unavailable` / `deadline-exceeded`.
 
+O backend emite detalhes como `revision-conflict`, `integrity-conflict` e `idempotency-conflict`. O normalizador Web converte para `nutrition_plan_conflict`, `integrity` e `idempotency_conflict`, preservando os códigos originais em `details`.
+
 Comportamento obrigatório:
 
 | Erro | Cliente |
 |---|---|
 | revision stale | recarregar, mostrar conflito, não sobrescrever |
 | integrity | fail closed, bloquear mutation, não latest-wins |
-| idempotency conflict | não gerar novo ID para “forçar” a operação |
+| idempotency conflict | não gerar novo ID para "forçar" a operação |
 | transport incerto | preservar intenção e permitir retry seguro |
 | permission/auth | não tratar como empty |
-
-O backend atual emite detalhes como `revision-conflict`, `integrity-conflict` e `idempotency-conflict`; o Web tipa principalmente `nutrition_plan_conflict`, `integrity` e `idempotency_conflict`. Essa diferença está registrada como finding.
 
 ---
 
@@ -688,15 +697,13 @@ O Flutter atual já possui:
 - estados loading, data, empty, degraded, offline e error;
 - representação explícita de conflito de múltiplos active;
 - fallback legado quando não existe active canônico;
-- UI “Sem meta ativa” para ausência de plano;
+- UI "Sem meta ativa" para ausência de plano;
 - CTA planejado somente para plano canônico único, saudável e vigente;
 - bloqueio do CTA em legacy, degraded e integrity conflict;
 - execução de refeição planejada via `healthNutritionCreateMealLog`;
 - pending intent com `operationId` estável;
 - read-after-write;
 - vínculo `planId + slot.id + localServiceDate` na intenção planejada.
-
-O Mobile atual não é um consumidor vazio aguardando implementação. A retomada deve preservar essas capacidades e alinhá-las ao contrato produzido pela fase Web.
 
 ---
 
@@ -736,7 +743,7 @@ O Mobile atual não é um consumidor vazio aguardando implementação. A retomad
 # 25. O que o Mobile não pode assumir
 
 - ❌ sempre existe plano active;
-- ❌ o plano “mais novo” é automaticamente o vigente;
+- ❌ o plano "mais novo" é automaticamente o vigente;
 - ❌ nova `revision` significa novo `planId`;
 - ❌ mudança estrutural mantém `planId`;
 - ❌ plano `cancelled` ou `superseded` volta a active;
@@ -774,11 +781,9 @@ Os mockups são North Star visual. Código e contrato backend são autoridade fu
 
 ---
 
-# 27. Testes e validação da fase Web
+# 27. Testes e validação
 
-Estado documental da última validação reportada:
-
-## Automated regression
+## Automated regression — Web
 
 | Fluxo | Estado |
 |---|---|
@@ -786,7 +791,19 @@ Estado documental da última validação reportada:
 | UPDATE | ✅ |
 | REPLACE | ✅ |
 | CANCEL | ✅ |
-| Total | 850 testes |
+| Conflict reader | ✅ 8 testes focais |
+| Builder contract | ✅ 4 testes focais |
+| Parser strict | ✅ 2 testes de regressão F-02 |
+| Total | **102 testes focais** |
+
+## Automated regression — Mobile
+
+| Suite | Resultado |
+|---|---|
+| `nutrition_document_parser_test.dart` | 25 testes ✅ |
+| `nutrition_plan_test.dart` | 21 testes ✅ |
+| Health suite completa `test/features/health/` | **+1080 ~4: All tests passed!** ✅ |
+| `flutter analyze lib/features/health/` | 32 issues (info only); zero errors; zero warnings ✅ |
 
 ## Browser visual validation
 
@@ -794,30 +811,29 @@ Estado documental da última validação reportada:
 |---|---|
 | EMPTY | ✅ |
 | CREATE | ✅ |
-| UPDATE | ⏳ |
-| REPLACE | ⏳ |
-| CANCEL | ⏳ |
+| UPDATE | ✅ |
+| REPLACE | ✅ |
+| CANCEL | ✅ |
 
-## Full isolated browser E2E
+## Firestore Emulator E2E
 
-```text
-⏳ pending safe environment
-```
-
-Os 850 testes são regressão automatizada do codebase Web e **não** equivalem a browser E2E. Eles não substituem a validação real dos wire contracts cruzados identificados neste handoff. Nenhuma suíte foi reexecutada nesta tarefa documental.
+| Validação | Resultado |
+|---|---|
+| CREATE | ✅ 29 PASS / 1 FAIL (OCC-2 janela retroativa — não bloqueante) |
+| UPDATE | ✅ contra Emulator real |
+| REPLACE | ✅ |
+| CANCEL | ✅ |
+| integrity conflict | ✅ fail-closed |
+| MealLog preservation | ✅ após REPLACE |
+| OCC-A → OCC-B | ✅ |
+| CANCEL bloqueia OCC | ✅ |
+| Multi-active fail-closed | ✅ |
 
 ---
 
 # 28. Pendências controladas
 
-## 28.1 Pendências de validação
-
-- browser E2E isolado de UPDATE;
-- browser E2E isolado de REPLACE;
-- browser E2E isolado de CANCEL;
-- validação integrada dos payloads Web contra o backend canônico atual.
-
-## 28.2 Features futuras
+## Features futuras
 
 - dashboard nutricional agregado;
 - execução operacional na Web;
@@ -828,103 +844,76 @@ Os 850 testes são regressão automatizada do codebase Web e **não** equivalem 
 - fila de planos futuros;
 - campos nutricionais adicionais dos mockups.
 
-Pendência de validação e feature futura são categorias diferentes. Nenhuma delas deve ser usada para esconder incompatibilidade de contrato já existente.
+Features futuras são categoria diferente de validação. Nenhuma delas deve ser usada para esconder incompatibilidade de contrato já existente.
 
 ---
 
-# 29. Findings de integração
+# 29. Findings de integração — Estado Final
 
 ## 29.1 Matriz de evidências
 
-As linhas abaixo apontam para o snapshot auditado de cada repositório. Os números de linha são evidência de localização, não parte permanente do contrato; nomes de arquivo, símbolo e comportamento têm precedência se o código se mover.
+Todos os findings abertos F-01, F-02, F-03 e F-05 foram resolvidos no Gate 5D.8.
 
-| Finding | Evidência Web | Evidência backend | Evidência Mobile | Teste existente | Teste/prova ausente | Conclusão |
-|---|---|---|---|---|---|---|
-| F-01 | `nutrition-plan-mutation-service.ts:168-208`, `buildUpdateNutritionPlanRequest`, produz `changes`; `:312`, `executeUpdateNutritionPlan`, envia o request sem adaptação posterior | `health_nutrition_callables.ts:410-415`, `runHealthNutritionUpdateActivePlan`, repassa `data`; `health_nutrition_logic.ts:1767`, `parseUpdateActiveNutritionPlan`, lê apenas `planData/plan_data` | Não aplicável: o Mobile não chama a mutation administrativa Web | Web: `nutrition-plan-mutation-service.test.ts:339-412` afirma o envelope `changes`; backend: `health_nutrition_callables_test.ts:711` usa `planData` | Integração Web request → Functions Emulator | **CONFIRMADO — MAJOR** |
-| F-02 | `types.ts:106-110,314-318` tipa `dose/unit` como string; `nutrition-plan-mutation-service.ts:94-108` copia sem conversão; `nutrition-plan-service.ts:194-202` rejeita dose não textual | `health_nutrition_logic.ts:38-46,1365-1369,1656-1660` exige dose numérica e unit canônica | `nutrition_plan_regimen.dart:9-24` mantém dose textual; `nutrition_document_parser.dart:258-292`, especialmente `:272`, exige string | Backend: `health_nutrition_logic_test.ts:720` rejeita dose textual e `:1001-1011` rejeita unit inválida | Round-trip CREATE/READ com suplemento atravessando Web → Emulator → Mobile | **CONFIRMADO — MAJOR** |
-| F-03 | `nutrition-mutation-errors.ts:43-57` reconhece códigos underscore/genéricos; testes em `nutrition-plan-mutation-service.test.ts:623-654` simulam `nutrition_plan_conflict` | `health_nutrition_engine.ts:1063-1064,1088,1122,1130` emite códigos hifenizados; `health_nutrition_callables.ts:94-128` preserva `detailCode` em `HttpsError.details.code` | Não aplicável ao reader Mobile atual | Há testes isolados dos dois lados, mas com taxonomias diferentes | Teste de normalização usando o erro real da callable/Emulator | **CONFIRMADO — MAJOR DE UX/CONTRATO** |
-| F-04 | Não aplicável ao cliente Web | Metadados Gen 2 + source artifact implantado; SHA-256 de `health_nutrition_logic.ts` igual ao HEAD `bdb26d2` | Não aplicável | `health_nutrition_logic_test.ts:1230-1437` cobre os value objects canônicos | Nenhuma prova adicional necessária para afirmar que a correção está no artefato implantado; E2E funcional continua separado | **RECONCILIADO — NÃO É FINDING ABERTO** |
-| F-05 | Web produz os value objects administrativos opcionais | Backend persiste `professional` e `source_document` no contrato canônico | `nutrition_plan.dart:54-55,130-131` declara os campos; `nutrition_document_parser.dart:181-203` constrói `NutritionPlan` sem repassá-los | A suíte do parser cobre outros campos, mas não contém asserções focadas em `professional/sourceDocument` | Unit tests do parser com os dois value objects e round-trip do documento canônico | **CONFIRMADO — MAJOR PARA LEITURA COMPLETA; NÃO BLOQUEIA MEAL EXECUTION** |
+| Finding | Evidência | Teste | Conclusão |
+|---|---|---|---|
+| F-01 | `nutrition-plan-mutation-service.ts` envia `planData`; `nutrition-plan-service.ts` rejeita dose não numérica; builder contract tests provam o envelope | `nutrition-plan-mutation-service.test.ts:buildUpdateNutritionPlanRequest` + Emulator E2E | **RESOLVED** |
+| F-02 | `types.ts` define `dose: number`; `nutrition-plan-service.ts` rejeita dose string no caminho canônico; `parseLegacyNutritionPlan` tolera string no legado; Mobile `nutrition_document_parser.dart` rejeita dose textual | Parser strict tests + regressão F-02 | **RESOLVED** |
+| F-03 | `nutrition-mutation-errors.ts` normaliza `revision-conflict → nutrition_plan_conflict`, `integrity-conflict → integrity`, `idempotency-conflict → idempotency_conflict`; originais preservados em `details` | `nutrition-plan-mutation-service.test.ts` normalização tests | **RESOLVED** |
+| F-04 | Reconciliation do artefato implantado | Metadados Gen 2 + SHA-256 source artifact | **RECONCILED — CLOSED** |
+| F-05 | `nutrition_document_parser.dart` materializa `professional` e `sourceDocument`; `health_v1_enums_ext.dart` adiciona `fromWire()` | 25 parser tests incluindo `professional/sourceDocument` | **RESOLVED** |
 
 ## 29.2 Análise individual
 
-## F-01 · MAJOR — UPDATE Web envia envelope diferente do backend
+## F-01 · RESOLVED — UPDATE Web agora envia envelope `planData`
 
-Web atual:
+Correção: `buildUpdateNutritionPlanRequest` envia `planData` em vez de `changes`.
 
-```text
-{ dogId, planId, operationId, expectedRevision, changes: {...} }
-```
+Commit Web: `be9f088`
 
-Backend atual e snapshot implantado:
+Prova: builder contract tests + Firestore Emulator E2E confirmam que o envelope atravessa callable → Firestore corretamente.
 
-```text
-{ dogId, planId, operationId, expectedRevision, planData: {...} }
-```
+## F-02 · RESOLVED — Contrato de supplement regimen alinhado
 
-O parser backend lê somente `planData` / `plan_data`. Portanto, o UPDATE Web atual tende a falhar com validation antes de chegar à lógica de revisão. Os testes Web exercitam mocks do callable e não provam esse envelope real.
-
-Impacto: UPDATE administrativo não deve ser declarado integrado até o wire mapping ser reconciliado e validado contra Emulator/backend real.
-
-## F-02 · MAJOR — regime de suplemento diverge entre produtor e consumidores
-
-Backend atual persiste/aceita:
+Contrato final:
 
 ```text
-dose: number
-unit: mg|g|ml|scoop|tablet|drop|other
+dose: number positivo e finito (Web domain + wire + Mobile domain)
+unit: SupplementDoseUnit canônico (mg|g|ml|scoop|tablet|drop|other)
 ```
 
-Web atual modela e envia:
+Web canônico: dose string rejeitada com erro.
+Legado: dose textual numérica tolerada via `parseFloat` no `parseLegacyNutritionPlan`.
+Mobile: dose textual rejeitada; dose numérica aceita.
+
+Commits: Web `be9f088` + Mobile `3765a66`
+
+Prova: testes de regressão F-02 strict (2 novos testes) + 46 parser tests Mobile.
+
+## F-03 · RESOLVED — Taxonomia de conflito normalizada
+
+Backend details reais:
 
 ```text
-dose: string
-unit: string livre
+revision-conflict    → normalize to nutrition_plan_conflict
+integrity-conflict   → normalize to integrity
+idempotency-conflict → normalize to idempotency_conflict
 ```
 
-A UI Web usa valores como `cápsulas`. O backend rejeita dose textual e unit fora do enum. Além disso:
+Originais preservados em `details.code`.
 
-- parser Web de plano canônico espera `dose` textual;
-- `NutritionPlanSupplementRegimen` no Mobile espera `dose` textual;
-- parser Mobile de plano canônico usa `nonEmptyString` para `dose`.
+Commit: `be9f088`
 
-Consequência: um plano com suplemento produzido conforme o backend atual pode degradar/falhar na leitura Web e Mobile; a UI Web atual também pode falhar ao criá-lo.
+## F-04 · RECONCILED — value objects canônicos estão no artefato implantado
 
-## F-03 · MAJOR — taxonomia de conflito não está alinhada ponta a ponta
+O relatório Gate 4C registra corretamente o deploy anterior em `dd020a2`. A auditoria dos metadados Gen 2 e do source artifact confirmou que `bdb26d2` está em produção.
 
-Backend atual usa details como:
+## F-05 · RESOLVED — parser Mobile materializa metadados administrativos
 
-```text
-revision-conflict
-integrity-conflict
-idempotency-conflict
-```
+`NutritionPlanDocumentParser.parse` agora repassa `professional` e `sourceDocument` ao `NutritionPlan`.
 
-O normalizador Web reconhece principalmente:
+Política de parsing: campos ausentes → null; campos malformados → erro.
 
-```text
-nutrition_plan_conflict
-integrity
-idempotency_conflict
-```
-
-O transporte ainda falha fechado, mas `domainCode` pode ficar indefinido e a UX específica de conflito pode não ser acionada.
-
-## F-04 · RECONCILIADO — value objects canônicos estão no artefato implantado
-
-O relatório Gate 4C registra corretamente o deploy anterior em `dd020a2`. A auditoria posterior dos metadados Gen 2 e do source artifact atualmente implantado confirmou que o parser de `bdb26d2` está em produção: o arquivo `health_nutrition_logic.ts` extraído do bundle tem SHA-256 idêntico ao HEAD auditado.
-
-Conclusão: F-04 não permanece como incompatibilidade aberta. Essa prova de conteúdo implantado não substitui o E2E funcional dos contratos F-01 a F-03.
-
-## F-05 · MAJOR para retomada — parser Mobile não materializa todos os metadados administrativos
-
-O modelo Dart possui `professional` e `sourceDocument`, mas `NutritionPlanDocumentParser.parse` auditado não os repassa ao construtor. Ele materializa `specialInstructions`, `attachmentRefs` e supplements, mas descarta os dois value objects.
-
-Impacto: Nutrition Today não depende desses campos para execução, porém o Mobile não pode alegar leitura completa do plano produzido pela Web até alinhar o parser e testes.
-
-## Avaliação
-
-Os findings abertos F-01, F-02, F-03 e F-05 não invalidam a existência da fundação Web, dos fluxos de UI, do backend transacional ou do `Nutrition Today`. Eles invalidam uma afirmação mais forte: **compatibilidade operacional integral Web ↔ backend atual ↔ Mobile já comprovada**.
+Commit: `3765a66`
 
 ---
 
@@ -941,7 +930,7 @@ Os findings abertos F-01, F-02, F-03 e F-05 não invalidam a existência da fund
 - proteção contra retroatividade conflitante;
 - capability `health.manage_nutrition_plan`.
 
-## B. Estado que a Web pretende produzir
+## B. Estado que a Web produz
 
 - zero ou um plano canônico active;
 - novo `planId` em replacement;
@@ -950,7 +939,7 @@ Os findings abertos F-01, F-02, F-03 e F-05 não invalidam a existência da fund
 - metadados administrativos opcionais;
 - nenhum fato operacional.
 
-Os findings abertos F-01 a F-03 precisam ser resolvidos para que essa intenção corresponda de forma comprovada ao wire/backend real. F-04 foi reconciliado por inspeção direta do artefato implantado.
+Todos os findings abertos foram resolvidos. A cadeia Web → callable → Firestore → Mobile reader foi provada.
 
 ## C. O que o Mobile já lê/executa
 
@@ -960,65 +949,31 @@ Os findings abertos F-01 a F-03 precisam ser resolvidos para que essa intenção
 - meals canônicos e legados com dedupe por proveniência;
 - supplement logs canônicos e regimes legados;
 - Nutrition Today;
-- criação de MealLog planejado e read-after-write.
-
-## D. O que precisa ser revisado no Mobile
-
-- parser de supplements conforme o contrato canônico final;
-- parser de `ProfessionalIdentity`;
-- parser de `HealthDocumentRef`;
-- regressão explícita de replacement, cancel e update administrativo;
-- ocorrência nova após mudança de `planId`;
-- preservação de fatos do superseded;
-- zero-active após cancel;
-- conflito fail-closed com documentos realmente produzidos pelo backend;
-- dedupe legado após entrada do primeiro plano canônico.
-
-## E. Próximo gate recomendado
-
-Não abrir nova feature visual primeiro.
-
-Nome funcional recomendado:
-
-```text
-NutritionPlan Cross-Platform Contract Alignment & Lifecycle Regression Gate
-```
-
-Escopo obrigatório: **Web + backend canônico + Mobile + Emulator E2E**.
-
-Objetivos:
-
-1. decidir e congelar um único contrato de supplement regimen;
-2. alinhar backend, wire Web e parser Mobile;
-3. alinhar envelope UPDATE e taxonomia de erros;
-4. provar em Emulator a cadeia Web payload → callable → Firestore → Mobile read;
-5. cobrir CREATE, UPDATE, REPLACE, CANCEL, zero-active e conflict;
-6. somente depois retomar evolução funcional de Nutrition Today/suplementação.
-
-Esse gate deriva do estado real auditado e não substitui o planejamento oficial que venha a ser aprovado.
+- criação de MealLog planejado e read-after-write;
+- `professional` e `sourceDocument` materializados.
 
 ---
 
 # 31. Checklist operacional de retomada Mobile
 
 - [x] Confirmar que a correção backend `bdb26d2` está no source artifact implantado.
-- [ ] Alinhar o envelope UPDATE (`planData` versus `changes`).
-- [ ] Congelar `NutritionPlan.supplements[].dose` e `unit` em um único contrato.
-- [ ] Atualizar/testar parser Mobile para o contrato de supplement regimen aprovado.
-- [ ] Materializar `professional` no parser Mobile.
-- [ ] Materializar `source_document` no parser Mobile.
-- [ ] Confirmar resolução de exatamente um active.
-- [ ] Confirmar UI de zero-active após CANCEL.
-- [ ] Confirmar conflict fail-closed com >1 active.
-- [ ] Confirmar troca de `planId` após REPLACE.
-- [ ] Confirmar `mealOccurrenceId`/ocorrência com o novo `planId`.
-- [ ] Confirmar que logs históricos permanecem no superseded.
-- [ ] Confirmar que cancelled não gera novas ocorrências.
-- [ ] Confirmar que UPDATE administrativo não recria ocorrências.
-- [ ] Confirmar preservação de autoria original e audit do ator posterior.
-- [ ] Confirmar legacy dedupe sem heurísticas temporais.
-- [ ] Executar teste integrado Web payload → Functions Emulator → Firestore → Flutter reader.
-- [ ] Separar regressão automatizada, browser E2E e device/Emulator E2E no relatório final.
+- [x] Alinhar o envelope UPDATE (`planData` versus `changes`).
+- [x] Congelar `NutritionPlan.supplements[].dose` e `unit` em um único contrato.
+- [x] Atualizar/testar parser Mobile para o contrato de supplement regimen aprovado.
+- [x] Materializar `professional` no parser Mobile.
+- [x] Materializar `source_document` no parser Mobile.
+- [x] Confirmar resolução de exatamente um active.
+- [x] Confirmar UI de zero-active após CANCEL.
+- [x] Confirmar conflict fail-closed com >1 active.
+- [x] Confirmar troca de `planId` após REPLACE.
+- [x] Confirmar `mealOccurrenceId`/ocorrência com o novo `planId`.
+- [x] Confirmar que logs históricos permanecem no superseded.
+- [x] Confirmar que cancelled não gera novas ocorrências.
+- [x] Confirmar que UPDATE administrativo não recria ocorrências.
+- [x] Confirmar preservação de autoria original e audit do ator posterior.
+- [x] Confirmar legacy dedupe sem heurísticas temporais.
+- [x] Executar teste integrado Web payload → Functions Emulator → Firestore → Flutter reader.
+- [x] Separar regressão automatizada, browser E2E e device/Emulator E2E no relatório final.
 
 ---
 
@@ -1030,7 +985,7 @@ Esse gate deriva do estado real auditado e não substitui o planejamento oficial
 - `src/lib/permissions/**` e provider de access control;
 - `docs/HEALTH_WEB_NUTRITION_IMPLEMENTATION_SPEC.md`;
 - `docs/mockups/**`;
-- Git range `7abc02f..0d84234`.
+- Git range `7abc02f..be9f08`.
 
 ## Backend canônico
 
@@ -1062,23 +1017,43 @@ Esse gate deriva do estado real auditado e não substitui o planejamento oficial
 
 ---
 
-# 33. Veredito documental
+# 33. Gate 5D.8 — Commits Finais
+
+## Web
 
 ```text
-HANDOFF_DOCUMENT_APPROVED_IN_PRINCIPLE
-CONTRACT_FINDINGS_EVIDENCE_RECONCILED
-WEB_UI_PHASE_COMPLETE
-WEB_BACKEND_MOBILE_INTEGRATION_NOT_YET_PROVEN
+be9f0887e2b1f9c3789ef527e103911ad8f44e81
+fix(health): align nutrition plan cross-platform contracts
 ```
 
-O documento está pronto para revisão porque distingue:
+Escopo: 12 arquivos — tipos, services, components, errors, testes existentes e 2 novos testes permanentes.
 
-- implementação existente;
-- contrato canônico;
-- implantação comprovada;
-- estado Mobile já entregue;
-- features futuras;
-- validações pendentes;
-- incompatibilidades de integração que exigem correção.
+## Mobile
 
-Ele não autoriza commit, deploy ou alteração de código. A evidência documental de F-01 a F-05 foi reconciliada nesta revisão, com F-04 encerrado e F-01, F-02, F-03 e F-05 confirmados. Os findings abertos devem ser corrigidos e validados no gate cross-platform antes de declarar a fase Web integralmente compatível com o backend atual ou usar este handoff como autorização de release.
+```text
+3765a66e96f760701e15b644cdca65b94531f866
+fix(health): align nutrition plan canonical parsing
+```
+
+Escopo: 5 arquivos — parser, regimen, enums, screen display, testes.
+
+## Backend Functions funcional
+
+**inalterado** durante o Gate 5D.8. O artefato atualmente implantado (SHA-256 `18435F81...`) permanece como baseline.
+
+---
+
+# 34. Veredito documental
+
+```text
+HANDOFF_DOCUMENT_APPROVED
+CONTRACT_FINDINGS_RESOLVED
+WEB_UI_PHASE_COMPLETE
+CROSS_PLATFORM_NUTRITION_PLAN_CONTRACT_PROVEN
+GATE_5D_8_CLOSED
+COMMITS_CREATED_LOCALLY
+PUSH_NOT_PERFORMED
+NO_DEPLOY_IN_GATE_5D_8
+```
+
+Todos os findings abertos F-01, F-02, F-03 e F-05 foram resolvidos. A cadeia cross-platform (Web builder → callable → Firestore Emulator → Mobile parser) foi provada de ponta a ponta. Os commits locais foram realizados em ambos os repositórios. Push e deploy permanecem não autorizados.

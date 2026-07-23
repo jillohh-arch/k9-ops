@@ -133,14 +133,14 @@ describe("K9OpsLoadingScreen — mensagem de status", () => {
 });
 
 describe("K9OpsLoadingScreen — asset injetável e fallback oficial", () => {
-  it("renderiza o fallback estático oficial quando visual não é fornecido", () => {
+  it("renderiza o visual oficial quando visual não é fornecido", () => {
     render(<K9OpsLoadingScreen />);
 
     const img = screen.getByAltText("Malinois K9 Ops — carregando sistema");
     expect(img).toBeInTheDocument();
     expect(img).toHaveAttribute(
       "src",
-      "/assets/loading/k9_ops_loading_dog_static_v1.png",
+      "/assets/loading/k9_ops_loading_dog_animated.webp",
     );
   });
 

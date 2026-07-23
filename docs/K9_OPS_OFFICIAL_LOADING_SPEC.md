@@ -629,6 +629,200 @@ Nesta fase (2A), foi integrado o asset estático oficial aprovado:
 
 **Arquitetura Visual:**
 - **Mobile:** `K9OpsLoadingVisual` (`lib/core/widgets/k9_ops_loading_visual.dart`) encapsula o asset estático local (`assets/images/k9_ops_loading_dog_static_v1.png`).
+Nome sugerido:
+
+`K9OpsLoadingScreen`
+
+## 12.2 Responsabilidades
+
+- renderizar o layout;
+- receber estado externo;
+- não executar autenticação diretamente;
+- não decidir autorização;
+- não possuir regra de domínio.
+
+## 12.3 Modelo conceitual
+
+```text
+K9OpsLoadingState
+├── stage
+├── progress
+├── message
+├── isComplete
+└── error
+```
+
+## 12.4 Stages sugeridos
+
+```text
+initializing
+validatingAccess
+loadingPermissions
+syncingModules
+finalizing
+ready
+error
+```
+
+A lista final deve respeitar os estados reais existentes no app.
+
+---
+
+# 13. Arquitetura sugerida — Web
+
+Criar um componente equivalente na stack real do projeto.
+
+O componente deve:
+
+- consumir estado externo;
+- ser responsivo;
+- usar o Lottie apenas como camada visual;
+- manter progresso e status em componentes nativos;
+- não bloquear navegação além do necessário;
+- preservar comportamento de erro já existente.
+
+Não assumir framework sem primeiro inspecionar o projeto.
+
+---
+
+# 14. Assets e convenções
+
+Sugestões de nomes:
+
+```text
+assets/branding/loading/k9_ops_loading_dog.json
+assets/branding/loading/k9_ops_loading_dog_reduced_motion.json
+```
+
+ou estrutura equivalente aprovada pelo repositório.
+
+Não adicionar assets:
+
+- sem origem conhecida;
+- sem licença compatível;
+- maiores do que o necessário;
+- contendo texto rasterizado que deveria ser nativo.
+
+---
+
+# 15. Performance
+
+## Mobile
+
+Validar:
+
+- tempo de carregamento do asset;
+- uso de memória;
+- frame pacing;
+- fluidez em dispositivo físico;
+- comportamento em aparelhos menos potentes.
+
+## Web
+
+Validar:
+
+- tamanho transferido;
+- lazy/preload adequado;
+- ausência de layout shift relevante;
+- carregamento em conexão mais lenta.
+
+A animação deve ser visualmente premium, mas nunca atrasar o bootstrap real do produto.
+
+---
+
+# 16. Fallback
+
+Se o Lottie falhar:
+
+- exibir versão estática do Malinois;
+- manter barra, textos e estados funcionais;
+- permitir conclusão normal do bootstrap.
+
+O loading nunca pode depender da animação para funcionar.
+
+---
+
+# 17. Critérios de aceite
+
+## Visual
+
+- [ ] identidade coerente com K9 Ops;
+- [ ] Malinois reconhecível e anatômico;
+- [ ] loop fluido;
+- [ ] sem aparência cartunesca;
+- [ ] glow controlado;
+- [ ] HUD discreto;
+- [ ] Web e Mobile pertencem à mesma família visual.
+
+## Funcional
+
+- [ ] loading reflete estados reais quando disponíveis;
+- [ ] nenhuma lógica crítica depende da animação;
+- [ ] erro não gera loading infinito;
+- [ ] fallback funciona;
+- [ ] navegação ocorre apenas quando o bootstrap está pronto;
+- [ ] não há regressão de autenticação ou autorização.
+
+## Performance
+
+- [ ] animação fluida no Mobile;
+- [ ] asset com tamanho aceitável;
+- [ ] Web responsiva;
+- [ ] reduced motion respeitado quando disponível;
+- [ ] sem impacto relevante no tempo de inicialização.
+
+---
+
+# 18. Ordem oficial de execução
+
+```text
+Auditoria da implementação atual
+↓
+Mapeamento dos estados reais de boot
+↓
+Produção do asset animado
+↓
+Implementação estrutural Mobile
+↓
+Validação Mobile
+↓
+Implementação Web
+↓
+Validação Web
+↓
+Polimento e acessibilidade
+↓
+Documentação final
+```
+
+---
+
+# 19. Decisão atual
+
+A direção visual de Web e Mobile está aprovada.
+
+A implementação deverá usar, como primeira opção:
+
+**Lottie para o Malinois/HUD + UI nativa para progresso, textos e estados.**
+
+A arte conceitual aprovada serve como **referência visual**, não como asset final pronto para produção.
+
+A etapa seguinte é:
+
+1. auditar a implementação atual de loading/boot;
+2. identificar os pontos reais de progresso e estados;
+3. produzir ou obter o asset Lottie final;
+4. integrar sem alterar contratos funcionais de autenticação, permissão ou bootstrap.
+
+---
+
+# 20. Fase 2A — Integração do Fallback Estático Oficial
+
+Nesta fase (2A), foi integrado o asset estático oficial aprovado:
+- `k9_ops_loading_dog_static_v1.png`
+
+**Arquitetura Visual:**
+- **Mobile:** `K9OpsLoadingVisual` (`lib/core/widgets/k9_ops_loading_visual.dart`) encapsula o asset estático local (`assets/images/k9_ops_loading_dog_static_v1.png`).
 - **Web:** `K9OpsLoadingVisual` (`src/components/feedback/k9-ops-loading-visual.tsx`) encapsula o asset estático public (`public/assets/loading/k9_ops_loading_dog_static_v1.png`).
 - **Resiliência:** Em ambos os ambientes, a tela aceita override visual (`visual` prop). Na ausência de override, o `K9OpsLoadingVisual` fornece o fallback estático oficial sem dependência de rede nem de bibliotecas externas de animação.
 
@@ -639,3 +833,13 @@ Nesta fase (2A), foi integrado o asset estático oficial aprovado:
 - **Integração Real (Gate 4A):** O `K9OpsLoadingScreen` foi integrado ao `AuthGate` (`validatingAccess` / `0.30`) e ao fallback do App Router `loading.tsx` (`syncingModules` / `0.95`).
 - **AccessControl:** Mantido intacto sem novos bloqueios por tela cheia.
 - **Remoção do Loading Legado (Gate 4B):** O componente provisório Web (`src/components/feedback/loading-screen.tsx`) foi removido do repositório após auditoria comprovar zero consumidores ativos.
+
+---
+
+# 22. Fase 5D.1 — Mídia Animada Oficial Web (Animated WebP)
+
+- **Integração Real (Gate 5D.1):** O `K9OpsLoadingVisual` Web (`src/components/feedback/k9-ops-loading-visual.tsx`) integra o Animated WebP oficial (`public/assets/loading/k9_ops_loading_dog_animated.webp` - 666×384 px, 24 fps, 36 frames, loop de 1,50 s, Candidate V2-B Medium Crop).
+- **Desempenho Visual Web:** Na homologação em navegador real, o Animated WebP iniciou sem flash vazio perceptível e apresentou comportamento visual satisfatório durante os loadings observados.
+- **Duração Natural:** O Web permanece sem duração mínima artificial, respeitando o tempo técnico natural dos estados de carregamento.
+- **Resiliência & Accessibility:** Quando `prefers-reduced-motion: reduce` estiver ativo (`useReducedMotion` do Framer Motion) ou em caso de erro no WebP, a interface reverte automaticamente para o PNG estático oficial (`k9_ops_loading_dog_static_v1.png`). Em falha do PNG, exibe o SVG neutro.
+- **Nativa & Leve:** Decodificação nativa via tag `<img>` no navegador, sem inclusão de players de vídeo (`video_player`) ou dependências de terceiros.

@@ -23,7 +23,7 @@ export interface K9OpsLoadingVisualProps {
  */
 export function K9OpsLoadingVisual({
   src = "/assets/loading/k9_ops_loading_dog_static_v1.png",
-  className = "h-36 w-36 sm:h-44 sm:w-44",
+  className = "h-44 w-44 sm:h-56 sm:w-56 md:h-64 md:w-64 lg:h-72 lg:w-72",
   alt = "Malinois K9 Ops — carregando sistema",
 }: K9OpsLoadingVisualProps) {
   const [hasError, setHasError] = useState(false);

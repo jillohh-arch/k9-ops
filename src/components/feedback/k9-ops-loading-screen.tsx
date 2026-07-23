@@ -72,14 +72,14 @@ export function K9OpsLoadingScreen({
 
   return (
     <main
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-[#040a10]"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-black bg-gradient-to-b from-black via-black via-45% to-[#040a10]"
       role="status"
       aria-live="polite"
       aria-label="Carregando painel operacional K9 Ops"
     >
-      {/* Ambient glow */}
+      {/* Ambient glow — deslocado para a metade inferior da tela para não iluminar as bordas da mídia */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-1/3 h-[600px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500/[0.06] blur-[120px]" />
+        <div className="absolute left-1/2 top-2/3 h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500/[0.05] blur-[120px]" />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent" />
       </div>
 
@@ -98,18 +98,25 @@ export function K9OpsLoadingScreen({
       ) : null}
 
       {/* Center content */}
-      <div className="relative flex flex-col items-center gap-8 px-6">
-        {/* Asset stage — Malinois injetável ou moldura HUD neutra */}
-        <div className="relative flex h-44 w-44 items-center justify-center sm:h-52 sm:w-52">
+      <div className="relative flex flex-col items-center gap-6 sm:gap-8 lg:gap-10 px-6 max-w-4xl">
+        {/* Asset stage — Malinois em preto puro com anéis HUD holográficos em camadas */}
+        <div className="relative flex h-48 w-48 sm:h-64 sm:w-64 md:h-72 md:w-72 lg:h-80 lg:w-80 items-center justify-center">
+          {/* Anéis traseiros (profundidade de fundo) */}
+          <div className="absolute inset-0 rounded-full border border-cyan-400/20" />
           <div className="hud-rotate-slow absolute inset-1 rounded-full border border-cyan-400/20 border-t-cyan-400/60" />
-          <div className="absolute inset-0 rounded-full bg-cyan-400/[0.06] blur-2xl" />
+
+          {/* Mídia (assentada sobre a zona de mídia em preto absoluto #000000) */}
           <div className="relative z-10 flex h-full w-full items-center justify-center">
             {visual ?? <K9OpsLoadingVisual />}
           </div>
+
+          {/* Anéis frontais sutis (integração holográfica sobre o perímetro) */}
+          <div className="pointer-events-none absolute inset-2 z-20 rounded-full border border-cyan-400/30" />
+          <div className="pointer-events-none absolute inset-4 z-20 rounded-full border border-cyan-400/20" />
         </div>
 
         {/* Título */}
-        <p className="text-center font-mono text-sm font-bold uppercase tracking-[0.25em] text-cyan-100/80">
+        <p className="text-center font-mono text-sm sm:text-base md:text-lg lg:text-xl font-bold uppercase tracking-[0.25em] sm:tracking-[0.3em] text-cyan-100/90">
           {K9_LOADING_TITLE}
         </p>
 
@@ -122,14 +129,16 @@ export function K9OpsLoadingScreen({
           <>
             {/* Mensagem de status opcional (não duplica rótulos de etapa) */}
             {message ? (
-              <p className="text-center text-[11px] text-slate-400">{message}</p>
+              <p className="text-center text-[11px] sm:text-xs text-slate-400">
+                {message}
+              </p>
             ) : null}
 
             {/* Barra de progresso */}
             <ProgressBar value={clampedProgress} />
 
             {/* Etapas */}
-            <div className="mt-2 space-y-3">
+            <div className="mt-2 w-full max-w-xs sm:max-w-md md:max-w-lg space-y-3.5 sm:space-y-4">
               {K9_LOADING_STEPS.map((step, index) => {
                 const done = isReady || index < currentOrder;
                 const active = !isReady && index === currentOrder;
@@ -149,7 +158,7 @@ export function K9OpsLoadingScreen({
       </div>
 
       {/* Footer */}
-      <p className="absolute bottom-6 font-mono text-[10px] uppercase tracking-[0.3em] text-cyan-400/25">
+      <p className="absolute bottom-6 font-mono text-[10px] sm:text-xs uppercase tracking-[0.3em] text-cyan-400/25">
         {K9_LOADING_FOOTER}
       </p>
     </main>
@@ -161,15 +170,15 @@ function ProgressBar({ value }: { value: number | null }) {
   const percent = value == null ? null : Math.round(value * 100);
   const width = value == null ? 0 : value * 100;
   return (
-    <div className="w-72">
-      <div className="h-1 w-full overflow-hidden rounded-full bg-cyan-400/10">
+    <div className="w-72 sm:w-96 md:w-[420px] lg:w-[460px] max-w-full">
+      <div className="h-1.5 sm:h-2 w-full overflow-hidden rounded-full bg-cyan-400/10">
         <div
           className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-cyan-300 transition-[width] duration-300 ease-out motion-reduce:transition-none"
           style={{ width: `${width}%` }}
         />
       </div>
       {percent != null ? (
-        <p className="mt-2 text-right font-mono text-[10px] tabular-nums text-cyan-400/50">
+        <p className="mt-2 text-right font-mono text-[10px] sm:text-xs tabular-nums text-cyan-400/50">
           {percent}%
         </p>
       ) : null}
@@ -190,11 +199,14 @@ function StepRow({
 }) {
   const state = done ? "concluído" : active ? "em andamento" : "pendente";
   return (
-    <div className="flex items-center gap-3" aria-label={`${label}: ${state}`}>
-      <span className="flex h-5 w-5 items-center justify-center">
+    <div
+      className="flex items-center gap-3 sm:gap-4"
+      aria-label={`${label}: ${state}`}
+    >
+      <span className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center shrink-0">
         {done ? (
           <svg
-            className="h-3 w-3 text-emerald-400"
+            className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400"
             viewBox="0 0 12 12"
             fill="none"
             aria-hidden="true"
@@ -209,7 +221,7 @@ function StepRow({
           </svg>
         ) : (
           <span
-            className={`h-2 w-2 rounded-full ${
+            className={`h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full ${
               active
                 ? "bg-cyan-400 motion-safe:animate-pulse"
                 : "bg-cyan-400/30"
@@ -219,13 +231,15 @@ function StepRow({
       </span>
       <div>
         <p
-          className={`text-sm font-bold ${
+          className={`text-sm sm:text-base font-bold ${
             done || active ? "text-cyan-200" : "text-slate-500"
           }`}
         >
           {label}
         </p>
-        <p className="mt-0.5 text-[11px] text-slate-500">{detail}</p>
+        <p className="mt-0.5 text-[11px] sm:text-xs md:text-sm text-slate-500">
+          {detail}
+        </p>
       </div>
     </div>
   );

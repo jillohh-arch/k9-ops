@@ -9,6 +9,7 @@ import {
   stageOrder,
   type K9LoadingStage,
 } from "./k9-ops-loading-constants";
+import { K9OpsLoadingVisual } from "./k9-ops-loading-visual";
 
 /**
  * Loading oficial do K9 Ops (Web) — camada **puramente apresentacional**.
@@ -103,7 +104,7 @@ export function K9OpsLoadingScreen({
           <div className="hud-rotate-slow absolute inset-1 rounded-full border border-cyan-400/20 border-t-cyan-400/60" />
           <div className="absolute inset-0 rounded-full bg-cyan-400/[0.06] blur-2xl" />
           <div className="relative z-10 flex h-full w-full items-center justify-center">
-            {visual ?? <NeutralAssetMarker />}
+            {visual ?? <K9OpsLoadingVisual />}
           </div>
         </div>
 
@@ -155,28 +156,6 @@ export function K9OpsLoadingScreen({
   );
 }
 
-/**
- * Marcador neutro exibido enquanto o asset oficial não está presente.
- * Não simula o Malinois nem finge ser o asset final.
- */
-function NeutralAssetMarker() {
-  return (
-    <svg
-      className="h-20 w-20 text-cyan-400/40"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" strokeDasharray="3 3" />
-      <path
-        d="M8 14c0-2 1.5-3.5 4-3.5S16 12 16 14M9.5 9.5h.01M14.5 9.5h.01"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function ProgressBar({ value }: { value: number | null }) {
   const percent = value == null ? null : Math.round(value * 100);

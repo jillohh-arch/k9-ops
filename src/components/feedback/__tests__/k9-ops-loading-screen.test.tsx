@@ -132,15 +132,35 @@ describe("K9OpsLoadingScreen — mensagem de status", () => {
   });
 });
 
-describe("K9OpsLoadingScreen — asset injetável", () => {
-  it("renderiza visual injetado", () => {
+describe("K9OpsLoadingScreen — asset injetável e fallback oficial", () => {
+  it("renderiza o fallback estático oficial quando visual não é fornecido", () => {
+    render(<K9OpsLoadingScreen />);
+
+    const img = screen.getByAltText("Malinois K9 Ops — carregando sistema");
+    expect(img).toBeInTheDocument();
+    expect(img).toHaveAttribute(
+      "src",
+      "/assets/loading/k9_ops_loading_dog_static_v1.png",
+    );
+  });
+
+  it("renderiza visual customizado quando prop visual é fornecida", () => {
     render(
       <K9OpsLoadingScreen
-        visual={<div data-testid="malinois">dog</div>}
+        visual={<div data-testid="malinois-override">dog</div>}
       />,
     );
 
-    expect(screen.getByTestId("malinois")).toBeInTheDocument();
+    expect(screen.getByTestId("malinois-override")).toBeInTheDocument();
+    expect(
+      screen.queryByAltText("Malinois K9 Ops — carregando sistema"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opera normalmente sem biblioteca Lottie", () => {
+    render(<K9OpsLoadingScreen />);
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
   });
 });
 

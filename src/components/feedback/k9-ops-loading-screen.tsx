@@ -14,14 +14,11 @@ import { K9OpsLoadingVisual } from "./k9-ops-loading-visual";
 /**
  * Loading oficial do K9 Ops (Web) — camada **puramente apresentacional**.
  *
- * ## Estado de transição
+ * ## Estado de integração
  *
- * Este componente é o novo loading oficial, mas na Fase 1 ele **ainda não está
- * conectado** ao bootstrap. O loading ativo em produção continua sendo
- * `src/components/feedback/loading-screen.tsx`. A substituição controlada (e a
- * decisão do ponto correto de integração entre `authStatus` e `accessStatus`)
- * ocorrerá na fase de integração. Não devem coexistir dois sistemas de loading
- * ativos em produção após aquela fase.
+ * Este componente é o novo loading oficial do K9 Ops (Web), integrado ao `AuthGate`
+ * e ao fallback do App Router (`loading.tsx`). O componente legado
+ * `loading-screen.tsx` foi removido após auditoria comprovar zero consumidores ativos.
  *
  * ## Estado externo
  *

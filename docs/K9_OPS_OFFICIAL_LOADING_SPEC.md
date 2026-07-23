@@ -631,3 +631,11 @@ Nesta fase (2A), foi integrado o asset estático oficial aprovado:
 - **Mobile:** `K9OpsLoadingVisual` (`lib/core/widgets/k9_ops_loading_visual.dart`) encapsula o asset estático local (`assets/images/k9_ops_loading_dog_static_v1.png`).
 - **Web:** `K9OpsLoadingVisual` (`src/components/feedback/k9-ops-loading-visual.tsx`) encapsula o asset estático public (`public/assets/loading/k9_ops_loading_dog_static_v1.png`).
 - **Resiliência:** Em ambos os ambientes, a tela aceita override visual (`visual` prop). Na ausência de override, o `K9OpsLoadingVisual` fornece o fallback estático oficial sem dependência de rede nem de bibliotecas externas de animação.
+
+---
+
+# 21. Fase 4 — Integração Funcional Web e Remoção do Loading Legado
+
+- **Integração Real (Gate 4A):** O `K9OpsLoadingScreen` foi integrado ao `AuthGate` (`validatingAccess` / `0.30`) e ao fallback do App Router `loading.tsx` (`syncingModules` / `0.95`).
+- **AccessControl:** Mantido intacto sem novos bloqueios por tela cheia.
+- **Remoção do Loading Legado (Gate 4B):** O componente provisório Web (`src/components/feedback/loading-screen.tsx`) foi removido do repositório após auditoria comprovar zero consumidores ativos.

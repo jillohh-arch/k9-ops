@@ -5,7 +5,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { useAuth } from "@/features/auth/providers/auth-provider";
 import { paths } from "@/lib/routes/paths";
-import { LoadingScreen } from "@/components/feedback/loading-screen";
+import { K9OpsLoadingScreen } from "@/components/feedback/k9-ops-loading-screen";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { status } = useAuth();
@@ -22,7 +22,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, [pathname, router, status]);
 
   if (status === "loading") {
-    return <LoadingScreen />;
+    return <K9OpsLoadingScreen stage="validatingAccess" progress={0.30} />;
   }
 
   if (status === "unauthenticated") {

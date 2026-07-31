@@ -1,264 +1,302 @@
-/**
- * Firebase Auth Emulator Seed Script for HW-2 E2E Tests
- *
- * Creates test users with different permission levels:
- * - canonical: Full health.read access
- * - legacy: Only health.view (no health.read)
- * - no-access: No health permissions
- *
- * Uses emulator-specific authentication endpoint.
- * Port configuration is sourced from command-line arguments.
- */
+import { pathToFileURL } from "node:url";
 
-// Test users with deterministic UIDs for idempotency
-const TEST_USERS = [
+const AUTH_DOMAIN = "gcm.com.br";
+
+export const TEST_SCENARIOS = [
   {
-    email: "canonical@hw2-test.local",
+    key: "canonical",
+    ra: "100001",
     password: "TestPassword123!",
-    displayName: "Canonical Test User",
-    uid: "canonical-test-user-uid",
-    profileId: "canonical-profile",
+    displayName: "Canonical Health E2E",
+    profileId: "health-e2e-canonical",
+    permissions: { health: { read: true } },
   },
   {
-    email: "legacy@hw2-test.local",
+    key: "legacy",
+    ra: "100002",
     password: "TestPassword123!",
-    displayName: "Legacy Test User",
-    uid: "legacy-test-user-uid",
-    profileId: "legacy-profile",
+    displayName: "Legacy Health E2E",
+    profileId: "health-e2e-legacy",
+    permissions: { health: { view: true } },
   },
   {
-    email: "noaccess@hw2-test.local",
+    key: "no-access",
+    ra: "100003",
     password: "TestPassword123!",
-    displayName: "No Access Test User",
-    uid: "noaccess-test-user-uid",
-    profileId: "noaccess-profile",
+    displayName: "No Access Health E2E",
+    profileId: "health-e2e-no-access",
+    permissions: {},
   },
 ];
 
-const DEFAULT_AUTH_EMULATOR = "http://127.0.0.1:9199";
-const DEFAULT_FIRESTORE_EMULATOR = "127.0.0.1:8181";
-const DEFAULT_PROJECT = "demo-k9-ops";
+export function normalizeRa(value) {
+  return String(value).replace(/\D/g, "");
+}
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options = {
-    authEmulator: DEFAULT_AUTH_EMULATOR,
-    firestoreEmulator: DEFAULT_FIRESTORE_EMULATOR,
-    projectId: DEFAULT_PROJECT,
+export function raToAuthEmail(ra) {
+  return `${normalizeRa(ra)}@${AUTH_DOMAIN}`;
+}
+
+export function parseEmulatorEndpoint(value, name) {
+  if (!value) throw new Error(`${name} emulator argument is required`);
+  const url = new URL(value.includes("://") ? value : `http://${value}`);
+  const hostname = url.hostname.toLowerCase();
+  if (hostname !== "127.0.0.1" && hostname !== "localhost") {
+    throw new Error(`${name} emulator host must be local`);
+  }
+  if (!url.port) throw new Error(`${name} emulator port is required`);
+  return `${url.protocol}//${url.hostname}:${url.port}`;
+}
+
+export function parseArgs(args = process.argv.slice(2)) {
+  const parsed = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const flag = args[index];
+    const value = args[index + 1];
+    if (["--auth-emulator", "--firestore-emulator", "--project"].includes(flag)) {
+      if (!value || value.startsWith("--")) {
+        throw new Error(`${flag} requires a value`);
+      }
+      parsed[flag] = value;
+      index += 1;
+    }
+  }
+
+  for (const flag of ["--auth-emulator", "--firestore-emulator", "--project"]) {
+    if (!parsed[flag]) throw new Error(`${flag} is required`);
+  }
+
+  const projectId = parsed["--project"];
+  if (!projectId.startsWith("demo-")) {
+    throw new Error("Emulator project must use the demo- prefix");
+  }
+
+  return {
+    authEmulator: parseEmulatorEndpoint(parsed["--auth-emulator"], "Auth"),
+    firestoreEmulator: parseEmulatorEndpoint(
+      parsed["--firestore-emulator"],
+      "Firestore",
+    ),
+    projectId,
   };
-  let force = false;
-
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
-      case "--auth-emulator":
-        options.authEmulator = args[++i];
-        break;
-      case "--firestore-emulator":
-        options.firestoreEmulator = args[++i];
-        break;
-      case "--project":
-        options.projectId = args[++i];
-        break;
-      case "--force":
-        force = true;
-        break;
-    }
-  }
-
-  return { options, force };
 }
 
-async function signUpUser(email, password, uid, displayName, authEmulator, projectId) {
-  const response = await fetch(`${authEmulator}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      password,
-      displayName,
-      idToken: undefined,
-      localId: uid, // Request specific UID for deterministic testing
-      returnSecureToken: true,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    // Ignore if user already exists (idempotent)
-    if (error.includes("EMAIL_EXISTS") || error.includes("DUPLICATE_EMAIL") || error.includes("already exists")) {
-      return { status: "exists", uid: uid };
-    }
-    throw new Error(`Failed to create user ${email}: ${error}`);
-  }
-
-  const data = await response.json();
-  return { status: "created", uid: data.localId || uid };
+function jsonResponseError(operation, response) {
+  return new Error(`${operation} failed with HTTP ${response.status}`);
 }
 
-async function createAccessProfile(profileId, permissions, displayName, firestoreEmulator, projectId) {
-  const url = `http://${firestoreEmulator}/v1/projects/${projectId}/databases/(default)/documents/access_profiles/${profileId}`;
+async function readJson(response, operation) {
+  if (!response.ok) throw jsonResponseError(operation, response);
+  return response.json();
+}
 
-  try {
-    const response = await fetch(url, {
-      method: "PATCH",
+async function createOrResolveIdentity(fetchImpl, authBase, scenario) {
+  const body = {
+    email: raToAuthEmail(scenario.ra),
+    password: scenario.password,
+    displayName: scenario.displayName,
+    returnSecureToken: true,
+  };
+  const signUp = await fetchImpl(
+    `${authBase}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key`,
+    {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fields: {
-          id: { stringValue: profileId },
-          displayName: { stringValue: displayName },
-          description: { stringValue: `Test profile for ${profileId}` },
-          isActive: { booleanValue: true },
-          permissions: {
-            mapValue: {
-              fields: Object.fromEntries(
-                Object.entries(permissions).map(([moduleId, actions]) => [
-                  moduleId,
-                  {
-                    mapValue: {
-                      fields: Object.fromEntries(
-                        Object.entries(actions).map(([action, value]) => [action, { booleanValue: value }])
-                      ),
-                    },
-                  },
-                ])
-              ),
-            },
-          },
-        },
-      }),
-    });
+      body: JSON.stringify(body),
+    },
+  );
 
-    if (!response.ok && response.status !== 409) {
-      throw new Error(`Failed to create profile ${profileId}: HTTP ${response.status}`);
-    }
+  let payload;
+  if (signUp.ok) {
+    payload = await signUp.json();
+  } else if ((await signUp.text()).includes("EMAIL_EXISTS")) {
+    const signIn = await fetchImpl(
+      `${authBase}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-api-key`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: body.email,
+          password: body.password,
+          returnSecureToken: true,
+        }),
+      },
+    );
+    payload = await readJson(signIn, "Auth identity resolution");
+  } else {
+    throw jsonResponseError("Auth identity creation", signUp);
+  }
 
-    // Verify the document was written correctly
-    const verifyResponse = await fetch(url);
-    if (!verifyResponse.ok) {
-      throw new Error(`Failed to verify profile ${profileId} creation`);
-    }
+  if (typeof payload.localId !== "string" || !payload.localId) {
+    throw new Error("Auth identity response did not include a UID");
+  }
+  return payload.localId;
+}
 
-    const verifyData = await verifyResponse.json();
-    if (!verifyData.fields || !verifyData.fields.permissions) {
-      throw new Error(`Profile ${profileId} verification failed: missing permissions field`);
-    }
+function firestoreValue(value) {
+  if (typeof value === "boolean") return { booleanValue: value };
+  if (typeof value === "number") return { integerValue: String(value) };
+  if (Array.isArray(value)) {
+    return { arrayValue: { values: value.map(firestoreValue) } };
+  }
+  if (value && typeof value === "object") {
+    return {
+      mapValue: {
+        fields: Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [key, firestoreValue(item)]),
+        ),
+      },
+    };
+  }
+  return { stringValue: String(value) };
+}
 
-    return { status: response.status === 409 ? "exists" : "created" };
-  } catch (err) {
-    throw new Error(`Failed to create/verify profile ${profileId}: ${err.message}`);
+function documentBody(fields) {
+  return {
+    fields: Object.fromEntries(
+      Object.entries(fields).map(([key, value]) => [key, firestoreValue(value)]),
+    ),
+  };
+}
+
+function documentUrl(options, collection, id) {
+  return `${options.firestoreEmulator}/v1/projects/${options.projectId}/databases/(default)/documents/${collection}/${encodeURIComponent(id)}`;
+}
+
+async function writeDocument(fetchImpl, url, fields, operation) {
+  const response = await fetchImpl(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(documentBody(fields)),
+  });
+  if (!response.ok) throw jsonResponseError(operation, response);
+}
+
+function fieldValue(field) {
+  if (!field) return undefined;
+  if ("stringValue" in field) return field.stringValue;
+  if ("booleanValue" in field) return field.booleanValue;
+  if ("integerValue" in field) return Number(field.integerValue);
+  if ("arrayValue" in field) {
+    return (field.arrayValue.values ?? []).map(fieldValue);
+  }
+  if ("mapValue" in field) {
+    return Object.fromEntries(
+      Object.entries(field.mapValue.fields ?? {}).map(([key, value]) => [
+        key,
+        fieldValue(value),
+      ]),
+    );
+  }
+  return undefined;
+}
+
+async function readDocument(fetchImpl, url, operation) {
+  const payload = await readJson(await fetchImpl(url), operation);
+  return Object.fromEntries(
+    Object.entries(payload.fields ?? {}).map(([key, value]) => [
+      key,
+      fieldValue(value),
+    ]),
+  );
+}
+
+function assertEqual(actual, expected, message) {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(message);
   }
 }
 
-async function verifyEmulatorConnection(authEmulator, projectId) {
-  try {
-    const response = await fetch(`${authEmulator}/identitytoolkit.googleapis.com/v1/projects/${projectId}/config`);
-    if (!response.ok && response.status !== 404) {
-      throw new Error(`Auth emulator health check failed: HTTP ${response.status}`);
-    }
-    return true;
-  } catch (err) {
-    throw new Error(`Auth emulator not reachable at ${authEmulator}: ${err.message}`);
+async function seedScenario(fetchImpl, options, scenario) {
+  const uid = await createOrResolveIdentity(
+    fetchImpl,
+    options.authEmulator,
+    scenario,
+  );
+  const userUrl = documentUrl(options, "users", scenario.ra);
+  const profileUrl = documentUrl(
+    options,
+    "access_profiles",
+    scenario.profileId,
+  );
+
+  const userFields = {
+    active: true,
+    status: "active",
+    ra: scenario.ra,
+    auth_uid: uid,
+    email: raToAuthEmail(scenario.ra),
+    name: scenario.displayName,
+    access_profile_id: scenario.profileId,
+  };
+  const profileFields = {
+    id: scenario.profileId,
+    name: scenario.displayName,
+    description: "Synthetic HW-2 emulator profile",
+    level: "read-only",
+    module_tags: ["health"],
+    role_keys: [],
+    scope: "global",
+    seed_version: 1,
+    slug: scenario.profileId,
+    status: "active",
+    tone: "cyan",
+    ui_hidden: true,
+    permissions: scenario.permissions,
+  };
+
+  await writeDocument(fetchImpl, userUrl, userFields, "User association write");
+  await writeDocument(fetchImpl, profileUrl, profileFields, "Profile write");
+
+  const storedUser = await readDocument(
+    fetchImpl,
+    userUrl,
+    "User association verification",
+  );
+  const storedProfile = await readDocument(
+    fetchImpl,
+    profileUrl,
+    "Profile verification",
+  );
+
+  for (const [field, expected] of Object.entries(userFields)) {
+    assertEqual(storedUser[field], expected, "User association verification diverged");
+  }
+  for (const [field, expected] of Object.entries(profileFields)) {
+    assertEqual(storedProfile[field], expected, "Profile verification diverged");
+  }
+}
+
+export async function runSeed(options, dependencies = {}) {
+  const fetchImpl = dependencies.fetchImpl ?? fetch;
+  const log = dependencies.log ?? console.log;
+  parseEmulatorEndpoint(options.authEmulator, "Auth");
+  parseEmulatorEndpoint(options.firestoreEmulator, "Firestore");
+  if (!options.projectId?.startsWith("demo-")) {
+    throw new Error("Emulator project must use the demo- prefix");
+  }
+
+  for (const scenario of TEST_SCENARIOS) {
+    await seedScenario(fetchImpl, options, scenario);
+    log(`${scenario.key} identity: valid`);
+    log(`${scenario.key} user association: valid`);
+    log(`${scenario.key} profile: valid`);
   }
 }
 
 async function main() {
-  const { options, force } = parseArgs();
-
-  console.log("[Seed] Firebase Auth Emulator Seed");
-  console.log("[Seed] Project: " + options.projectId);
-  console.log("[Seed] Auth Emulator: " + options.authEmulator);
-  console.log("[Seed] Firestore Emulator: " + options.firestoreEmulator);
-  console.log("");
-
-  // Verify emulator is running
-  await verifyEmulatorConnection(options.authEmulator, options.projectId);
-  console.log("[Seed] Emulators verified and ready");
-
-  // Create test users
-  console.log("\n[Seed] Creating test users...\n");
-  const userResults = [];
-
-  for (const user of TEST_USERS) {
-    console.log("[Seed] Creating user: [REDACTED] (" + user.uid + ")");
-
-    try {
-      const result = await signUpUser(user.email, user.password, user.uid, user.displayName, options.authEmulator, options.projectId);
-      userResults.push({ ...user, result });
-      console.log("[Seed]   " + (result.status === "created" ? "Created" : "Exists") + " with UID: " + result.uid);
-    } catch (error) {
-      if (force) throw error;
-      console.log("[Seed]   Error: " + error.message);
-    }
-  }
-
-  // Create access profiles
-  console.log("\n[Seed] Creating access profiles...\n");
-
-  try {
-    // Canonical profile with health.read
-    const canonicalResult = await createAccessProfile(
-      "canonical-profile",
-      {
-        health: { read: true, view: true },
-        training: { read: true, write: true },
-      },
-      "Canonical Health Access",
-      options.firestoreEmulator,
-      options.projectId
-    );
-    console.log("[Seed]   canonical-profile (" + canonicalResult.status + ")");
-    console.log("[Seed]     - health.read: true");
-    console.log("[Seed]     - health.view: true");
-  } catch (error) {
-    console.error("[Seed]   canonical-profile FAILED: " + error.message);
-    throw error;
-  }
-
-  try {
-    // Legacy profile with only health.view
-    const legacyResult = await createAccessProfile(
-      "legacy-profile",
-      {
-        health: { view: true },
-      },
-      "Legacy Health View Only",
-      options.firestoreEmulator,
-      options.projectId
-    );
-    console.log("[Seed]   legacy-profile (" + legacyResult.status + ")");
-    console.log("[Seed]     - health.view: true");
-    console.log("[Seed]     - health.read: NOT PRESENT (legacy adapter required)");
-  } catch (error) {
-    console.error("[Seed]   legacy-profile FAILED: " + error.message);
-    throw error;
-  }
-
-  try {
-    // No-access profile
-    const noaccessResult = await createAccessProfile(
-      "noaccess-profile",
-      {
-        training: { read: true },
-      },
-      "No Health Access",
-      options.firestoreEmulator,
-      options.projectId
-    );
-    console.log("[Seed]   noaccess-profile (" + noaccessResult.status + ")");
-    console.log("[Seed]     - health permissions: NONE");
-  } catch (error) {
-    console.error("[Seed]   noaccess-profile FAILED: " + error.message);
-    throw error;
-  }
-
-  console.log("\n[Seed] Seed complete");
-  console.log("\n[Seed] Test users (canonical identifiers only):");
-  console.log("  Canonical: canonical@hw2-test.local / [REDACTED]");
-  console.log("  Legacy:    legacy@hw2-test.local / [REDACTED]");
-  console.log("  No Access: noaccess@hw2-test.local / [REDACTED]");
+  await runSeed(parseArgs());
 }
 
-main().catch((error) => {
-  console.error("[Seed] Fatal error:", error);
-  process.exit(1);
-});
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((error) => {
+    console.error(
+      "seed failed:",
+      error instanceof Error ? error.message : "unknown error",
+    );
+    process.exitCode = 1;
+  });
+}

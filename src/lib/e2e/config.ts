@@ -1,69 +1,110 @@
-/**
- * E2E Test Environment Configuration
- *
- * Centralized configuration for all E2E test infrastructure.
- * This module is the SINGLE SOURCE OF TRUTH for port configuration.
- *
- * Security guarantees:
- * - Only used in E2E testing context
- * - No production impact
- * - No secrets required
- */
+/** Shared, production-safe configuration for the HW-2 emulator environment. */
 
-/** Auth Emulator Host */
-export const AUTH_EMULATOR_HOST = "127.0.0.1";
+export const DEFAULT_E2E_CONFIG = {
+  authHost: "127.0.0.1",
+  authPort: 9199,
+  firestoreHost: "127.0.0.1",
+  firestorePort: 8181,
+  hubHost: "127.0.0.1",
+  hubPort: 4545,
+  nextjsHost: "localhost",
+  nextjsPort: 3000,
+  projectId: "demo-k9-ops",
+} as const;
 
-/** Auth Emulator Port */
-export const AUTH_EMULATOR_PORT = Number(
-  process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT || "9199"
-);
+type Environment = Record<string, string | undefined>;
 
-/** Firestore Emulator Host */
-export const FIRESTORE_EMULATOR_HOST = "127.0.0.1";
+export type E2EConfig = {
+  authHost: string;
+  authPort: number;
+  firestoreHost: string;
+  firestorePort: number;
+  hubHost: string;
+  hubPort: number;
+  nextjsHost: string;
+  nextjsPort: number;
+  projectId: string;
+};
 
-/** Firestore Emulator Port */
-export const FIRESTORE_EMULATOR_PORT = Number(
-  process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_PORT || "8181"
-);
+function parsePort(value: string | undefined, fallback: number, name: string) {
+  const port = Number(value ?? fallback);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+    throw new Error(`[E2E Config] Invalid ${name} port: ${String(value ?? port)}`);
+  }
+  return port;
+}
 
-/** Firebase Hub Emulator Port */
-export const HUB_EMULATOR_PORT = Number(
-  process.env.NEXT_PUBLIC_FIREBASE_HUB_EMULATOR_PORT || "4545"
-);
+export function isLocalEmulatorHost(host: string) {
+  const normalized = host.trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost";
+}
 
-/** Firebase Emulator Project ID */
-export const EMULATOR_PROJECT_ID = "demo-k9-ops";
+export function assertLocalEmulatorHost(host: string, name: string) {
+  if (!isLocalEmulatorHost(host)) {
+    throw new Error(`[E2E Config] ${name} host must be local`);
+  }
+}
 
-/** Auth Emulator URL for direct HTTP calls */
+export function createE2EConfig(env: Environment = process.env): E2EConfig {
+  return {
+    authHost:
+      env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST ??
+      DEFAULT_E2E_CONFIG.authHost,
+    authPort: parsePort(
+      env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT,
+      DEFAULT_E2E_CONFIG.authPort,
+      "Auth",
+    ),
+    firestoreHost:
+      env.NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST ??
+      DEFAULT_E2E_CONFIG.firestoreHost,
+    firestorePort: parsePort(
+      env.NEXT_PUBLIC_FIRESTORE_EMULATOR_PORT,
+      DEFAULT_E2E_CONFIG.firestorePort,
+      "Firestore",
+    ),
+    hubHost:
+      env.NEXT_PUBLIC_FIREBASE_HUB_EMULATOR_HOST ??
+      DEFAULT_E2E_CONFIG.hubHost,
+    hubPort: parsePort(
+      env.NEXT_PUBLIC_FIREBASE_HUB_EMULATOR_PORT,
+      DEFAULT_E2E_CONFIG.hubPort,
+      "Hub",
+    ),
+    nextjsHost: DEFAULT_E2E_CONFIG.nextjsHost,
+    nextjsPort: parsePort(
+      env.E2E_NEXTJS_PORT,
+      DEFAULT_E2E_CONFIG.nextjsPort,
+      "Next.js",
+    ),
+    projectId:
+      env.FIREBASE_EMULATOR_PROJECT_ID ?? DEFAULT_E2E_CONFIG.projectId,
+  };
+}
+
+const config = createE2EConfig();
+
+export const AUTH_EMULATOR_HOST = config.authHost;
+export const AUTH_EMULATOR_PORT = config.authPort;
+export const FIRESTORE_EMULATOR_HOST = config.firestoreHost;
+export const FIRESTORE_EMULATOR_PORT = config.firestorePort;
+export const HUB_EMULATOR_HOST = config.hubHost;
+export const HUB_EMULATOR_PORT = config.hubPort;
+export const EMULATOR_PROJECT_ID = config.projectId;
 export const AUTH_EMULATOR_URL = `http://${AUTH_EMULATOR_HOST}:${AUTH_EMULATOR_PORT}`;
-
-/** Firestore Emulator URL for direct HTTP calls */
 export const FIRESTORE_EMULATOR_URL = `${FIRESTORE_EMULATOR_HOST}:${FIRESTORE_EMULATOR_PORT}`;
-
-/** All E2E test ports for lifecycle management */
 export const E2E_PORTS = {
   auth: AUTH_EMULATOR_PORT,
   firestore: FIRESTORE_EMULATOR_PORT,
   hub: HUB_EMULATOR_PORT,
-  nextjs: 3000,
+  nextjs: config.nextjsPort,
 } as const;
 
-/**
- * Validates that port values are within valid range.
- */
-export function validateE2EPorts(): void {
-  const ports = [
-    { name: "Auth", port: AUTH_EMULATOR_PORT },
-    { name: "Firestore", port: FIRESTORE_EMULATOR_PORT },
-    { name: "Hub", port: HUB_EMULATOR_PORT },
-  ];
-
-  for (const { name, port } of ports) {
-    if (port < 1024 || port > 65535) {
-      throw new Error(`[E2E Config] Invalid port for ${name}: ${port} (must be 1024-65535)`);
-    }
+export function validateE2EConfig(nextConfig: E2EConfig = config) {
+  assertLocalEmulatorHost(nextConfig.authHost, "Auth emulator");
+  assertLocalEmulatorHost(nextConfig.firestoreHost, "Firestore emulator");
+  assertLocalEmulatorHost(nextConfig.hubHost, "Hub emulator");
+  if (!nextConfig.projectId.startsWith("demo-")) {
+    throw new Error("[E2E Config] Emulator project must use the demo- prefix");
   }
 }
-
-// Validate on module load
-validateE2EPorts();

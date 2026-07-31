@@ -1,273 +1,278 @@
-import { setTimeout as sleep } from "node:timers/promises";
 import { spawn, type ChildProcess } from "node:child_process";
 import * as net from "node:net";
+import { resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
-// E2E Configuration - synced with src/lib/e2e/config.ts
-// These values are the source of truth for the lifecycle script
-const AUTH_EMULATOR_PORT = Number(process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT || "9199");
-const FIRESTORE_EMULATOR_PORT = Number(process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_PORT || "8181");
-const HUB_EMULATOR_PORT = Number(process.env.NEXT_PUBLIC_FIREBASE_HUB_EMULATOR_PORT || "4545");
-const EMULATOR_PROJECT_ID = "demo-k9-ops";
-const AUTH_EMULATOR_URL = `http://127.0.0.1:${AUTH_EMULATOR_PORT}`;
-const E2E_PORTS = {
-  auth: AUTH_EMULATOR_PORT,
-  firestore: FIRESTORE_EMULATOR_PORT,
-  hub: HUB_EMULATOR_PORT,
-} as const;
+import {
+  AUTH_EMULATOR_HOST,
+  AUTH_EMULATOR_PORT,
+  E2E_PORTS,
+  EMULATOR_PROJECT_ID,
+  FIRESTORE_EMULATOR_HOST,
+  FIRESTORE_EMULATOR_PORT,
+  HUB_EMULATOR_HOST,
+  HUB_EMULATOR_PORT,
+  validateE2EConfig,
+  createE2EConfig,
+} from "../src/lib/e2e/config";
+import { LifecycleStateMachine } from "../src/lib/e2e/lifecycle-machine";
 
-const NEXTJS_PORT = 3000;
+const projectRoot = process.cwd();
+const node = process.execPath;
+const firebaseCli = resolve(projectRoot, "node_modules/firebase-tools/lib/bin/firebase.js");
+const nextCli = resolve(projectRoot, "node_modules/next/dist/bin/next");
+const playwrightCli = resolve(projectRoot, "node_modules/@playwright/test/cli.js");
 
-async function isPortInUse(port: number): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    const client = new net.Socket();
-    const timeout = setTimeout(() => {
-      client.destroy();
-      resolve(false);
-    }, 500);
-
-    client.once("connect", () => {
-      clearTimeout(timeout);
-      client.destroy();
-      resolve(true);
-    });
-    client.once("error", () => {
-      clearTimeout(timeout);
-      resolve(false);
-    });
-    client.connect(port, "127.0.0.1");
+function isPortInUse(host: string, port: number) {
+  return new Promise<boolean>((resolveResult) => {
+    const socket = net.createConnection({ host, port });
+    const finish = (result: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolveResult(result);
+    };
+    socket.setTimeout(500);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
   });
 }
 
 async function waitForPort(
   host: string,
   port: number,
-  timeoutMs = 60000,
-  intervalMs = 1000,
-  processRef?: ChildProcess
-): Promise<boolean> {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeoutMs) {
-    if (processRef && processRef.exitCode !== null) {
-      throw new Error("[Lifecycle] Process exited unexpectedly during port wait (" + host + ":" + port + ")");
+  processRef: ChildProcess,
+  timeoutMs = 60_000,
+) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (processRef.exitCode !== null) {
+      throw new Error(`Process exited before ${host}:${port} became ready`);
     }
-    const inUse = await isPortInUse(port);
-    if (inUse) return true;
-    await sleep(intervalMs);
+    if (await isPortInUse(host, port)) return;
+    await sleep(500);
   }
-  throw new Error("[Lifecycle] Timeout waiting for " + host + ":" + port);
+  throw new Error(`Timed out waiting for ${host}:${port}`);
 }
 
-async function waitForService(
-  url: string,
-  maxAttempts = 30,
-  interval = 1000
-): Promise<boolean> {
-  for (let i = 0; i < maxAttempts; i++) {
+async function waitForHttp(url: string, processRef: ChildProcess) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    if (processRef.exitCode !== null) {
+      throw new Error("Next.js exited before readiness");
+    }
     try {
       const response = await fetch(url);
-      if (response.ok || response.status === 401) return true;
+      if (response.ok) return;
     } catch {
-      // Not ready yet
+      // Startup retry.
     }
-    await sleep(interval);
+    await sleep(1_000);
   }
-  return false;
+  throw new Error("Timed out waiting for Next.js readiness");
 }
 
-async function verifyPortsFree(): Promise<void> {
-  const ports = [E2E_PORTS.auth, E2E_PORTS.firestore, E2E_PORTS.hub, NEXTJS_PORT];
-  const occupied: string[] = [];
-  for (const p of ports) {
-    if (await isPortInUse(p)) {
-      const n = p === E2E_PORTS.auth ? "Auth" : p === E2E_PORTS.firestore ? "Firestore" : p === E2E_PORTS.hub ? "Hub" : "Next.js";
-      occupied.push(p + " (" + n + ")");
-    }
+async function verifyPorts(expectedInUse: boolean) {
+  const endpoints = [
+    [AUTH_EMULATOR_HOST, E2E_PORTS.auth],
+    [FIRESTORE_EMULATOR_HOST, E2E_PORTS.firestore],
+    [HUB_EMULATOR_HOST, E2E_PORTS.hub],
+    ["127.0.0.1", E2E_PORTS.nextjs],
+  ] as const;
+  const mismatches: number[] = [];
+  for (const [host, port] of endpoints) {
+    if ((await isPortInUse(host, port)) !== expectedInUse) mismatches.push(port);
   }
-  if (occupied.length) {
-    throw new Error("[Lifecycle] Required ports are already in use: " + occupied.join(", ") + ". Please stop any running emulators or Next.js servers.");
-  }
+  return mismatches;
 }
 
-async function verifyPortsReleased(): Promise<void> {
-  const ports = [E2E_PORTS.auth, E2E_PORTS.firestore, E2E_PORTS.hub, NEXTJS_PORT];
-  const stillBound: string[] = [];
-  await sleep(2000);
-  for (const p of ports) {
-    if (await isPortInUse(p)) stillBound.push(String(p));
-  }
-  if (stillBound.length) {
-    console.warn("[Lifecycle] Warning: Ports may not be fully released: " + stillBound.join(", "));
+function spawnNode(script: string, args: string[], env = process.env) {
+  return spawn(node, [script, ...args], {
+    cwd: projectRoot,
+    env: { ...env, FORCE_COLOR: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+}
+
+function pipeOutput(child: ChildProcess) {
+  child.stdout?.pipe(process.stdout);
+  child.stderr?.pipe(process.stderr);
+}
+
+function waitForClose(child: ChildProcess) {
+  return new Promise<number>((resolveResult, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => resolveResult(code ?? 1));
+  });
+}
+
+async function terminateKnownChild(child: ChildProcess | null, label: string) {
+  if (!child || child.exitCode !== null) return;
+  console.log(`[Lifecycle] Stopping ${label}`);
+  if (process.platform === "win32" && child.pid) {
+    const gracefulTree = spawn(
+      "taskkill",
+      ["/PID", String(child.pid), "/T"],
+      { stdio: "ignore", windowsHide: true },
+    );
+    await waitForClose(gracefulTree);
   } else {
-    console.log("[Lifecycle] All ports released");
+    child.kill("SIGTERM");
+  }
+  for (let attempt = 0; attempt < 20 && child.exitCode === null; attempt += 1) {
+    await sleep(250);
+  }
+  if (child.exitCode === null && child.pid) {
+    if (process.platform === "win32") {
+      const taskkill = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      await waitForClose(taskkill);
+    } else {
+      child.kill("SIGKILL");
+    }
   }
 }
 
-class LifecycleManager {
-  private emulatorProcess: ChildProcess | null = null;
-  private nextjsProcess: ChildProcess | null = null;
-  private exited = false;
+class Lifecycle {
+  private emulators: ChildProcess | null = null;
+  private nextjs: ChildProcess | null = null;
+  private stopped = false;
+  readonly machine = new LifecycleStateMachine();
 
-  async start(): Promise<void> {
-    console.log("[Lifecycle] Starting E2E test environment...");
-    console.log("[Lifecycle] Checking port availability...");
-    await verifyPortsFree();
-    console.log("[Lifecycle] Starting Firebase emulators (Auth + Firestore)...");
-    console.log("[Lifecycle]   Auth: 127.0.0.1:" + AUTH_EMULATOR_PORT);
-    console.log("[Lifecycle]   Firestore: 127.0.0.1:" + FIRESTORE_EMULATOR_PORT);
-    console.log("[Lifecycle]   Hub: 127.0.0.1:" + HUB_EMULATOR_PORT);
-    this.emulatorProcess = spawn("npx", ["firebase", "emulators:start", "--only", "auth,firestore", "--project", EMULATOR_PROJECT_ID], {
-      cwd: process.cwd(),
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: true,
-      env: { ...process.env, FORCE_COLOR: "1" },
-    });
-    let output = "";
-    this.emulatorProcess.stdout?.on("data", (d: Buffer) => {
-      output += d.toString();
-    });
-    this.emulatorProcess.stderr?.on("data", (d: Buffer) => {
-      output += d.toString();
-    });
-    this.emulatorProcess.on("exit", (code: number | null) => {
-      if (!this.exited && code !== 0 && code !== null) {
-        console.error("[Lifecycle] Emulator exited with code " + code);
-      }
-    });
-    console.log("[Lifecycle] Waiting for Auth emulator...");
-    await waitForPort("127.0.0.1", E2E_PORTS.auth, 60000, 1000, this.emulatorProcess);
-    console.log("[Lifecycle] Waiting for Firestore emulator...");
-    await waitForPort("127.0.0.1", E2E_PORTS.firestore, 60000, 1000, this.emulatorProcess);
-    if (this.emulatorProcess.exitCode !== null) {
-      throw new Error("[Lifecycle] Emulator process died during startup.\n" + output);
+  async start() {
+    console.log("[Lifecycle] Verifying dedicated ports");
+    validateE2EConfig(createE2EConfig());
+    const occupied = await verifyPorts(false);
+    if (occupied.length) {
+      throw new Error(`Required ports already occupied: ${occupied.join(", ")}`);
     }
-    console.log("[Lifecycle] Auth Emulator ready at 127.0.0.1:" + E2E_PORTS.auth);
-    console.log("[Lifecycle] Firestore Emulator ready at 127.0.0.1:" + E2E_PORTS.firestore);
-    console.log("[Lifecycle] Hub UI available at http://127.0.0.1:" + E2E_PORTS.hub);
-    console.log("[Lifecycle] Running seed for test data...");
-    await this.runSeed();
-    console.log("[Lifecycle] Seed complete");
-    console.log("[Lifecycle] Starting Next.js development server...");
-    this.nextjsProcess = spawn("npx", ["next", "dev", "-p", String(NEXTJS_PORT)], {
-      cwd: process.cwd(),
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: true,
-      env: {
-        ...process.env,
-        NODE_ENV: "development",
-        NEXT_PUBLIC_FIREBASE_USE_EMULATORS: "true",
-        NEXT_PUBLIC_FIREBASE_API_KEY: "demo-api-key-for-e2e-tests",
-        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "demo-k9-ops.firebaseapp.com",
-        NEXT_PUBLIC_FIREBASE_PROJECT_ID: EMULATOR_PROJECT_ID,
-        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "demo-k9-ops.appspot.com",
-        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789",
-        NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789:web:abcdef",
-        NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT: String(AUTH_EMULATOR_PORT),
-        NEXT_PUBLIC_FIRESTORE_EMULATOR_PORT: String(FIRESTORE_EMULATOR_PORT),
-        FORCE_COLOR: "1",
-      },
+    this.machine.transition("ports_verified");
+
+    console.log("[Lifecycle] Starting Auth and Firestore emulators");
+    this.emulators = spawnNode(firebaseCli, [
+      "emulators:start",
+      "--only",
+      "auth,firestore",
+      "--project",
+      EMULATOR_PROJECT_ID,
+    ]);
+    pipeOutput(this.emulators);
+    this.machine.transition("emulators_started");
+    await Promise.all([
+      waitForPort(AUTH_EMULATOR_HOST, AUTH_EMULATOR_PORT, this.emulators),
+      waitForPort(
+        FIRESTORE_EMULATOR_HOST,
+        FIRESTORE_EMULATOR_PORT,
+        this.emulators,
+      ),
+      waitForPort(HUB_EMULATOR_HOST, HUB_EMULATOR_PORT, this.emulators),
+    ]);
+    this.machine.transition("emulators_ready");
+    console.log("[Lifecycle] Auth, Firestore and Hub ready");
+
+    console.log("[Lifecycle] Running validated emulator seed");
+    const seed = spawnNode(resolve(projectRoot, "tools/seed_emulator_auth.mjs"), [
+      "--auth-emulator",
+      `http://${AUTH_EMULATOR_HOST}:${AUTH_EMULATOR_PORT}`,
+      "--firestore-emulator",
+      `http://${FIRESTORE_EMULATOR_HOST}:${FIRESTORE_EMULATOR_PORT}`,
+      "--project",
+      EMULATOR_PROJECT_ID,
+    ]);
+    pipeOutput(seed);
+    const seedExit = await waitForClose(seed);
+    if (seedExit !== 0) throw new Error(`Seed failed with exit code ${seedExit}`);
+    this.machine.transition("seed_validated");
+    console.log("[Lifecycle] Seed validated");
+
+    console.log("[Lifecycle] Starting Next.js");
+    this.nextjs = spawnNode(nextCli, ["dev", "-p", String(E2E_PORTS.nextjs)], {
+      ...process.env,
+      NODE_ENV: "development",
+      NEXT_PUBLIC_FIREBASE_USE_EMULATORS: "true",
+      NEXT_PUBLIC_FIREBASE_API_KEY: "synthetic-e2e-api-key",
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: `${EMULATOR_PROJECT_ID}.firebaseapp.com`,
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: EMULATOR_PROJECT_ID,
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: `${EMULATOR_PROJECT_ID}.appspot.com`,
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "100000000000",
+      NEXT_PUBLIC_FIREBASE_APP_ID: "1:100000000000:web:synthetic",
     });
-    const ready = await waitForService("http://localhost:" + NEXTJS_PORT, 60, 2000);
-    if (!ready) throw new Error("Next.js failed to start");
-    console.log("[Lifecycle] Next.js ready at http://localhost:" + NEXTJS_PORT);
-    console.log("[Lifecycle] === Environment Ready ===");
+    pipeOutput(this.nextjs);
+    this.machine.transition("nextjs_started");
+    await waitForHttp(`http://localhost:${E2E_PORTS.nextjs}`, this.nextjs);
+    this.machine.transition("nextjs_ready");
+    console.log("[Lifecycle] Next.js ready");
   }
 
-  private async runSeed(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const seed = spawn("node", [
-        "tools/seed_emulator_auth.mjs",
-        "--project",
-        EMULATOR_PROJECT_ID,
-        "--auth-emulator",
-        AUTH_EMULATOR_URL,
-        "--firestore-emulator",
-        "127.0.0.1:" + FIRESTORE_EMULATOR_PORT,
-      ], {
-        cwd: process.cwd(),
-        stdio: ["ignore", "pipe", "pipe"],
-        shell: true,
-      });
-      let output = "";
-      seed.stdout?.on("data", (d: Buffer) => {
-        output += d.toString();
-      });
-      seed.stderr?.on("data", (d: Buffer) => {
-        output += d.toString();
-      });
-      seed.on("close", (code: number | null) => {
-        if (code === 0) resolve();
-        else {
-          console.error("[Seed] Output:", output);
-          reject(new Error("Seed failed with code " + code));
-        }
-      });
-      seed.on("error", reject);
+  async runPlaywright(args: string[]) {
+    console.log("[Lifecycle] Starting Playwright");
+    const playwright = spawnNode(playwrightCli, ["test", ...args], {
+      ...process.env,
+      NEXT_PUBLIC_FIREBASE_USE_EMULATORS: "true",
     });
+    pipeOutput(playwright);
+    this.machine.transition("playwright_started");
+    const exitCode = await waitForClose(playwright);
+    this.machine.transition("playwright_closed");
+    console.log(`[Lifecycle] Playwright closed with exit code ${exitCode}`);
+    return exitCode;
   }
 
-  async stop(): Promise<void> {
-    if (this.exited) return;
-    this.exited = true;
-    console.log("[Lifecycle] Shutting down...");
-    if (this.nextjsProcess) {
-      console.log("[Lifecycle] Stopping Next.js...");
-      this.nextjsProcess.kill("SIGTERM");
-      await sleep(1000);
-      if (!this.nextjsProcess.killed) this.nextjsProcess.kill("SIGKILL");
-      console.log("[Lifecycle] Next.js stopped");
+  async stop() {
+    if (this.stopped) return;
+    this.stopped = true;
+    await terminateKnownChild(this.nextjs, "Next.js");
+    if (this.machine.state === "playwright_closed") {
+      this.machine.transition("nextjs_stopped");
     }
-    if (this.emulatorProcess) {
-      console.log("[Lifecycle] Stopping Firebase emulators...");
-      this.emulatorProcess.kill("SIGTERM");
-      await sleep(2000);
-      if (!this.emulatorProcess.killed) this.emulatorProcess.kill("SIGKILL");
-      console.log("[Lifecycle] Firebase emulators stopped");
+    await terminateKnownChild(this.emulators, "Firebase emulators");
+    if (this.machine.state === "nextjs_stopped") {
+      this.machine.transition("emulators_stopped");
     }
-    await verifyPortsReleased();
-    console.log("[Lifecycle] Cleanup complete");
-  }
-
-  getPorts(): typeof E2E_PORTS {
-    return E2E_PORTS;
+    await sleep(1_000);
+    const occupied = await verifyPorts(false);
+    if (occupied.length) {
+      throw new Error(`Dedicated ports still occupied after cleanup: ${occupied.join(", ")}`);
+    }
+    if (this.machine.state === "emulators_stopped") {
+      this.machine.transition("ports_released");
+      this.machine.transition("finished");
+    }
+    console.log("[Lifecycle] Ports released: 3000, 9199, 8181, 4545");
   }
 }
 
-async function main(): Promise<void> {
-  const lifecycle = new LifecycleManager();
+async function main() {
+  const lifecycle = new Lifecycle();
   let exitCode = 1;
-  const cleanup = async (): Promise<void> => {
-    await lifecycle.stop();
-    process.exit(exitCode);
+  let interrupted = false;
+  const handleSignal = () => {
+    interrupted = true;
+    process.exitCode = 130;
+    void lifecycle.stop().catch((error) => console.error("[Lifecycle]", error));
   };
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
+  process.once("SIGINT", handleSignal);
+  process.once("SIGTERM", handleSignal);
+
   try {
     await lifecycle.start();
-    console.log("[Lifecycle] Running Playwright E2E tests...");
-    const playwright = spawn("npx", ["playwright", "test", "--config", "playwright.config.ts", "--project=chromium", ...process.argv.slice(2)], {
-      cwd: process.cwd(),
-      stdio: "inherit",
-      shell: true,
-      env: { ...process.env, NEXT_PUBLIC_FIREBASE_USE_EMULATORS: "true" },
-    });
-    return new Promise<void>((resolve) => {
-      playwright.on("close", (code: number | null) => {
-        exitCode = code ?? 1;
-        resolve();
-      });
-      playwright.on("error", (err: Error) => {
-        console.error("[Lifecycle] Playwright error:", err);
-        exitCode = 1;
-        resolve();
-      });
-    });
+    exitCode = await lifecycle.runPlaywright(process.argv.slice(2));
   } catch (error) {
-    console.error("[Lifecycle] Error:", error);
+    console.error("[Lifecycle]", error);
     exitCode = 1;
   } finally {
-    await lifecycle.stop();
-    process.exit(exitCode);
+    try {
+      await lifecycle.stop();
+    } catch (error) {
+      console.error("[Lifecycle] Cleanup failed:", error);
+      exitCode = 1;
+    }
+    process.removeListener("SIGINT", handleSignal);
+    process.removeListener("SIGTERM", handleSignal);
+    process.exitCode = interrupted ? 130 : exitCode;
   }
 }
 
-main();
+void main();

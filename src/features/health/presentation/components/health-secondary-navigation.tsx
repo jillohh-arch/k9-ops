@@ -47,6 +47,7 @@ export function HealthSecondaryNavigation({
 
         return (
           <Link
+            role="link"
             key={item.key}
             href={item.href}
             className={cn(

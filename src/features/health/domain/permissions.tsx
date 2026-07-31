@@ -231,7 +231,10 @@ function DefaultDeniedState({ reason, capability }: PermissionDeniedProps) {
   const message = getDeniedMessage(reason, capability);
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 text-center">
+    <div
+      className="flex flex-col items-center justify-center p-8 text-center"
+      data-testid="health-forbidden"
+    >
       <div className="mb-4 rounded-full bg-destructive/10 p-4">
         <svg
           className="h-8 w-8 text-destructive"

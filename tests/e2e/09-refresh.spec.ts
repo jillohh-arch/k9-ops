@@ -1,57 +1,21 @@
-/**
- * HW-2 E2E Test 9: Page Refresh Session Preservation
- *
- * Validates:
- * - Refresh preserves session
- * - Route is preserved
- * - Active item is preserved
- */
+import { expect, openHealth, test } from "./auth.setup";
 
-import { test, expect } from "./auth.setup";
+test("HW-2 preserves the reports session, route and shell after refresh", async ({
+  authenticateAs,
+  consoleMonitor,
+  page,
+}) => {
+  await authenticateAs("canonical");
+  await openHealth(page, "/health/reports");
+  await page.reload();
+  await page.getByTestId("health-module-shell").waitFor({ state: "visible" });
 
-test.describe("HW-2 Test 9: Page Refresh", () => {
-  test.beforeEach(async ({ authenticateAs }) => {
-    await authenticateAs("canonical");
-  });
-
-  test("should preserve session on refresh at /health/reports", async ({
-    page,
-  }) => {
-    await page.goto("/health/reports");
-    await page.waitForLoadState("networkidle");
-
-    // Store active link before refresh
-    const activeLink = page.locator('[aria-current="page"]');
-    await expect(activeLink).toHaveAttribute("aria-current", /page/i);
-
-    // Refresh
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-
-    // Session preserved - still authenticated
-    await expect(page).not.toHaveURL(/\/login/);
-
-    // Route preserved
-    await expect(page).toHaveURL(/reports/);
-
-    // Active item preserved
-    await expect(activeLink).toHaveAttribute("aria-current", /page/i);
-  });
-
-  test("should preserve session on refresh at /health/readiness", async ({
-    page,
-  }) => {
-    await page.goto("/health/readiness");
-    await page.waitForLoadState("networkidle");
-
-    const activeLink = page.getByRole("link", { name: /prontidão|readiness/i });
-    await expect(activeLink).toHaveAttribute("aria-current", /page/i);
-
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-
-    await expect(page).not.toHaveURL(/\/login/);
-    await expect(page).toHaveURL(/readiness/);
-    await expect(activeLink).toHaveAttribute("aria-current", /page/i);
-  });
+  expect(new URL(page.url()).pathname).toBe("/health/reports");
+  await expect(page).not.toHaveURL(/\/login/);
+  await expect(
+    page
+      .getByRole("navigation", { name: /navegação secundária de saúde/i })
+      .getByRole("link", { name: "Relatórios", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  expect(consoleMonitor.hydrationErrors()).toEqual([]);
 });

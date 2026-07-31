@@ -1,97 +1,65 @@
-/**
- * Unit tests for E2E Configuration
- *
- * Validates:
- * - Port configuration values
- * - URL construction
- * - Environment variable overrides
- */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
 
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import {
+  DEFAULT_E2E_CONFIG,
+  assertLocalEmulatorHost,
+  createE2EConfig,
+  validateE2EConfig,
+} from "../config";
 
-describe("E2E Config", () => {
-  describe("Default Ports", () => {
-    it("should have correct default Auth port", () => {
-      const defaultPort = Number(process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT || "9199");
-      expect(defaultPort).toBe(9199);
+describe("HW-2 E2E configuration", () => {
+  it("uses the canonical default ports, hosts and project", () => {
+    expect(createE2EConfig({})).toEqual(DEFAULT_E2E_CONFIG);
+  });
+
+  it("supports explicit custom ports", () => {
+    const config = createE2EConfig({
+      NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT: "9299",
+      NEXT_PUBLIC_FIRESTORE_EMULATOR_PORT: "8281",
+      NEXT_PUBLIC_FIREBASE_HUB_EMULATOR_PORT: "4645",
+      E2E_NEXTJS_PORT: "3100",
     });
-
-    it("should have correct default Firestore port", () => {
-      const defaultPort = Number(process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_PORT || "8181");
-      expect(defaultPort).toBe(8181);
-    });
-
-    it("should have correct default Hub port", () => {
-      const defaultPort = Number(process.env.NEXT_PUBLIC_FIREBASE_HUB_EMULATOR_PORT || "4545");
-      expect(defaultPort).toBe(4545);
-    });
-
-    it("should have correct emulator project ID", () => {
-      const projectId = "demo-k9-ops";
-      expect(projectId).toBe("demo-k9-ops");
+    expect(config).toMatchObject({
+      authPort: 9299,
+      firestorePort: 8281,
+      hubPort: 4645,
+      nextjsPort: 3100,
     });
   });
 
-  describe("Port Range Validation", () => {
-    it("should accept valid port numbers", () => {
-      const validPorts = [1024, 3000, 8080, 9199, 65535];
-      for (const port of validPorts) {
-        expect(port >= 1024 && port <= 65535).toBe(true);
-      }
-    });
-
-    it("should reject invalid port numbers", () => {
-      const invalidPorts = [0, 80, 443, 1023, 65536, 99999];
-      for (const port of invalidPorts) {
-        const isValid = port >= 1024 && port <= 65535;
-        expect(isValid).toBe(false);
-      }
-    });
+  it("accepts only loopback emulator hosts", () => {
+    expect(() => assertLocalEmulatorHost("127.0.0.1", "Auth")).not.toThrow();
+    expect(() => assertLocalEmulatorHost("localhost", "Auth")).not.toThrow();
+    expect(() => assertLocalEmulatorHost("firebase.example.com", "Auth")).toThrow(
+      /must be local/,
+    );
   });
 
-  describe("URL Construction", () => {
-    it("should construct correct Auth emulator URL", () => {
-      const host = "127.0.0.1";
-      const port = 9199;
-      const url = `http://${host}:${port}`;
-      expect(url).toBe("http://127.0.0.1:9199");
-    });
-
-    it("should construct correct Firestore emulator URL", () => {
-      const host = "127.0.0.1";
-      const port = 8181;
-      const url = `${host}:${port}`;
-      expect(url).toBe("127.0.0.1:8181");
-    });
+  it("rejects production projects and hosts", () => {
+    expect(() =>
+      validateE2EConfig({
+        ...DEFAULT_E2E_CONFIG,
+        authHost: "identitytoolkit.googleapis.com",
+      }),
+    ).toThrow(/must be local/);
+    expect(() =>
+      validateE2EConfig({ ...DEFAULT_E2E_CONFIG, projectId: "canil-gcm" }),
+    ).toThrow(/demo-/);
   });
 
-  describe("Environment Variable Overrides", () => {
-    const originalEnv = process.env;
-
-    beforeEach(() => {
-      process.env = { ...originalEnv };
-    });
-
-    afterAll(() => {
-      process.env = originalEnv;
-    });
-
-    it("should use environment variable for Auth port when set", () => {
-      process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT = "9999";
-      const port = Number(process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT || "9199");
-      expect(port).toBe(9999);
-    });
-
-    it("should use environment variable for Firestore port when set", () => {
-      process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_PORT = "8888";
-      const port = Number(process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_PORT || "8181");
-      expect(port).toBe(8888);
-    });
-
-    it("should fall back to default when env var is not set", () => {
-      delete process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT;
-      const port = Number(process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT || "9199");
-      expect(port).toBe(9199);
+  it("stays synchronized with firebase.json", () => {
+    const firebase = JSON.parse(
+      readFileSync(resolve(process.cwd(), "firebase.json"), "utf8"),
+    );
+    expect(DEFAULT_E2E_CONFIG).toMatchObject({
+      authHost: firebase.emulators.auth.host,
+      authPort: firebase.emulators.auth.port,
+      firestoreHost: firebase.emulators.firestore.host,
+      firestorePort: firebase.emulators.firestore.port,
+      hubHost: firebase.emulators.hub.host,
+      hubPort: firebase.emulators.hub.port,
     });
   });
 });

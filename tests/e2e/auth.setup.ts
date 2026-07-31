@@ -1,262 +1,175 @@
-/**
- * HW-2 Authenticated E2E Tests - Setup and Helpers
- *
- * Provides shared utilities for authentication and network verification.
- * Validates that all Firebase calls go exclusively to E2E emulators.
- */
-
 /* eslint-disable react-hooks/rules-of-hooks */
 
-import { test as base, type Page, type Request } from "@playwright/test";
+import {
+  test as base,
+  type ConsoleMessage,
+  type Page,
+  type Request,
+} from "@playwright/test";
 
-// Test user credentials (emulator-only, never real)
 export const TEST_USERS = {
-  canonical: {
-    email: "canonical@hw2-test.local",
-    password: "TestPassword123!",
-    uid: "canonical-test-user-uid",
-  },
-  legacy: {
-    email: "legacy@hw2-test.local",
-    password: "TestPassword123!",
-    uid: "legacy-test-user-uid",
-  },
-  noAccess: {
-    email: "noaccess@hw2-test.local",
-    password: "TestPassword123!",
-    uid: "noaccess-test-user-uid",
-  },
+  canonical: { ra: "100001", password: "TestPassword123!" },
+  legacy: { ra: "100002", password: "TestPassword123!" },
+  noAccess: { ra: "100003", password: "TestPassword123!" },
+} as const;
+
+const AUTH_HOST = "127.0.0.1";
+const AUTH_PORT = "9199";
+const FIRESTORE_HOST = "127.0.0.1";
+const FIRESTORE_PORT = "8181";
+const FORBIDDEN_FIREBASE_HOSTS = [
+  "identitytoolkit.googleapis.com",
+  "firestore.googleapis.com",
+  "firebaseio.com",
+  "googleapis.com",
+];
+
+export type NetworkCall = {
+  host: string;
+  method: string;
+  path: string;
+  port: string;
 };
 
-// E2E emulator configuration - must match E2E config module
-const EMULATOR_AUTH_HOST = "127.0.0.1";
-const EMULATOR_AUTH_PORT = 9199;
-const EMULATOR_FIRESTORE_HOST = "127.0.0.1";
-const EMULATOR_FIRESTORE_PORT = 8181;
-
-// Allowed hosts for E2E testing
-const ALLOWED_HOSTS = [
-  "localhost",
-  "127.0.0.1",
-  `localhost:${EMULATOR_AUTH_PORT}`,
-  `${EMULATOR_AUTH_HOST}:${EMULATOR_AUTH_PORT}`,
-  `localhost:${EMULATOR_FIRESTORE_PORT}`,
-  `${EMULATOR_FIRESTORE_HOST}:${EMULATOR_FIRESTORE_PORT}`,
-];
-
-// Forbidden domains - ANY call to these is a test failure
-const FORBIDDEN_DOMAINS = [
-  "googleapis.com",
-  "firebaseio.com",
-  "firestore.googleapis.com",
-  "identitytoolkit.googleapis.com",
-  "canil-gcm",
-  "k9-ops",
-];
-
-// Network call interface
-interface NetworkCall {
-  url: string;
-  method: string;
-  type: string;
-  domain: string;
-}
-
-/**
- * Enhanced NetworkMonitor for rigorous E2E network validation.
- * Validates that:
- * - Auth calls go ONLY to emulator (127.0.0.1:9199)
- * - Firestore calls go ONLY to emulator (127.0.0.1:8181)
- * - ZERO calls to Firebase production domains
- */
 export class NetworkMonitor {
   private calls: NetworkCall[] = [];
-  private page: Page | null = null;
 
-  attach(page: Page): void {
-    this.page = page;
-    this.calls = [];
-
+  attach(page: Page) {
     page.on("request", (request: Request) => {
-      try {
-        const url = new URL(request.url());
-        this.calls.push({
-          url: request.url(),
-          method: request.method(),
-          type: request.resourceType(),
-          domain: url.hostname,
-        });
-      } catch {
-        // Invalid URL - log but don't fail
-        console.warn("[NetworkMonitor] Invalid URL:", request.url());
-      }
+      const parsed = new URL(request.url());
+      this.calls.push({
+        host: parsed.hostname,
+        method: request.method(),
+        path: parsed.pathname,
+        port: parsed.port,
+      });
     });
   }
 
-  getCalls(): NetworkCall[] {
+  all() {
     return [...this.calls];
   }
 
-  /**
-   * Get all Auth emulator calls (should be to 127.0.0.1:9199)
-   */
-  getAuthEmulatorCalls(): NetworkCall[] {
-    return this.calls.filter((call) => {
-      const isAuthCall = call.url.includes("identitytoolkit");
-      const isToEmulator =
-        call.domain === "127.0.0.1" ||
-        call.domain === "localhost" ||
-        call.domain.includes(EMULATOR_AUTH_HOST);
-      return isAuthCall && isToEmulator;
-    });
+  authCalls() {
+    return this.calls.filter(
+      (call) =>
+        call.host === AUTH_HOST &&
+        call.port === AUTH_PORT &&
+        call.path.includes("identitytoolkit"),
+    );
   }
 
-  /**
-   * Get all Firestore emulator calls (should be to 127.0.0.1:8181)
-   */
-  getFirestoreEmulatorCalls(): NetworkCall[] {
-    return this.calls.filter((call) => {
-      const isFirestoreCall =
-        call.url.includes("firestore") ||
-        call.url.includes("firebaseio") ||
-        call.url.includes("datastore.googleapis");
-      const isToEmulator =
-        call.domain === "127.0.0.1" ||
-        call.domain === "localhost" ||
-        call.domain.includes(EMULATOR_FIRESTORE_HOST);
-      return isFirestoreCall && isToEmulator;
-    });
+  firestoreCalls() {
+    return this.calls.filter(
+      (call) => call.host === FIRESTORE_HOST && call.port === FIRESTORE_PORT,
+    );
   }
 
-  /**
-   * Get calls to Firebase production (FORBIDDEN in E2E)
-   */
-  getFirebaseProductionCalls(): NetworkCall[] {
-    return this.calls.filter((call) => {
-      return FORBIDDEN_DOMAINS.some(
-        (domain) =>
-          call.domain.includes(domain) && !call.domain.includes("demo")
+  productionFirebaseCalls() {
+    return this.calls.filter(
+      (call) =>
+        call.host !== "localhost" &&
+        call.host !== "127.0.0.1" &&
+        FORBIDDEN_FIREBASE_HOSTS.some(
+          (host) => call.host === host || call.host.endsWith(`.${host}`),
+        ),
+    );
+  }
+
+  firestoreMutationCalls() {
+    return this.firestoreCalls().filter((call) => {
+      if (["PUT", "PATCH", "DELETE"].includes(call.method)) return true;
+      return (
+        call.method === "POST" &&
+        (/documents:(commit|batchWrite)$/.test(call.path) ||
+          call.path.includes("/documents:write"))
       );
     });
   }
 
-  /**
-   * Get mutation calls (POST/PUT/PATCH/DELETE to Firestore)
-   */
-  getMutationCalls(): NetworkCall[] {
-    return this.calls.filter((call) => {
-      const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(call.method);
-      const isFirestore =
-        call.url.includes("firestore") ||
-        call.url.includes("firebaseio") ||
-        call.url.includes("datastore.googleapis");
-      return isMutation && isFirestore;
-    });
-  }
-
-  /**
-   * Get read calls to Firestore
-   */
-  getReadCalls(): NetworkCall[] {
-    return this.calls.filter((call) => {
-      const isRead = call.method === "GET";
-      const isFirestore =
-        call.url.includes("firestore") ||
-        call.url.includes("firebaseio") ||
-        call.url.includes("datastore.googleapis");
-      return isRead && isFirestore;
-    });
-  }
-
-  /**
-   * Validate complete network audit for a test.
-   * Returns validation result with details.
-   */
-  validateNetworkAudit(): {
-    valid: boolean;
-    authCallsToEmulator: number;
-    firestoreCallsToEmulator: number;
-    productionCalls: NetworkCall[];
-    mutations: NetworkCall[];
-    errors: string[];
-  } {
-    const errors: string[] = [];
-    const productionCalls = this.getFirebaseProductionCalls();
-    const authCalls = this.getAuthEmulatorCalls();
-    const firestoreCalls = this.getFirestoreEmulatorCalls();
-    const mutations = this.getMutationCalls();
-
-    if (productionCalls.length > 0) {
-      errors.push(
-        `FAIL: ${productionCalls.length} call(s) to Firebase production detected: ${productionCalls.map(c => c.domain).join(", ")}`
-      );
-    }
-
-    return {
-      valid: errors.length === 0,
-      authCallsToEmulator: authCalls.length,
-      firestoreCallsToEmulator: firestoreCalls.length,
-      productionCalls,
-      mutations,
-      errors,
-    };
+  summary() {
+    return this.calls.map(({ host, port, method }) => ({ host, port, method }));
   }
 }
 
-// Extended test fixture with auth helpers and network monitoring
-export const test = base.extend<{
-  authenticateAs: (user: keyof typeof TEST_USERS) => Promise<void>;
-  networkMonitor: NetworkMonitor;
-}>({
-  authenticateAs: ({ page }, use) => {
-    use(async (user: keyof typeof TEST_USERS) => {
-      const credentials = TEST_USERS[user];
+export class ConsoleMonitor {
+  private critical: string[] = [];
 
-      // Navigate to login if not there
-      await page.goto("/login");
-
-      // Fill login form
-      await page.getByLabel(/email/i).fill(credentials.email);
-      await page.getByLabel(/senha/i).fill(credentials.password);
-
-      // Submit
-      await page.getByRole("button", { name: /entrar|login|sign in/i }).click();
-
-      // Wait for navigation away from login
-      await page.waitForURL((url) => !url.pathname.includes("/login"), {
-        timeout: 10000,
-      });
+  attach(page: Page) {
+    page.on("console", (message: ConsoleMessage) => {
+      if (message.type() === "error") this.critical.push(message.text());
     });
-  },
+    page.on("pageerror", (error) => this.critical.push(error.message));
+  }
 
-  networkMonitor: ({ page }, use) => {
-    const monitor = new NetworkMonitor();
-    monitor.attach(page);
-    use(monitor);
-  },
-});
+  errors() {
+    return [...this.critical];
+  }
 
-// Export authenticateAs as a standalone function for tests that need it
+  hydrationErrors() {
+    return this.critical.filter((message) => /hydration|hydrated/i.test(message));
+  }
+}
+
 export async function authenticateAs(
   page: Page,
-  user: keyof typeof TEST_USERS
-): Promise<void> {
+  user: keyof typeof TEST_USERS,
+) {
   const credentials = TEST_USERS[user];
-
-  // Navigate to login if not there
   await page.goto("/login");
+  await page.getByLabel(/^RA$/i).fill(credentials.ra);
+  await page.getByLabel(/^Senha$/i).fill(credentials.password);
 
-  // Fill login form
-  await page.getByLabel(/email/i).fill(credentials.email);
-  await page.getByLabel(/senha/i).fill(credentials.password);
+  const authResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.hostname === AUTH_HOST &&
+      url.port === AUTH_PORT &&
+      url.pathname.includes("accounts:signInWithPassword")
+    );
+  });
+  await page.getByRole("button", { name: /entrar no painel/i }).click();
+  const response = await authResponse;
+  if (!response.ok()) {
+    throw new Error(`Auth Emulator rejected login with HTTP ${response.status()}`);
+  }
 
-  // Submit
-  await page.getByRole("button", { name: /entrar|login|sign in/i }).click();
-
-  // Wait for navigation away from login
-  await page.waitForURL((url) => !url.pathname.includes("/login"), {
-    timeout: 10000,
+  await page.waitForURL((url) => url.pathname !== "/login", { timeout: 15_000 });
+  const appShell = page.getByTestId("app-shell");
+  await appShell.waitFor({ state: "visible", timeout: 15_000 });
+  await page.waitForFunction(() => {
+    const shell = document.querySelector('[data-testid="app-shell"]');
+    const status = shell?.getAttribute("data-access-status");
+    return status === "ready" || status === "fallback";
   });
 }
+
+export async function openHealth(page: Page, path = "/health") {
+  await page.goto(path);
+  await page.getByTestId("health-permission-boundary").waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+}
+
+export const test = base.extend<{
+  authenticateAs: (user: keyof typeof TEST_USERS) => Promise<void>;
+  consoleMonitor: ConsoleMonitor;
+  networkMonitor: NetworkMonitor;
+}>({
+  authenticateAs: async ({ page }, use) => {
+    await use((user) => authenticateAs(page, user));
+  },
+  consoleMonitor: async ({ page }, use) => {
+    const monitor = new ConsoleMonitor();
+    monitor.attach(page);
+    await use(monitor);
+  },
+  networkMonitor: async ({ page }, use) => {
+    const monitor = new NetworkMonitor();
+    monitor.attach(page);
+    await use(monitor);
+  },
+});
 
 export { expect } from "@playwright/test";

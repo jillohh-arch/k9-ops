@@ -62,7 +62,10 @@ export function HealthModuleShell({
   technicalState,
 }: HealthModuleShellProps) {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div
+      className="flex min-h-screen flex-col bg-background"
+      data-testid="health-module-shell"
+    >
       {/* Module Header */}
       <header className="border-b border-border bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-start justify-between gap-4">
@@ -113,6 +116,7 @@ export function HealthModuleShell({
       <main
         className={cn("flex-1 px-6 py-6", contentClassName)}
         id="main-content"
+        tabIndex={-1}
       >
         {children}
       </main>

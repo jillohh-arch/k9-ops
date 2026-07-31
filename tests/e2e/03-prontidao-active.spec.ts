@@ -1,36 +1,15 @@
-/**
- * HW-2 E2E Test 3: Prontidão Active State
- *
- * Validates:
- * - Opening /health/readiness shows Prontidão with aria-current
- * - URL is preserved
- */
+import { expect, openHealth, test } from "./auth.setup";
 
-import { test, expect } from "./auth.setup";
-
-test.describe("HW-2 Test 3: Prontidão Active Item", () => {
-  test.beforeEach(async ({ authenticateAs }) => {
-    await authenticateAs("canonical");
-  });
-
-  test("should have aria-current on Prontidão when on /health/readiness", async ({
-    page,
-  }) => {
-    await page.goto("/health/readiness");
-    await page.waitForLoadState("networkidle");
-
-    // Find Prontidão link
-    const prontidaoLink = page.getByRole("link", { name: /prontidão|readiness/i });
-    await expect(prontidaoLink).toBeVisible();
-
-    // Should have aria-current
-    await expect(prontidaoLink).toHaveAttribute("aria-current", /page/i);
-  });
-
-  test("should preserve URL when accessing /health/readiness directly", async ({
-    page,
-  }) => {
-    await page.goto("/health/readiness");
-    await expect(page).toHaveURL(/readiness/);
-  });
+test("HW-2 keeps Prontidão active on a direct readiness route", async ({
+  authenticateAs,
+  page,
+}) => {
+  await authenticateAs("canonical");
+  await openHealth(page, "/health/readiness");
+  expect(new URL(page.url()).pathname).toBe("/health/readiness");
+  await expect(
+    page
+      .getByRole("navigation", { name: /navegação secundária de saúde/i })
+      .getByRole("link", { name: "Prontidão", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
 });

@@ -1,59 +1,28 @@
-/**
- * HW-2 E2E Test 5: Cockpit Placeholder for Test Dog
- *
- * Validates:
- * - Opening /health/readiness/test-dog shows shell
- * - Shows placeholder structural content
- * - No calculated readiness data
- * - No clinical data loaded
- * - No reader triggered inappropriately
- */
+import { expect, openHealth, test } from "./auth.setup";
 
-import { test, expect } from "./auth.setup";
-
-test.describe("HW-2 Test 5: Cockpit Placeholder", () => {
+test.describe("HW-2 readiness cockpit placeholder", () => {
   test.beforeEach(async ({ authenticateAs }) => {
     await authenticateAs("canonical");
   });
 
-  test("should show placeholder when accessing /health/readiness/test-dog", async ({
+  test("keeps /health/readiness/test-dog structural and data-free", async ({
+    networkMonitor,
     page,
   }) => {
-    await page.goto("/health/readiness/test-dog");
-    await page.waitForLoadState("networkidle");
+    await openHealth(page, "/health/readiness/test-dog");
+    expect(new URL(page.url()).pathname).toBe("/health/readiness/test-dog");
+    await expect(page.getByTestId("health-module-shell")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /prontidão do k9/i }),
+    ).toBeVisible();
+    await expect(page.getByText(/carregando prontidão de test-dog/i)).toBeVisible();
 
-    // Shell should be present
-    const nav = page.locator("nav");
-    await expect(nav).toBeVisible({ timeout: 5000 });
-
-    // Should show some content (placeholder or empty state)
-    const main = page.locator("main, [role='main']");
-    await expect(main).toBeVisible({ timeout: 5000 });
-
-    // Should NOT show full dog readiness data (since test-dog doesn't exist)
-    // Look for loading or empty state indicators
-    const loadingOrEmpty = page.getByText(/carregando|nenhum|selecione|selecione/i);
-    const noDataYet = page.getByText(/sem dados|não encontrado|selecione/i);
-
-    // At least one should be present or page should show empty state
-    const hasPlaceholder = (await loadingOrEmpty.isVisible({ timeout: 1000 }).catch(() => false)) ||
-                           (await noDataYet.isVisible({ timeout: 1000 }).catch(() => false));
-
-    // If not showing placeholder, should show shell navigation
-    if (!hasPlaceholder) {
-      // Shell navigation should work
-      const healthLink = page.getByRole("link", { name: /saúde|health/i }).first();
-      await expect(healthLink).toBeVisible();
-    }
-  });
-
-  test("should not trigger inappropriate mutations on placeholder view", async ({
-    page,
-  }) => {
-    await page.goto("/health/readiness/test-dog");
-    await page.waitForLoadState("networkidle");
-
-    // Check network for any write operations to Firestore
-    // This is validated in test 13
+    await expect(page.getByText(/score|percentual|diagnóstico|tratamento/i)).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("button", { name: /salvar|registrar|editar|concluir/i }),
+    ).toHaveCount(0);
+    expect(networkMonitor.firestoreMutationCalls()).toEqual([]);
   });
 });

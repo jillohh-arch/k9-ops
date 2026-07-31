@@ -22,6 +22,7 @@ import {
   AUTH_EMULATOR_PORT,
   FIRESTORE_EMULATOR_HOST,
   FIRESTORE_EMULATOR_PORT,
+  assertLocalEmulatorHost,
 } from "../e2e/config";
 
 /** Guard flag to prevent duplicate connections */
@@ -65,6 +66,16 @@ export function validateEmulatorEnvironment(): EmulatorEnvironment {
     return {
       enabled: false,
       reason: `NEXT_PUBLIC_FIREBASE_USE_EMULATORS is not "true" (current: "${useEmulators}")`,
+    };
+  }
+
+  try {
+    assertLocalEmulatorHost(AUTH_EMULATOR_HOST, "Auth emulator");
+    assertLocalEmulatorHost(FIRESTORE_EMULATOR_HOST, "Firestore emulator");
+  } catch (error) {
+    return {
+      enabled: false,
+      reason: error instanceof Error ? error.message : String(error),
     };
   }
 

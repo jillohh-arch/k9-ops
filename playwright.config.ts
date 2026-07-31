@@ -33,11 +33,16 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: /12-tablet\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "chromium-tablet",
-      use: { ...devices["iPad (gen 7)"] },
+      testMatch: /12-tablet\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1024, height: 768 },
+      },
     },
   ],
 

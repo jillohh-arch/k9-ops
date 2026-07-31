@@ -191,7 +191,10 @@ function getModulesForPath(pathname: string) {
 function AccessDenied({ onGoHome }: { onGoHome: () => void }) {
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] items-center justify-center">
-      <section className="max-w-xl rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.06] p-8 text-center shadow-[0_30px_90px_rgba(0,0,0,0.28)]">
+      <section
+        className="max-w-xl rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.06] p-8 text-center shadow-[0_30px_90px_rgba(0,0,0,0.28)]"
+        data-testid="app-access-denied"
+      >
         <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-300/25 bg-amber-300/10 text-amber-200">
           <KeyRound className="h-8 w-8" />
         </span>
@@ -252,6 +255,7 @@ function SidebarContent({
 
           return (
             <Link
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "relative flex items-center gap-4 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-400 transition hover:bg-white/[0.045] hover:text-white",
                 isActive &&
@@ -532,7 +536,17 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh bg-[#040b15] text-slate-100">
+    <div
+      className="min-h-dvh bg-[#040b15] text-slate-100"
+      data-access-status={accessStatus}
+      data-testid="app-shell"
+    >
+      <a
+        className="sr-only z-[100] rounded-lg bg-cyan-300 px-4 py-3 font-bold text-cyan-950 focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+        href="#main-content"
+      >
+        Pular para o conteúdo principal
+      </a>
       <aside className="fixed inset-y-0 left-0 hidden w-[300px] overflow-hidden border-r border-cyan-200/10 bg-[#07111f]/94 shadow-[30px_0_90px_rgba(0,0,0,0.36)] backdrop-blur-2xl xl:block">
         <SidebarChrome>
           <SidebarContent

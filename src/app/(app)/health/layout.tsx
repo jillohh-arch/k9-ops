@@ -5,22 +5,11 @@
  */
 import { type ReactNode } from "react";
 import { HealthModuleShell } from "@/features/health/presentation/components/health-module-shell";
-import { getHealthNavKey, type HealthNavItemKey } from "@/features/health/domain/paths";
 
 interface HealthLayoutProps {
   children: ReactNode;
   params: Promise<{ dogId?: string }>;
 }
-
-const NAV_KEY_MAP: Record<string, HealthNavItemKey> = {
-  "": "overview",
-  "readiness": "readiness",
-  "schedule": "schedule",
-  "clinical": "clinical",
-  "nutrition": "nutrition",
-  "history": "history",
-  "reports": "reports",
-};
 
 export default async function HealthLayout({ children, params }: HealthLayoutProps) {
   // Await params to get route information

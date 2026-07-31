@@ -12,6 +12,9 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:hw2": "npx tsx scripts/lifecycle-e2e.ts",
+    "test:e2e:hw2:emulators": "npx firebase emulators:start --only auth,firestore --project demo-k9-ops",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -37,6 +40,7 @@
     "xlsx": "0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",

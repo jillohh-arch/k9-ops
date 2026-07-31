@@ -192,9 +192,11 @@ function DogContextCard({
   photo?: string;
   readinessStatus?: string;
 }) {
+  void _id; // Reserved for future use
   return (
     <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-3">
       {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={photo}
           alt={name}

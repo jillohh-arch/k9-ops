@@ -11,20 +11,9 @@ import { AlertCircle, AlertTriangle, Ban, FileQuestion, Loader2, RefreshCw } fro
 import { cn } from "@/lib/utils";
 import type {
   ReadState,
-  ReadStateError,
   ReadStateForbidden,
   ReadStateNotFound,
-  ReadStateUnauthorized,
-  ReadStateEmpty,
-  ReadStateLoading,
-  ReadStatePartial,
-  ReadStateDegraded,
-  ReadStateStale,
-  ReadStateLegacy,
-  ReadStateConflict,
-  ReadStateRefreshing,
-  ReadStateSuccess,
-  ReadStateIdle,
+  ReadStateError,
 } from "@/features/health/domain/read-states";
 
 // ============================================================================
@@ -484,11 +473,13 @@ interface ConflictStateProps {
  */
 export function ConflictState({
   conflictDescription,
-  data1,
-  data2,
+  data1: _data1,
+  data2: _data2,
   resolutionOptions,
   className,
 }: ConflictStateProps) {
+  void _data1; // Reserved for future use
+  void _data2; // Reserved for future use
   return (
     <div
       className={cn("flex flex-col items-center justify-center gap-4 py-12", className)}
@@ -534,10 +525,11 @@ interface LegacyStateProps {
  */
 export function LegacyState({
   children,
-  source,
+  source: _source,
   explanation = "Este registro foi criado antes da adoção do contrato canônico Health v1.",
   className,
 }: LegacyStateProps) {
+  void _source; // Reserved for future use
   return (
     <div className={className}>
       <div

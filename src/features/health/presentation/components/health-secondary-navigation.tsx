@@ -70,6 +70,8 @@ export function HealthSecondaryNavigation({
  * Detect the active navigation key from the current pathname.
  */
 function detectActiveKey(pathname: string, dogId?: string): HealthNavItemKey {
+  // dogId reserved for future use in dog-specific navigation
+  void dogId;
   // Direct route matches first
   for (const item of HEALTH_NAV_ITEMS) {
     if (pathname === item.href) {

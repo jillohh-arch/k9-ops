@@ -2,8 +2,8 @@
  * Health Capabilities Tests
  *
  * Tests for capability definitions:
- * - HEALTH_WEB_BASELINE.md §14 (Granular Capabilities)
- * - HEALTH_WEB_TARGET_ARCHITECTURE.md §24 (Authorization Architecture)
+ * - HEALTH_WEB_TARGET_ARCHITECTURE.md §32 (Authorization Architecture)
+ * - HEALTH_WEB_INFORMATION_ARCHITECTURE.md §39 (Permissions and Visibility)
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -14,27 +14,102 @@ import {
 } from "@/features/health/domain/capabilities";
 
 describe("Health Capabilities", () => {
+  describe("HealthCapability type", () => {
+    it("has health.read as core read capability", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.read");
+    });
+
+    it("has canonical record capabilities", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.record_routine");
+      expect(caps).toContain("health.record_preventive");
+      expect(caps).toContain("health.record_incident");
+      expect(caps).toContain("health.record_clinical_document");
+    });
+
+    it("has canonical exam capabilities", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.request_exam");
+      expect(caps).toContain("health.interpret_exam");
+    });
+
+    it("has canonical treatment capabilities", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.create_treatment");
+      expect(caps).toContain("health.complete_treatment");
+      expect(caps).toContain("health.administer_dose");
+    });
+
+    it("has canonical restriction capabilities", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.issue_restriction");
+      expect(caps).toContain("health.release_restriction");
+    });
+
+    it("has canonical case lifecycle capabilities", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.discharge_case");
+      expect(caps).toContain("health.reopen_case");
+      expect(caps).toContain("health.cancel_case");
+    });
+
+    it("has canonical schedule capabilities", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.schedule_item");
+      expect(caps).toContain("health.manage_schedule");
+    });
+
+    it("has canonical record correction capabilities", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.cancel_record");
+      expect(caps).toContain("health.amend_record");
+    });
+
+    it("has nutrition capability", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.manage_nutrition_plan");
+    });
+
+    it("has audit capability", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toContain("health.audit");
+    });
+
+    it("has total of 21 canonical capabilities for HW-2 Foundation", () => {
+      const caps = Object.keys(CAPABILITY_GROUPS) as HealthCapability[];
+      expect(caps).toHaveLength(21);
+    });
+  });
+
   describe("CAPABILITY_GROUPS", () => {
     it("has groups for all capabilities", () => {
       Object.entries(CAPABILITY_GROUPS).forEach(([capability, group]) => {
         expect(capability.startsWith("health.")).toBe(true);
         expect(group).toBeDefined();
-        expect(["read", "schedule", "clinical", "restrictions", "treatments", "exams", "nutrition", "documents", "transcription", "export", "audit"]).toContain(group);
+        expect(["read", "record", "clinical", "exams", "treatments", "restrictions", "schedule", "nutrition", "audit"]).toContain(group);
       });
     });
 
-    it("has read capabilities in read group", () => {
+    it("has read capability in read group", () => {
       const readCaps = Object.entries(CAPABILITY_GROUPS)
         .filter(([, group]) => group === "read")
         .map(([cap]) => cap as HealthCapability);
 
-      expect(readCaps).toContain("health.view_overview");
-      expect(readCaps).toContain("health.view_readiness");
-      expect(readCaps).toContain("health.view_schedule");
-      expect(readCaps).toContain("health.view_clinical");
-      expect(readCaps).toContain("health.view_nutrition");
-      expect(readCaps).toContain("health.view_history");
-      expect(readCaps).toContain("health.view_reports");
+      expect(readCaps).toContain("health.read");
+    });
+
+    it("has record capabilities in record group", () => {
+      const recordCaps = Object.entries(CAPABILITY_GROUPS)
+        .filter(([, group]) => group === "record")
+        .map(([cap]) => cap as HealthCapability);
+
+      expect(recordCaps).toContain("health.record_routine");
+      expect(recordCaps).toContain("health.record_preventive");
+      expect(recordCaps).toContain("health.record_incident");
+      expect(recordCaps).toContain("health.record_clinical_document");
+      expect(recordCaps).toContain("health.cancel_record");
+      expect(recordCaps).toContain("health.amend_record");
     });
 
     it("has schedule capabilities in schedule group", () => {
@@ -42,8 +117,8 @@ describe("Health Capabilities", () => {
         .filter(([, group]) => group === "schedule")
         .map(([cap]) => cap as HealthCapability);
 
+      expect(scheduleCaps).toContain("health.schedule_item");
       expect(scheduleCaps).toContain("health.manage_schedule");
-      expect(scheduleCaps).toContain("health.manage_schedule_create");
     });
 
     it("has clinical capabilities in clinical group", () => {
@@ -51,30 +126,25 @@ describe("Health Capabilities", () => {
         .filter(([, group]) => group === "clinical")
         .map(([cap]) => cap as HealthCapability);
 
-      expect(clinicalCaps).toContain("health.manage_clinical_case");
-      expect(clinicalCaps).toContain("health.manage_clinical_case_open");
-      expect(clinicalCaps).toContain("health.manage_clinical_case_close");
+      expect(clinicalCaps).toContain("health.discharge_case");
+      expect(clinicalCaps).toContain("health.reopen_case");
+      expect(clinicalCaps).toContain("health.cancel_case");
     });
 
-    it("has nutrition capabilities in nutrition group", () => {
+    it("has nutrition capability in nutrition group", () => {
       const nutritionCaps = Object.entries(CAPABILITY_GROUPS)
         .filter(([, group]) => group === "nutrition")
         .map(([cap]) => cap as HealthCapability);
 
       expect(nutritionCaps).toContain("health.manage_nutrition_plan");
-      expect(nutritionCaps).toContain("health.manage_nutrition_plan_create");
-      expect(nutritionCaps).toContain("health.manage_nutrition_plan_update");
-      expect(nutritionCaps).toContain("health.manage_nutrition_plan_replace");
-      expect(nutritionCaps).toContain("health.manage_nutrition_plan_cancel");
     });
 
-    it("has audit capabilities in audit group", () => {
+    it("has audit capability in audit group", () => {
       const auditCaps = Object.entries(CAPABILITY_GROUPS)
         .filter(([, group]) => group === "audit")
         .map(([cap]) => cap as HealthCapability);
 
-      expect(auditCaps).toContain("health.audit_health");
-      expect(auditCaps).toContain("health.audit_view_restricted");
+      expect(auditCaps).toContain("health.audit");
     });
   });
 
@@ -93,9 +163,8 @@ describe("Health Capabilities", () => {
     });
 
     it("has descriptive labels", () => {
-      expect(CAPABILITY_LABELS["health.view_overview"]).toContain("Visão Geral");
+      expect(CAPABILITY_LABELS["health.read"]).toContain("Saúde");
       expect(CAPABILITY_LABELS["health.manage_nutrition_plan"]).toContain("Planos Alimentares");
-      expect(CAPABILITY_LABELS["health.manage_clinical_case"]).toContain("Casos Clínicos");
     });
   });
 
@@ -108,36 +177,33 @@ describe("Health Capabilities", () => {
       expect(LEGACY_TO_GRANULAR["health.audit"]).toBeDefined();
     });
 
-    it("maps health.view to read capabilities", () => {
+    it("maps health.view to health.read", () => {
       const viewCaps = LEGACY_TO_GRANULAR["health.view"];
-      expect(viewCaps).toContain("health.view_overview");
-      expect(viewCaps).toContain("health.view_readiness");
-      expect(viewCaps).toContain("health.view_schedule");
-      expect(viewCaps).toContain("health.view_clinical");
+      expect(viewCaps).toContain("health.read");
     });
 
-    it("maps health.create to create capabilities", () => {
+    it("maps health.create to record capabilities", () => {
       const createCaps = LEGACY_TO_GRANULAR["health.create"];
-      expect(createCaps).toContain("health.manage_schedule_create");
-      expect(createCaps).toContain("health.manage_clinical_case_open");
-      expect(createCaps).toContain("health.manage_nutrition_plan_create");
+      expect(createCaps).toContain("health.record_routine");
+      expect(createCaps).toContain("health.record_preventive");
+      expect(createCaps).toContain("health.schedule_item");
     });
 
     it("maps health.edit to update capabilities", () => {
       const editCaps = LEGACY_TO_GRANULAR["health.edit"];
-      expect(editCaps).toContain("health.manage_schedule_update");
-      expect(editCaps).toContain("health.manage_nutrition_plan_update");
+      expect(editCaps).toContain("health.administer_dose");
+      expect(editCaps).toContain("health.interpret_exam");
     });
 
     it("maps health.approve to close capabilities", () => {
       const approveCaps = LEGACY_TO_GRANULAR["health.approve"];
-      expect(approveCaps).toContain("health.manage_clinical_case_close");
-      expect(approveCaps).toContain("health.manage_restriction_close");
+      expect(approveCaps).toContain("health.discharge_case");
+      expect(approveCaps).toContain("health.cancel_case");
     });
 
     it("has audit for health.audit legacy", () => {
       const auditCaps = LEGACY_TO_GRANULAR["health.audit"];
-      expect(auditCaps).toContain("health.audit_health");
+      expect(auditCaps).toContain("health.audit");
     });
   });
 });

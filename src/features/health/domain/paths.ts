@@ -13,7 +13,7 @@ export const paths = {
   /** Readiness - global list */
   health_readiness: "/health/readiness",
 
-  /** Readiness - individual dog cockpit */
+  /** Readiness - individual dog cockpit (placeholder for HW-3) */
   health_readiness_dog: (dogId: string) => `/health/readiness/${encodeURIComponent(dogId)}`,
 
   /** Preventive schedule - global */
@@ -46,18 +46,12 @@ export const paths = {
   /** Reports - global */
   health_reports: "/health/reports",
 
-  /** Audit - global */
-  health_audit: "/health/audit",
-
-  /** Documents - global */
-  health_documents: "/health/documents",
-
-  /** Individual dog's documents */
-  health_documents_dog: (dogId: string) => `/health/documents/dogs/${encodeURIComponent(dogId)}`,
+  // NOTE: /health/audit removed from HW-2 — no documentary justification
 } as const;
 
 /**
  * All health routes as a union type.
+ * NOTE: audit and documents removed from HW-2 — no documentary justification
  */
 export type HealthRoute =
   | typeof paths.health
@@ -72,10 +66,7 @@ export type HealthRoute =
   | typeof paths.health_nutrition_dog extends (dogId: string) => infer R ? R : never
   | typeof paths.health_history
   | typeof paths.health_history_dog extends (dogId: string) => infer R ? R : never
-  | typeof paths.health_reports
-  | typeof paths.health_audit
-  | typeof paths.health_documents
-  | typeof paths.health_documents_dog extends (dogId: string) => infer R ? R : never;
+  | typeof paths.health_reports;
 
 /**
  * Navigation items for the health secondary navigation.

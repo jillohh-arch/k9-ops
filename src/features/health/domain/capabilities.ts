@@ -168,7 +168,7 @@ export const CAPABILITY_LABELS: Record<HealthCapability, string> = {
 
   // Record corrections
   "health.cancel_record": "Cancelar Registro",
-  "health.amend_record": "Alterar Registro",
+  "health.amend_record": "Registrar Correção, Adendo ou Complemento (append-only)",
 
   // Nutrition
   "health.manage_nutrition_plan": "Gerenciar Planos Alimentares",
@@ -178,43 +178,29 @@ export const CAPABILITY_LABELS: Record<HealthCapability, string> = {
 } as const;
 
 /**
- * Mapping from legacy permissions to granular capabilities.
- * Used during transition from old permission model to canonical capabilities.
+ * LEGACY ADAPTER ONLY — READ-ONLY UI COMPATIBILITY
  *
- * This mapping is for backwards compatibility during the transition period.
- * New code should use canonical capabilities directly.
+ * This mapping provides TEMPORARY backwards compatibility for the UI layer only.
+ *
+ * CRITICAL CONSTRAINTS:
+ * - Only "health.view" → "health.read" is allowed
+ * - NO write actions (create, edit, archive, approve) map to capabilities
+ * - The Backend does NOT grant health.read via this adapter
+ * - This is UI-only; Backend authorization is separate
+ *
+ * For HW-2 Foundation, only read access is supported.
  */
 export const LEGACY_TO_GRANULAR: Record<string, HealthCapability[]> = {
-  "health.view": [
-    "health.read",
-  ],
-  "health.create": [
-    "health.record_routine",
-    "health.record_preventive",
-    "health.record_incident",
-    "health.record_clinical_document",
-    "health.schedule_item",
-    "health.create_treatment",
-    "health.request_exam",
-    "health.issue_restriction",
-  ],
-  "health.edit": [
-    "health.administer_dose",
-    "health.interpret_exam",
-    "health.complete_treatment",
-    "health.release_restriction",
-    "health.amend_record",
-    "health.manage_schedule",
-  ],
+  // LEGACY ADAPTER: health.view → health.read (read-only shell access)
+  // This does NOT grant health.read in Backend — only UI compatibility
+  "health.view": ["health.read"],
+
+  // Write actions are NOT mapped — they require explicit capability grant
+  // Mapping would defeat the purpose of granular authorization
+  "health.create": [],
+  "health.edit": [],
   "health.archive": [],
-  "health.approve": [
-    "health.discharge_case",
-    "health.cancel_case",
-  ],
-  "health.export": [
-    "health.read",
-  ],
-  "health.audit": [
-    "health.audit",
-  ],
+  "health.approve": [],
+  "health.export": [],
+  "health.audit": [],
 } as const;

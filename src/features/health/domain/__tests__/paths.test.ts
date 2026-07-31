@@ -4,6 +4,12 @@
  * Tests for the route definitions:
  * - HEALTH_WEB_INFORMATION_ARCHITECTURE.md §9 (Route Map)
  * - HEALTH_WEB_TARGET_ARCHITECTURE.md §11 (Route Architecture)
+ *
+ * HW-2 Official Routes:
+ * /health, /health/readiness, /health/schedule, /health/clinical,
+ * /health/nutrition, /health/history, /health/reports
+ *
+ * NOTE: /health/audit and /health/documents removed from HW-2 (no documentary justification)
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -14,7 +20,7 @@ import {
 } from "@/features/health/domain/paths";
 
 describe("Health Routes", () => {
-  describe("paths", () => {
+  describe("paths — HW-2 Official Routes", () => {
     it("has health module root", () => {
       expect(paths.health).toBe("/health");
     });
@@ -50,13 +56,9 @@ describe("Health Routes", () => {
       expect(paths.health_reports).toBe("/health/reports");
     });
 
-    it("has audit routes", () => {
-      expect(paths.health_audit).toBe("/health/audit");
-    });
-
-    it("has documents routes", () => {
-      expect(paths.health_documents).toBe("/health/documents");
-      expect(paths.health_documents_dog("dog-123")).toBe("/health/documents/dogs/dog-123");
+    it("does NOT have audit routes in HW-2", () => {
+      // /health/audit removed — no documentary justification
+      expect((paths as Record<string, unknown>).health_audit).toBeUndefined();
     });
   });
 
@@ -74,6 +76,11 @@ describe("Health Routes", () => {
       expect(keys).toContain("nutrition");
       expect(keys).toContain("history");
       expect(keys).toContain("reports");
+    });
+
+    it("does NOT have audit in nav items", () => {
+      const keys = HEALTH_NAV_ITEMS.map((item) => item.key);
+      expect(keys).not.toContain("audit");
     });
 
     it("has labels for all nav items", () => {
@@ -127,7 +134,7 @@ describe("Health Routes", () => {
       expect(getHealthNavKey("/health/reports/export")).toBe("reports");
     });
 
-    it("returns null for audit and other routes", () => {
+    it("returns null for non-HW-2 routes", () => {
       expect(getHealthNavKey("/health/audit")).toBeNull();
       expect(getHealthNavKey("/health/documents")).toBeNull();
       expect(getHealthNavKey("/health/other")).toBeNull();

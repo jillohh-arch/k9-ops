@@ -169,41 +169,39 @@ describe("Health Capabilities", () => {
   });
 
   describe("LEGACY_TO_GRANULAR", () => {
-    it("maps legacy permissions to granular capabilities", () => {
+    it("has all legacy keys defined", () => {
       expect(LEGACY_TO_GRANULAR["health.view"]).toBeDefined();
       expect(LEGACY_TO_GRANULAR["health.create"]).toBeDefined();
       expect(LEGACY_TO_GRANULAR["health.edit"]).toBeDefined();
+      expect(LEGACY_TO_GRANULAR["health.archive"]).toBeDefined();
+      expect(LEGACY_TO_GRANULAR["health.approve"]).toBeDefined();
       expect(LEGACY_TO_GRANULAR["health.export"]).toBeDefined();
       expect(LEGACY_TO_GRANULAR["health.audit"]).toBeDefined();
     });
 
-    it("maps health.view to health.read", () => {
+    it("LEGACY ADAPTER: health.view maps to health.read (read-only)", () => {
       const viewCaps = LEGACY_TO_GRANULAR["health.view"];
       expect(viewCaps).toContain("health.read");
+      expect(viewCaps).toHaveLength(1); // Only health.read
     });
 
-    it("maps health.create to record capabilities", () => {
-      const createCaps = LEGACY_TO_GRANULAR["health.create"];
-      expect(createCaps).toContain("health.record_routine");
-      expect(createCaps).toContain("health.record_preventive");
-      expect(createCaps).toContain("health.schedule_item");
+    it("LEGACY ADAPTER: write actions map to empty (fail-closed)", () => {
+      // Write actions require explicit capability grant
+      // Legacy adapter does NOT grant write capabilities
+      expect(LEGACY_TO_GRANULAR["health.create"]).toHaveLength(0);
+      expect(LEGACY_TO_GRANULAR["health.edit"]).toHaveLength(0);
+      expect(LEGACY_TO_GRANULAR["health.archive"]).toHaveLength(0);
+      expect(LEGACY_TO_GRANULAR["health.approve"]).toHaveLength(0);
+      expect(LEGACY_TO_GRANULAR["health.export"]).toHaveLength(0);
+      expect(LEGACY_TO_GRANULAR["health.audit"]).toHaveLength(0);
     });
 
-    it("maps health.edit to update capabilities", () => {
-      const editCaps = LEGACY_TO_GRANULAR["health.edit"];
-      expect(editCaps).toContain("health.administer_dose");
-      expect(editCaps).toContain("health.interpret_exam");
-    });
-
-    it("maps health.approve to close capabilities", () => {
-      const approveCaps = LEGACY_TO_GRANULAR["health.approve"];
-      expect(approveCaps).toContain("health.discharge_case");
-      expect(approveCaps).toContain("health.cancel_case");
-    });
-
-    it("has audit for health.audit legacy", () => {
-      const auditCaps = LEGACY_TO_GRANULAR["health.audit"];
-      expect(auditCaps).toContain("health.audit");
+    it("has amend_record with correct semantic", () => {
+      // amend_record means append-only correction/adendment, not direct edit
+      const amendLabel = CAPABILITY_LABELS["health.amend_record"];
+      expect(amendLabel).toContain("Correção");
+      expect(amendLabel).toContain("Adendo");
+      expect(amendLabel).toContain("Complemento");
     });
   });
 });

@@ -14,9 +14,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import * as net from "node:net";
 
 const EMULATOR_PORTS = {
-  auth: 9099,
-  firestore: 8080,
-  hub: 4400,
+  auth: 9199,
+  firestore: 8181,
+  hub: 4545,
 };
 
 async function isPortInUse(port: number): Promise<boolean> {
@@ -85,16 +85,20 @@ class LifecycleManager {
       emulatorOutput += data.toString();
     });
 
-    // Wait for emulators to start
-    const authReady = await waitForService(`http://127.0.0.1:${EMULATOR_PORTS.auth}`);
-    const firestoreReady = await waitForService(`http://127.0.0.1:${EMULATOR_PORTS.firestore}/emulator`);
+    // Wait for emulators to start (check if ports are listening)
+    const authReady = await isPortInUse(EMULATOR_PORTS.auth);
+    const firestoreReady = await isPortInUse(EMULATOR_PORTS.firestore);
 
     if (!authReady || !firestoreReady) {
       throw new Error(`Emulators failed to start. Output:\n${emulatorOutput}`);
     }
+
+    // Give emulators a moment to fully initialize
+    await setTimeout(2000);
+
     console.log(`[Lifecycle] ✓ Auth Emulator ready at 127.0.0.1:${EMULATOR_PORTS.auth}`);
     console.log(`[Lifecycle] ✓ Firestore Emulator ready at 127.0.0.1:${EMULATOR_PORTS.firestore}`);
-    console.log(`[Lifecycle] ✓ Hub UI available at http://127.0.0.1:${EMULATOR_PORTS.hub}\n`);
+    console.log(`[Lifecycle] ✓ Hub UI available at http://127.0.0.1:4000\n`);
 
     // Run seed
     console.log("[Lifecycle] Running seed for test data...");

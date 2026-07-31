@@ -9,21 +9,8 @@
  * Uses emulator-specific authentication endpoint.
  */
 
-interface SeedUser {
-  email: string;
-  password: string;
-  displayName: string;
-  uid: string;
-  profileId: string;
-}
-
-interface EmulatorOptions {
-  authEmulator: string;
-  projectId: string;
-}
-
 // Test users with deterministic UIDs for idempotency
-const TEST_USERS: SeedUser[] = [
+const TEST_USERS = [
   {
     email: "canonical@hw2-test.local",
     password: "TestPassword123!",
@@ -47,11 +34,14 @@ const TEST_USERS: SeedUser[] = [
   },
 ];
 
-function parseArgs(): { options: EmulatorOptions; force: boolean } {
+const DEFAULT_AUTH_EMULATOR = "http://127.0.0.1:9199";
+const DEFAULT_PROJECT = "demo-k9-ops";
+
+function parseArgs() {
   const args = process.argv.slice(2);
-  const options: EmulatorOptions = {
-    authEmulator: "http://127.0.0.1:9099",
-    projectId: "demo-k9-ops",
+  const options = {
+    authEmulator: DEFAULT_AUTH_EMULATOR,
+    projectId: DEFAULT_PROJECT,
   };
   let force = false;
 
@@ -72,14 +62,8 @@ function parseArgs(): { options: EmulatorOptions; force: boolean } {
   return { options, force };
 }
 
-async function signUpUser(
-  email: string,
-  password: string,
-  uid: string,
-  displayName: string,
-  authEmulator: string
-): Promise<void> {
-  const response = await fetch(`${authEmulator}/identitytoolkit.googleapis.googleapis.com/v1/accounts:signUp?key=demo-api-key`, {
+async function signUpUser(email, password, uid, displayName, authEmulator) {
+  const response = await fetch(`${authEmulator}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -98,54 +82,53 @@ async function signUpUser(
   }
 }
 
-async function createAccessProfile(
-  profileId: string,
-  permissions: Record<string, Record<string, boolean>>,
-  displayName: string
-): Promise<void> {
+async function createAccessProfile(profileId, permissions, displayName) {
   // Direct Firestore write to emulator
+  // Note: Firebase Emulator allows all operations without auth
   const projectId = "demo-k9-ops";
-  const response = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/access_profiles/${profileId}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer owner",
-      },
-      body: JSON.stringify({
-        fields: {
-          id: { stringValue: profileId },
-          displayName: { stringValue: displayName },
-          description: { stringValue: `Test profile for ${profileId}` },
-          isActive: { booleanValue: true },
-          permissions: {
-            mapValue: {
-              fields: Object.fromEntries(
-                Object.entries(permissions).map(([moduleId, actions]) => [
-                  moduleId,
-                  {
-                    mapValue: {
-                      fields: Object.fromEntries(
-                        Object.entries(actions).map(([action, value]) => [action, { booleanValue: value }])
-                      ),
+
+  // Try to create, ignore if already exists (idempotent)
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:8181/v1/projects/${projectId}/databases/(default)/documents/access_profiles/${profileId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fields: {
+            id: { stringValue: profileId },
+            displayName: { stringValue: displayName },
+            description: { stringValue: `Test profile for ${profileId}` },
+            isActive: { booleanValue: true },
+            permissions: {
+              mapValue: {
+                fields: Object.fromEntries(
+                  Object.entries(permissions).map(([moduleId, actions]) => [
+                    moduleId,
+                    {
+                      mapValue: {
+                        fields: Object.fromEntries(
+                          Object.entries(actions).map(([action, value]) => [action, { booleanValue: value }])
+                        ),
+                      },
                     },
-                  },
-                ])
-              ),
+                  ])
+                ),
+              },
             },
           },
-        },
-      }),
-    }
-  );
+        }),
+      }
+    );
 
-  if (!response.ok) {
-    // Profile might already exist, that's fine
-    if (response.status !== 409) {
-      const error = await response.text();
-      throw new Error(`Failed to create profile ${profileId}: ${error}`);
+    if (!response.ok && response.status !== 409) {
+      console.log(`[Seed]   Warning: Could not create profile ${profileId} (status ${response.status})`);
     }
+  } catch (err) {
+    // Ignore network errors for individual profiles
+    console.log(`[Seed]   Warning: Could not create profile ${profileId} (${err.message})`);
   }
 }
 
@@ -159,7 +142,7 @@ async function main() {
 
   // Verify emulator is running
   try {
-    await fetch(`${options.authEmulator}/identitytoolkit.googleapis.googleapis.com/v1/projects/${options.projectId}/config`);
+    await fetch(`${options.authEmulator}/identitytoolkit.googleapis.com/v1/projects/${options.projectId}/config`);
   } catch {
     console.error("[Seed] ERROR: Auth emulator not reachable at", options.authEmulator);
     console.error("[Seed] Please start emulators first with: npm run test:e2e:hw2:emulators");

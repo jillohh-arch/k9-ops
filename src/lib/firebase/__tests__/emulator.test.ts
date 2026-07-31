@@ -145,11 +145,12 @@ describe("connectToEmulators", () => {
 
     connectToEmulators(mockAuth, mockDb);
 
-    expect(connectAuthEmulator).toHaveBeenCalledWith(mockAuth, "http://127.0.0.1:9099", { disableWarnings: true });
-    expect(connectFirestoreEmulator).toHaveBeenCalledWith(mockDb, "127.0.0.1", 8080);
+    // Should use E2E config ports: Auth 9199, Firestore 8181
+    expect(connectAuthEmulator).toHaveBeenCalledWith(mockAuth, "http://127.0.0.1:9199", { disableWarnings: true });
+    expect(connectFirestoreEmulator).toHaveBeenCalledWith(mockDb, "127.0.0.1", 8181);
   });
 
-  it("connects Auth and Firestore with custom options", async () => {
+  it("connects Auth and Firestore with E2E config ports", async () => {
     vi.stubEnv("NEXT_PUBLIC_FIREBASE_USE_EMULATORS", "true");
     vi.stubEnv("NODE_ENV", "development");
 
@@ -159,15 +160,12 @@ describe("connectToEmulators", () => {
     const mockAuth = createMockAuth();
     const mockDb = createMockDb();
 
-    connectToEmulators(mockAuth, mockDb, {
-      authHost: "localhost",
-      authPort: 9199,
-      firestoreHost: "localhost",
-      firestorePort: 8088,
-    });
+    // connectToEmulators now uses E2E config - no options parameter
+    connectToEmulators(mockAuth, mockDb);
 
-    expect(connectAuthEmulator).toHaveBeenCalledWith(mockAuth, "http://localhost:9199", { disableWarnings: true });
-    expect(connectFirestoreEmulator).toHaveBeenCalledWith(mockDb, "localhost", 8088);
+    // Should use E2E config ports: Auth 9199, Firestore 8181
+    expect(connectAuthEmulator).toHaveBeenCalledWith(mockAuth, "http://127.0.0.1:9199", { disableWarnings: true });
+    expect(connectFirestoreEmulator).toHaveBeenCalledWith(mockDb, "127.0.0.1", 8181);
   });
 
   it("does not connect Auth when environment is invalid (variable false)", async () => {

@@ -10,10 +10,19 @@
  * - Guards against server-side execution
  * - Prevents duplicate connections
  * - No secrets or credentials required
+ *
+ * Port configuration is sourced from E2E config module to ensure consistency
+ * across lifecycle, browser client, and seed scripts.
  */
 
 import { connectAuthEmulator } from "firebase/auth";
 import { connectFirestoreEmulator } from "firebase/firestore";
+import {
+  AUTH_EMULATOR_HOST,
+  AUTH_EMULATOR_PORT,
+  FIRESTORE_EMULATOR_HOST,
+  FIRESTORE_EMULATOR_PORT,
+} from "../e2e/config";
 
 /** Guard flag to prevent duplicate connections */
 let isConnected = false;
@@ -65,14 +74,10 @@ export function validateEmulatorEnvironment(): EmulatorEnvironment {
 /**
  * Connects Firebase Auth and Firestore clients to their respective emulators.
  *
+ * Uses port configuration from E2E config module for consistency.
+ *
  * @param auth - Firebase Auth instance
  * @param db - Firestore instance
- * @param options - Connection options
- * @param options.authHost - Auth emulator host (default: 127.0.0.1)
- * @param options.authPort - Auth emulator port (default: 9099)
- * @param options.firestoreHost - Firestore emulator host (default: 127.0.0.1)
- * @param options.firestorePort - Firestore emulator port (default: 8080)
- * @param options.shareSession - Share same-origin port for emulator UI (default: true)
  *
  * @throws Error if environment validation fails
  * @throws Error if already connected
@@ -81,21 +86,7 @@ export function validateEmulatorEnvironment(): EmulatorEnvironment {
 export function connectToEmulators(
   auth: Parameters<typeof connectAuthEmulator>[0],
   db: Parameters<typeof connectFirestoreEmulator>[0],
-  options: {
-    authHost?: string;
-    authPort?: number;
-    firestoreHost?: string;
-    firestorePort?: number;
-    shareSession?: boolean;
-  } = {},
 ): void {
-  const {
-    authHost = "127.0.0.1",
-    authPort = 9099,
-    firestoreHost = "127.0.0.1",
-    firestorePort = 8080,
-  } = options;
-
   // Prevent concurrent initialization
   if (isConnecting) {
     console.warn("[Emulator] Connection already in progress, skipping");
@@ -119,17 +110,17 @@ export function connectToEmulators(
   isConnecting = true;
 
   try {
-    // Connect Auth Emulator
-    const authUrl = `http://${authHost}:${authPort}`;
+    // Connect Auth Emulator using E2E config ports
+    const authUrl = `http://${AUTH_EMULATOR_HOST}:${AUTH_EMULATOR_PORT}`;
     connectAuthEmulator(auth, authUrl, { disableWarnings: true });
 
-    // Connect Firestore Emulator
-    connectFirestoreEmulator(db, firestoreHost, firestorePort);
+    // Connect Firestore Emulator using E2E config ports
+    connectFirestoreEmulator(db, FIRESTORE_EMULATOR_HOST, FIRESTORE_EMULATOR_PORT);
 
     // Mark as connected
     isConnected = true;
 
-    console.info(`[Emulator] Connected to Auth (${authUrl}) and Firestore (${firestoreHost}:${firestorePort})`);
+    console.info(`[Emulator] Connected to Auth (${authUrl}) and Firestore (${FIRESTORE_EMULATOR_HOST}:${FIRESTORE_EMULATOR_PORT})`);
   } catch (error) {
     isConnecting = false;
     throw new Error(`Failed to connect to emulators: ${error instanceof Error ? error.message : String(error)}`);

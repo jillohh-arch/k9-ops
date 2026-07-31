@@ -2,9 +2,10 @@
  * HW-2 E2E Test 7: User Without Health Access
  *
  * Validates:
- * - User without health permissions sees forbidden state
+ * - User without health permissions sees forbidden state OR is redirected
  * - Protected content is not rendered
  * - No mutation is possible
+ * - Uses rigorous pathname comparison
  */
 
 import { test, expect } from "./auth.setup";
@@ -18,50 +19,71 @@ test.describe("HW-2 Test 7: User Without Access", () => {
     page,
   }) => {
     await page.goto("/health");
-
-    // Wait for auth gate or forbidden state
     await page.waitForLoadState("networkidle");
 
-    // Should show forbidden/error state
-    const forbiddenContent = page.getByText(/acesso negado|forbidden|proibido|sem permissão/i);
-    const unauthorizedContent = page.getByText(/não autorizado|unauthorized/i);
+    // Use rigorous pathname comparison
+    const currentPathname = new URL(page.url()).pathname;
 
-    const hasForbidden = (await forbiddenContent.isVisible({ timeout: 2000 }).catch(() => false)) ||
-                        (await unauthorizedContent.isVisible({ timeout: 2000 }).catch(() => false));
+    // Either shows forbidden OR redirects away from /health
+    const showsForbidden = await page.getByText(/acesso negado|forbidden|proibido|sem permissão|acesso negado/i).isVisible().catch(() => false);
+    const showsUnauthorized = await page.getByText(/não autorizado|unauthorized/i).isVisible().catch(() => false);
+    const isRedirected = currentPathname !== "/health" && !currentPathname.startsWith("/health/");
 
-    // Either forbidden message or redirect to another page
-    if (!hasForbidden) {
-      // Should redirect away from health
-      await expect(page).not.toHaveURL(/^\/health($|\/)/, { timeout: 5000 });
-    }
+    expect(showsForbidden || showsUnauthorized || isRedirected).toBe(true);
   });
 
-  test("should not show health content for no-access user", async ({
+  test("should NOT show health content for no-access user", async ({
     page,
   }) => {
     await page.goto("/health");
     await page.waitForLoadState("networkidle");
 
-    // If user can see health links at all, they shouldn't be fully functional
-    const mainContent = page.locator("main, [role='main']");
-    const contentText = await mainContent.textContent().catch(() => "");
+    // Use rigorous pathname comparison
+    const currentPathname = new URL(page.url()).pathname;
 
-    // Should not contain health-specific data
-    const hasHealthData = /prontidão|readiness|agenda|schedule/i.test(contentText || "");
-    expect(hasHealthData).toBe(false);
+    // If on /health, should show forbidden
+    if (currentPathname === "/health") {
+      const forbiddenText = page.getByText(/acesso|forbidden|proibido/i);
+      await expect(forbiddenText).toBeVisible({ timeout: 3000 });
+    } else {
+      // If redirected, should not be on /health
+      expect(currentPathname).not.toMatch(/^\/health($|\/)/);
+    }
   });
 
-  test("should not be able to mutate health data", async ({ page }) => {
+  test("should not have write controls accessible", async ({ page }) => {
+    // Even if user somehow accesses health routes
     await page.goto("/health/readiness");
     await page.waitForLoadState("networkidle");
 
-    // Should not have write buttons
-    const writeButtons = page.getByRole("button", {
-      name: /novo|create|adicionar|add/i,
-    });
+    const currentPathname = new URL(page.url()).pathname;
 
-    // Even if buttons exist, they should be disabled or not functional
-    const visibleWriteButtons = await writeButtons.filter({ has: page.locator(':not([disabled])') }).count();
-    expect(visibleWriteButtons).toBe(0);
+    // Should either show forbidden or be redirected
+    if (currentPathname.startsWith("/health")) {
+      // No write buttons should be visible
+      const writeButtons = page.getByRole("button", {
+        name: /novo|create|adicionar|add/i,
+      });
+
+      const visibleWriteButtons = await writeButtons
+        .filter({ hasNot: page.locator('[disabled]') })
+        .filter({ hasNot: page.locator('[hidden]') })
+        .count();
+
+      expect(visibleWriteButtons).toBe(0);
+    }
+  });
+
+  test("should redirect to login when accessing health without session", async ({
+    page,
+  }) => {
+    // Clear session
+    await page.context().clearCookies();
+
+    await page.goto("/health");
+
+    // Should redirect to /login
+    const currentPathname = new URL(page.url()).pathname;
+    expect(currentPathname).toBe("/login");
   });
 });

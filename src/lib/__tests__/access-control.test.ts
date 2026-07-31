@@ -8,6 +8,7 @@ import {
   isVisibleAccessProfile,
   mergeAccessProfilesWithDefaults,
   normalizePermissionMap,
+  accessActions,
   sortAccessProfiles,
   visibleAccessProfiles,
 } from "../permissions/access-control";
@@ -80,6 +81,32 @@ describe("normalizePermissionMap", () => {
 });
 
 describe("hasAccessPermission", () => {
+  it("declares the nutrition plan capability in policy v5", () => {
+    expect(accessActions.some((action) => action.id === "manage_nutrition_plan")).toBe(true);
+  });
+
+  it.each([
+    ["administrador", true],
+    ["gestor", true],
+    ["operador_k9", false],
+    ["instrutor_k9", false],
+    ["almoxarifado", false],
+  ])("defaults %s nutrition plan capability to %s", (profileId, expected) => {
+    const profile = getDefaultAccessProfile(profileId)!;
+    expect(hasAccessPermission(profile, "health", "manage_nutrition_plan")).toBe(expected);
+  });
+
+  it("fails closed for missing and false, and permits explicit true", () => {
+    const base = getDefaultAccessProfile("operador_k9")!;
+    expect(hasAccessPermission(base, "health", "manage_nutrition_plan")).toBe(false);
+    expect(hasAccessPermission({...base, permissions: {health: {manage_nutrition_plan: false}}}, "health", "manage_nutrition_plan")).toBe(false);
+    expect(hasAccessPermission({...base, permissions: {health: {manage_nutrition_plan: true}}}, "health", "manage_nutrition_plan")).toBe(true);
+  });
+
+  it("normalization preserves manage_nutrition_plan", () => {
+    expect(normalizePermissionMap({health: ["view", "manage_nutrition_plan"]}).health)
+      .toEqual({view: true, manage_nutrition_plan: true});
+  });
   it("returns true when profile has the permission", () => {
     const admin = defaultAccessProfiles.find((p) => p.id === "administrador")!;
     expect(hasAccessPermission(admin, "access", "edit")).toBe(true);

@@ -5,6 +5,11 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
+import {
+  sanitizeDownloadFilename,
+  sanitizeExportText,
+} from "./export-safety";
+
 export interface PdfExportOptions {
   filename: string;
   title: string;
@@ -14,15 +19,19 @@ export interface PdfExportOptions {
   orientation?: "portrait" | "landscape";
 }
 
-export function exportToPdf({
-  filename,
-  title,
-  subtitle,
-  headers,
-  rows,
-  orientation = "portrait",
-}: PdfExportOptions): void {
+export function createPdfDocument(options: PdfExportOptions): jsPDF {
+  const {
+    title,
+    subtitle,
+    headers,
+    rows,
+    orientation = "portrait",
+  } = options;
   const doc = new jsPDF({ orientation, unit: "mm", format: "a4" });
+  const safeTitle = sanitizeExportText(title);
+  const safeSubtitle = subtitle ? sanitizeExportText(subtitle) : undefined;
+  const safeHeaders = headers.map(sanitizeExportText);
+  const safeRows = rows.map((row) => row.map(sanitizeExportText));
 
   const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -34,14 +43,14 @@ export function exportToPdf({
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.text(title, 14, 15);
+  doc.text(safeTitle, 14, 15);
 
   // Subtitle
-  if (subtitle) {
+  if (safeSubtitle) {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(148, 163, 184); // slate-400
-    doc.text(subtitle, 14, 24);
+    doc.text(safeSubtitle, 14, 24);
   }
 
   // Generation timestamp
@@ -53,8 +62,8 @@ export function exportToPdf({
   // Table
   autoTable(doc, {
     startY: 38,
-    head: [headers],
-    body: rows,
+    head: [safeHeaders],
+    body: safeRows,
     theme: "grid",
     styles: {
       fontSize: 8,
@@ -79,7 +88,7 @@ export function exportToPdf({
       doc.setFontSize(7);
       doc.setTextColor(148, 163, 184);
       doc.text(
-        `K9 OPS - ${title}`,
+        `K9 OPS - ${safeTitle}`,
         14,
         pageHeight - 8,
       );
@@ -92,9 +101,14 @@ export function exportToPdf({
     },
   });
 
-  doc.save(ensureExtension(filename, ".pdf"));
+  return doc;
 }
 
-function ensureExtension(filename: string, ext: string): string {
-  return filename.endsWith(ext) ? filename : `${filename}${ext}`;
+export function exportToPdf(options: PdfExportOptions): void {
+  const doc = createPdfDocument(options);
+  savePdfDocument(doc, options.filename);
+}
+
+export function savePdfDocument(doc: jsPDF, filename: string): void {
+  doc.save(sanitizeDownloadFilename(filename, ".pdf"));
 }

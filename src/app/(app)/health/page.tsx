@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  Apple,
   Activity,
   AlertCircle,
   ArrowRight,
@@ -855,6 +856,13 @@ export default function HealthPage() {
                 : `${formatNumber(data.metrics.periodEvents)} registros em ${periodLabel.toLowerCase()}`}
             </Badge>
           </div>
+          <Link
+            href={paths.healthNutrition}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-300/[0.08] px-4 py-2.5 text-sm font-bold text-cyan-200 transition hover:bg-cyan-300/[0.15]"
+          >
+            <Apple className="h-4 w-4 text-cyan-300" />
+            Plano Alimentar
+          </Link>
           {canWriteHealth ? (
             <button
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] transition hover:bg-cyan-200"
@@ -884,8 +892,8 @@ export default function HealthPage() {
         </div>
       ) : null}
 
-      {data.errors.length ? (
-        <div className="rounded-[1.5rem] border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm text-amber-100">
+      {data.errors.length > 0 ? (
+        <div className="rounded-[1.25rem] border border-amber-300/20 bg-amber-300/[0.06] p-4 text-amber-100">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
             <div>

@@ -4,13 +4,21 @@
 
 import * as XLSX from "xlsx";
 
-export function exportToXlsx(
-  filename: string,
+import {
+  neutralizeSpreadsheetFormula,
+  sanitizeDownloadFilename,
+  sanitizeWorksheetName,
+} from "./export-safety";
+
+export function createXlsxWorkbook(
   headers: string[],
   rows: string[][],
   sheetName = "Relatório",
-): void {
-  const worksheetData = [headers, ...rows];
+): XLSX.WorkBook {
+  const worksheetData = [
+    headers.map(neutralizeSpreadsheetFormula),
+    ...rows.map((row) => row.map(neutralizeSpreadsheetFormula)),
+  ];
   const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
   // Auto-size columns based on content width
@@ -24,22 +32,39 @@ export function exportToXlsx(
   worksheet["!cols"] = colWidths;
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  XLSX.utils.book_append_sheet(
+    workbook,
+    worksheet,
+    sanitizeWorksheetName(sheetName),
+  );
 
+  return workbook;
+}
+
+export function createXlsxBlob(
+  headers: string[],
+  rows: string[][],
+  sheetName = "Relatório",
+): Blob {
+  const workbook = createXlsxWorkbook(headers, rows, sheetName);
   const xlsxBuffer = XLSX.write(workbook, {
     bookType: "xlsx",
     type: "array",
-  });
+  }) as ArrayBuffer;
 
-  const blob = new Blob([xlsxBuffer], {
+  return new Blob([xlsxBuffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
-
-  triggerDownload(blob, ensureExtension(filename, ".xlsx"));
 }
 
-function ensureExtension(filename: string, ext: string): string {
-  return filename.endsWith(ext) ? filename : `${filename}${ext}`;
+export function exportToXlsx(
+  filename: string,
+  headers: string[],
+  rows: string[][],
+  sheetName = "Relatório",
+): void {
+  const blob = createXlsxBlob(headers, rows, sheetName);
+  triggerDownload(blob, sanitizeDownloadFilename(filename, ".xlsx"));
 }
 
 function triggerDownload(blob: Blob, filename: string): void {

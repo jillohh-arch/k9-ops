@@ -24,7 +24,7 @@ const HEALTH_ROUTES = [
 ];
 
 test.describe("HW-2 Test 4: Seven Routes Validation", () => {
-  test.beforeEach(async ({ page, authenticateAs }) => {
+  test.beforeEach(async ({ authenticateAs }) => {
     await authenticateAs("canonical");
   });
 

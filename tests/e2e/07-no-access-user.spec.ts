@@ -10,7 +10,7 @@
 import { test, expect } from "./auth.setup";
 
 test.describe("HW-2 Test 7: User Without Access", () => {
-  test.beforeEach(async ({ page, authenticateAs }) => {
+  test.beforeEach(async ({ authenticateAs }) => {
     await authenticateAs("noAccess");
   });
 
@@ -41,11 +41,6 @@ test.describe("HW-2 Test 7: User Without Access", () => {
   }) => {
     await page.goto("/health");
     await page.waitForLoadState("networkidle");
-
-    // Health navigation should not be visible
-    const healthNav = page.getByRole("link", { name: /saúde|health/i }).filter({
-      hasNot: page.locator('[aria-current]'),
-    });
 
     // If user can see health links at all, they shouldn't be fully functional
     const mainContent = page.locator("main, [role='main']");

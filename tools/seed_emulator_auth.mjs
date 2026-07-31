@@ -9,12 +9,6 @@
  * Uses emulator-specific authentication endpoint.
  */
 
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
 interface SeedUser {
   email: string;
   password: string;
@@ -25,7 +19,6 @@ interface SeedUser {
 
 interface EmulatorOptions {
   authEmulator: string;
-  firestoreEmulator: string;
   projectId: string;
 }
 
@@ -58,7 +51,6 @@ function parseArgs(): { options: EmulatorOptions; force: boolean } {
   const args = process.argv.slice(2);
   const options: EmulatorOptions = {
     authEmulator: "http://127.0.0.1:9099",
-    firestoreEmulator: "127.0.0.1:8080",
     projectId: "demo-k9-ops",
   };
   let force = false;
@@ -67,9 +59,6 @@ function parseArgs(): { options: EmulatorOptions; force: boolean } {
     switch (args[i]) {
       case "--auth-emulator":
         options.authEmulator = args[++i];
-        break;
-      case "--firestore-emulator":
-        options.firestoreEmulator = args[++i];
         break;
       case "--project":
         options.projectId = args[++i];
@@ -109,30 +98,10 @@ async function signUpUser(
   }
 }
 
-async function setCustomUserClaims(
-  uid: string,
-  claims: Record<string, unknown>,
-  authEmulator: string
-): Promise<void> {
-  const response = await fetch(`${authEmulator}/identitytoolkit.googleapis.googleapis.com/v1/accounts:update?key=demo-api-key`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      localId: uid,
-      customAttributes: JSON.stringify(claims),
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to set claims for ${uid}`);
-  }
-}
-
 async function createAccessProfile(
   profileId: string,
   permissions: Record<string, Record<string, boolean>>,
-  displayName: string,
-  firestoreEmulator: string
+  displayName: string
 ): Promise<void> {
   // Direct Firestore write to emulator
   const projectId = "demo-k9-ops";
@@ -186,7 +155,6 @@ async function main() {
   console.log("[Seed] Firebase Auth Emulator Seed");
   console.log("[Seed] Project:", options.projectId);
   console.log("[Seed] Auth Emulator:", options.authEmulator);
-  console.log("[Seed] Firestore Emulator:", options.firestoreEmulator);
   console.log("");
 
   // Verify emulator is running
@@ -223,7 +191,7 @@ async function main() {
       read: true,
       write: true,
     },
-  }, "Canonical Health Access", options.firestoreEmulator);
+  }, "Canonical Health Access");
   console.log("[Seed]   ✓ canonical-profile (health.read + health.view)");
 
   // Legacy profile with only health.view
@@ -231,7 +199,7 @@ async function main() {
     health: {
       view: true,
     },
-  }, "Legacy Health View Only", options.firestoreEmulator);
+  }, "Legacy Health View Only");
   console.log("[Seed]   ✓ legacy-profile (health.view only)");
 
   // No-access profile
@@ -239,7 +207,7 @@ async function main() {
     training: {
       read: true,
     },
-  }, "No Health Access", options.firestoreEmulator);
+  }, "No Health Access");
   console.log("[Seed]   ✓ noaccess-profile (no health permissions)");
 
   console.log("\n[Seed] ✓ Seed complete");

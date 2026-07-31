@@ -9,7 +9,7 @@
 import { test, expect } from "./auth.setup";
 
 test.describe("HW-2 Test 3: Prontidão Active Item", () => {
-  test.beforeEach(async ({ page, authenticateAs }) => {
+  test.beforeEach(async ({ authenticateAs }) => {
     await authenticateAs("canonical");
   });
 

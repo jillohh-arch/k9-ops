@@ -10,7 +10,7 @@
 import { test, expect } from "./auth.setup";
 
 test.describe("HW-2 Test 9: Page Refresh", () => {
-  test.beforeEach(async ({ page, authenticateAs }) => {
+  test.beforeEach(async ({ authenticateAs }) => {
     await authenticateAs("canonical");
   });
 

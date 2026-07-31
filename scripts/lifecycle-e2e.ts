@@ -10,7 +10,7 @@
  */
 
 import { setTimeout } from "node:timers/promises";
-import { spawn, type ChildProcess, exec } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import * as net from "node:net";
 
 const EMULATOR_PORTS = {
@@ -18,8 +18,6 @@ const EMULATOR_PORTS = {
   firestore: 8080,
   hub: 4400,
 };
-
-const TEST_TIMEOUT = 300000; // 5 minutes
 
 async function isPortInUse(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -32,38 +30,6 @@ async function isPortInUse(port: number): Promise<boolean> {
       resolve(false);
     });
     client.connect(port, "127.0.0.1");
-  });
-}
-
-async function killProcessOnPort(port: number): Promise<void> {
-  if (!(await isPortInUse(port))) return;
-
-  return new Promise((resolve) => {
-    const platform = process.platform;
-
-    let cmd: string;
-    if (platform === "win32") {
-      cmd = `netstat -ano | findstr :${port}`;
-    } else {
-      cmd = `lsof -ti:${port}`;
-    }
-
-    exec(cmd, (error: Error | null, stdout: string) => {
-      if (error || !stdout.trim()) {
-        resolve();
-        return;
-      }
-
-      const pids = stdout.trim().split(/\s+/);
-      for (const pid of pids) {
-        try {
-          process.kill(parseInt(pid, 10), "SIGTERM");
-        } catch {
-          // Process may already be dead
-        }
-      }
-      setTimeout(1000).then(resolve);
-    });
   });
 }
 

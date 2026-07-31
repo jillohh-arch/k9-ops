@@ -10,7 +10,7 @@
 import { test, expect } from "./auth.setup";
 
 test.describe("HW-2 Test 8: Deep Link Navigation", () => {
-  test.beforeEach(async ({ page, authenticateAs }) => {
+  test.beforeEach(async ({ authenticateAs }) => {
     await authenticateAs("canonical");
   });
 

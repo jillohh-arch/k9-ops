@@ -12,7 +12,7 @@
 import { test, expect } from "./auth.setup";
 
 test.describe("HW-2 Test 5: Cockpit Placeholder", () => {
-  test.beforeEach(async ({ page, authenticateAs }) => {
+  test.beforeEach(async ({ authenticateAs }) => {
     await authenticateAs("canonical");
   });
 

@@ -233,32 +233,11 @@ export type ReadState<T = unknown, T2 = unknown> =
  * - HEALTH_WEB_TARGET_ARCHITECTURE.md §14 (Readiness States)
  * - HEALTH_WEB_BASELINE.md §11 (Official Readiness States)
  */
-export type ReadinessStatus =
-  | "operational"
-  | "operational_attention"
-  | "fit_with_restrictions"
-  | "temporarily_unfit"
-  | "not_evaluated";
-
-export const READINESS_STATUS_LABELS: Record<ReadinessStatus, string> = {
-  operational: "Operacional",
-  operational_attention: "Operacional com Atenção",
-  fit_with_restrictions: "Apto com Restrições",
-  temporarily_unfit: "Temporariamente Inapto",
-  not_evaluated: "Não Avaliado",
-} as const;
-
-/**
- * Readiness status severity ordering (for sorting/priority display).
- * Lower index = higher priority for display.
- */
-export const READINESS_STATUS_PRIORITY: Record<ReadinessStatus, number> = {
-  temporarily_unfit: 0,
-  fit_with_restrictions: 1,
-  operational_attention: 2,
-  not_evaluated: 3,
-  operational: 4,
-} as const;
+export {
+  type ReadinessStatus,
+  READINESS_STATUS_LABELS,
+  READINESS_STATUS_PRIORITY,
+} from "./readiness-types";
 
 /**
  * Restriction types for operational restrictions.

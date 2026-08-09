@@ -3,15 +3,19 @@
  * Pure Health Summary Projection Producer
  *
  * Implements server-side readiness projection logic according to:
- * - HW-3P Corrective Review §2 (Thresholds), §3 (Consultation vs Exam), §4 (Has Evaluation Predicate)
- * - HEALTH_V1_READINESS_POLICY.md
  * - HEALTH_V1_FIRESTORE_SCHEMA.md
+ * - HEALTH_V1_READINESS_POLICY.md
+ * - HW-3P Canonical Wire Final Patch
  *
  * CRITICAL MANDATES:
  * - PURE FUNCTION: 100% testable without Firestore or mocks.
- * - Dynamic ReadinessThresholdConfig parameter (Default production: null / not configured).
- * - Distinguishes consultation (veterinary) from exam.
- * - Explicit hasHealthEvaluation predicate for not_evaluated status.
+ * - Parses canonical Firestore wire schemas:
+ *   - VaccinationRecord: vaccine_name, vaccine_type, record_status, applied_at, next_due_at/validity_until
+ *   - ClinicalEvent: event_type, status, occurred_at, professional { name, crmv }
+ *   - ExamProcess: exam_type, current_stage (resulted | interpreted | impact_assessed), created_at
+ *   - OperationalRestriction: expected_end < now yields is_overdue = true & open_alert
+ * - Predicate hasHealthEvaluation strictly requires a clinical evaluation event or restriction (isolated weight, vaccination, nutrition, schedule alone DO NOT count as evaluation).
+ * - Dynamic ReadinessThresholdConfig parameter (Default production: null / unconfigured).
  * - Strictly outputs canonical snake_case wire document with numeric schema_version = 1.
  */
 
@@ -90,6 +94,7 @@ export interface HealthSummaryWireOutput {
     activities_restricted: string[];
     issued_at: Date | string | null;
     expected_end: Date | string | null;
+    is_overdue: boolean;
   }>;
   restriction_count: {
     absolute: number;
@@ -166,22 +171,41 @@ function parseDate(val: unknown): Date | null {
 
 /**
  * Predicate to determine if a K9 has any clinical health evaluation registered.
- * Administrative records (e.g. mere schedule items) alone do NOT constitute a clinical evaluation.
+ * MANDATE §6: Isolated weight records, vaccination records, nutrition plans, meal logs, or schedule items
+ * DO NOT constitute a clinical evaluation!
+ * Returns true ONLY if an active/historical OperationalRestriction exists, or a ClinicalEvent consultation / ExamProcess / active ClinicalCase exists.
  */
 export function hasHealthEvaluation(input: BuildHealthSummaryInput): boolean {
   const restrictions = input.restrictions ?? [];
-  const weightRecords = input.weightRecords ?? [];
-  const vaccinationRecords = input.vaccinationRecords ?? [];
-  const clinicalCases = input.clinicalCases ?? [];
-  const nutritionPlans = input.nutritionPlans ?? [];
-
   if (restrictions.length > 0) return true;
-  if (weightRecords.length > 0) return true;
-  if (vaccinationRecords.length > 0) return true;
-  if (nutritionPlans.length > 0) return true;
 
-  // Check if clinical cases contain events/exams/consultations
-  if (clinicalCases.length > 0) return true;
+  const clinicalCases = input.clinicalCases ?? [];
+  for (const c of clinicalCases) {
+    // Check for clinical events of type consultation
+    const events = Array.isArray(c.events) ? c.events : [];
+    for (const ev of events) {
+      const type = String(ev.event_type ?? ev.type ?? "").toLowerCase();
+      const status = String(ev.status ?? "final").toLowerCase();
+      if ((type === "consultation" || type === "veterinary_consultation") && status !== "draft" && status !== "cancelled") {
+        return true;
+      }
+    }
+
+    // Check for completed exam processes
+    const exams = Array.isArray(c.exams) ? c.exams : [];
+    for (const ex of exams) {
+      const stage = String(ex.current_stage ?? ex.stage ?? "").toLowerCase();
+      if (["resulted", "interpreted", "impact_assessed"].includes(stage)) {
+        return true;
+      }
+    }
+
+    // Check if clinical case has active clinical status
+    const caseStatus = String(c.clinical_status ?? c.status ?? "").toLowerCase();
+    if (["open", "under_investigation", "under_treatment", "monitoring"].includes(caseStatus)) {
+      return true;
+    }
+  }
 
   return false;
 }
@@ -195,9 +219,11 @@ export function buildHealthSummary(
   const now = input.now ?? new Date();
   const dogId = input.dogId;
   const thresholds = input.thresholdConfig ?? DEFAULT_PRODUCTION_THRESHOLDS;
+  const open_alerts: Array<Record<string, unknown>> = [];
 
   // 1. Process active operational restrictions
-  // MANDATE §14: Active restriction with expected_end in past STILL counts as active until status is ended/cancelled!
+  // MANDATE §8: Active restriction with expected_end < now STILL counts as active!
+  // Plus: produces is_overdue = true in DTO and open_alert for reevaluation overdue!
   const rawRestrictions = input.restrictions ?? [];
   const activeRestrictionsDocs = rawRestrictions.filter((r) => {
     const st = String(r.status ?? "active").toLowerCase();
@@ -214,21 +240,39 @@ export function buildHealthSummary(
     attention: activeAttention.length,
   };
 
-  const active_restrictions = activeRestrictionsDocs.map((r) => ({
-    id: String(r.id),
-    level: String(r.level ?? r.type ?? "attention").toLowerCase(),
-    category: String(r.category ?? "operational"),
-    description: String(r.description ?? r.reason ?? "Restrição ativa"),
-    activities_restricted: Array.isArray(r.activities_restricted)
-      ? (r.activities_restricted as string[])
-      : Array.isArray(r.restrictedActivities)
-      ? (r.restrictedActivities as string[])
-      : [],
-    issued_at: parseDate(r.issued_at ?? r.issuedAt) ?? now,
-    expected_end: parseDate(r.expected_end ?? r.expectedEnd),
-  }));
+  const active_restrictions = activeRestrictionsDocs.map((r) => {
+    const expectedEnd = parseDate(r.expected_end ?? r.expectedEnd);
+    const isOverdue = Boolean(expectedEnd && expectedEnd.getTime() < now.getTime());
 
-  // 2. Extract Evidence Summaries
+    if (isOverdue) {
+      open_alerts.push({
+        id: `alert-overdue-restriction-${r.id}`,
+        type: "restriction_reevaluation_overdue",
+        severity: "medium",
+        message: `Reavaliação de restrição vencida (${String(r.description ?? "Restrição")})`,
+        restriction_id: String(r.id),
+        expected_end: expectedEnd!.toISOString(),
+      });
+    }
+
+    return {
+      id: String(r.id),
+      level: String(r.level ?? r.type ?? "attention").toLowerCase(),
+      category: String(r.category ?? "operational"),
+      description: String(r.description ?? r.reason ?? "Restrição ativa"),
+      activities_restricted: Array.isArray(r.activities_restricted)
+        ? (r.activities_restricted as string[])
+        : Array.isArray(r.restrictedActivities)
+        ? (r.restrictedActivities as string[])
+        : [],
+      issued_at: parseDate(r.issued_at ?? r.issuedAt) ?? now,
+      expected_end: expectedEnd,
+      is_overdue: isOverdue,
+    };
+  });
+
+  // 2. Extract Evidence Summaries from Canonical Schemas
+  // Weight Records: weight_kg, measured_at, bcs
   const weightRecords = input.weightRecords ?? [];
   const validWeights = weightRecords
     .map((w) => ({ doc: w, date: parseDate(w.measured_at ?? w.measuredAt) }))
@@ -237,19 +281,25 @@ export function buildHealthSummary(
 
   const lastWeightDoc = validWeights.length > 0 ? validWeights[0] : null;
 
+  // Nutrition Plans: status == 'active', food_type, daily_amount_g
   const nutritionPlans = input.nutritionPlans ?? [];
   const activeNutrition = nutritionPlans.find((n) => String(n.status ?? "active").toLowerCase() === "active");
 
+  // VaccinationRecords (MANDATE §3): record_status == 'final', vaccine_name/vaccine_type, applied_at, next_due_at/validity_until
   const vaccinationRecords = input.vaccinationRecords ?? [];
   const validVaccinations = vaccinationRecords
-    .map((v) => ({ doc: v, date: parseDate(v.date ?? v.administered_at) }))
+    .filter((v) => String(v.record_status ?? "final").toLowerCase() !== "cancelled")
+    .map((v) => ({ doc: v, date: parseDate(v.applied_at ?? v.date ?? v.administered_at) }))
     .filter((v): v is { doc: SourceDocument; date: Date } => v.date !== null)
     .sort((a, b) => b.date.getTime() - a.date.getTime());
   
   const lastVaccineDoc = validVaccinations.length > 0 ? validVaccinations[0] : null;
-  const vaccineNextDue = lastVaccineDoc ? parseDate(lastVaccineDoc.doc.next_due ?? lastVaccineDoc.doc.nextDueDate) : null;
+  const vaccineNextDue = lastVaccineDoc
+    ? parseDate(lastVaccineDoc.doc.next_due_at ?? lastVaccineDoc.doc.validity_until ?? lastVaccineDoc.doc.next_due)
+    : null;
   const has_vaccination_current = Boolean(lastVaccineDoc && (!vaccineNextDue || vaccineNextDue.getTime() >= now.getTime()));
 
+  // Clinical Cases, ClinicalEvents & ExamProcesses (MANDATE §4 & §5)
   const clinicalCases = input.clinicalCases ?? [];
   const activeCases = clinicalCases.filter((c) => {
     const st = String(c.clinical_status ?? c.status ?? "open").toLowerCase();
@@ -260,23 +310,30 @@ export function buildHealthSummary(
   const validConsultations: Array<{ doc: SourceDocument; date: Date; caseId: string | null }> = [];
 
   clinicalCases.forEach((c) => {
+    // Process ClinicalEvent subcollection/array (MANDATE §4)
     const events = Array.isArray(c.events) ? c.events : [];
     events.forEach((ev: Record<string, unknown>) => {
-      const type = String(ev.type ?? ev.event_type ?? "").toLowerCase();
-      if (type === "exam") {
-        const d = parseDate(ev.date ?? ev.occurred_at);
-        if (d) validExams.push({ doc: ev as SourceDocument, date: d });
-      } else if (type === "consultation" || type === "veterinary_consultation") {
-        const d = parseDate(ev.date ?? ev.occurred_at);
-        if (d) validConsultations.push({ doc: ev as SourceDocument, date: d, caseId: String(c.id) });
+      const type = String(ev.event_type ?? ev.type ?? "").toLowerCase();
+      const status = String(ev.status ?? "final").toLowerCase();
+      if ((type === "consultation" || type === "veterinary_consultation") && status !== "draft" && status !== "cancelled") {
+        const d = parseDate(ev.occurred_at ?? ev.recorded_at ?? ev.date);
+        if (d) {
+          const profObj = typeof ev.professional === "object" && ev.professional !== null ? (ev.professional as Record<string, unknown>) : null;
+          const vetName = profObj?.name ? String(profObj.name) : typeof ev.professional === "string" ? ev.professional : null;
+          validConsultations.push({ doc: { ...ev, id: String(ev.id ?? ev.event_id ?? "event-doc"), vet_name: vetName }, date: d, caseId: String(c.id) });
+        }
       }
     });
 
-    // Also check direct exams subcollection if present on case object
+    // Process ExamProcess subcollection/array (MANDATE §5)
+    // Stage must be resulted, interpreted, or impact_assessed (not requested, collected, or cancelled)
     const exams = Array.isArray(c.exams) ? c.exams : [];
     exams.forEach((ex: Record<string, unknown>) => {
-      const d = parseDate(ex.date ?? ex.performed_at);
-      if (d) validExams.push({ doc: ex as SourceDocument, date: d });
+      const stage = String(ex.current_stage ?? ex.stage ?? "").toLowerCase();
+      if (["resulted", "interpreted", "impact_assessed"].includes(stage)) {
+        const d = parseDate(ex.created_at ?? ex.date ?? ex.performed_at);
+        if (d) validExams.push({ doc: ex as SourceDocument, date: d });
+      }
     });
   });
 
@@ -347,7 +404,7 @@ export function buildHealthSummary(
     }
   }
 
-  // 5. Structure Summaries for Output
+  // 5. Structure DTO Summaries for Output
   const treatmentProtocols = input.treatmentProtocols ?? [];
   const activeTreatments = treatmentProtocols.filter((t) => String(t.status ?? "active").toLowerCase() === "active");
 
@@ -371,7 +428,7 @@ export function buildHealthSummary(
 
   const last_vaccination = lastVaccineDoc
     ? {
-        type: String(lastVaccineDoc.doc.type ?? lastVaccineDoc.doc.vaccine_name ?? "Vacina"),
+        type: String(lastVaccineDoc.doc.vaccine_name ?? lastVaccineDoc.doc.vaccine_type ?? lastVaccineDoc.doc.type ?? "Vacina"),
         date: lastVaccineDoc.date,
         next_due: vaccineNextDue,
       }
@@ -379,9 +436,9 @@ export function buildHealthSummary(
 
   const last_exam = lastExamDoc
     ? {
-        type: String(lastExamDoc.doc.subtype ?? lastExamDoc.doc.title ?? lastExamDoc.doc.type ?? "Exame"),
+        type: String(lastExamDoc.doc.exam_type ?? lastExamDoc.doc.title ?? lastExamDoc.doc.subtype ?? "Exame"),
         date: lastExamDoc.date,
-        status: String(lastExamDoc.doc.status ?? "completed"),
+        status: String(lastExamDoc.doc.current_stage ?? lastExamDoc.doc.status ?? "completed"),
       }
     : null;
 
@@ -437,7 +494,7 @@ export function buildHealthSummary(
     nutrition_plan,
     pending_schedule_count: pendingSchedule.length,
     overdue_schedule_count: overdueSchedule.length,
-    open_alerts: [],
+    open_alerts,
     schema_version: CURRENT_CANONICAL_SCHEMA_VERSION,
   };
 }

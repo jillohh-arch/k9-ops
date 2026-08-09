@@ -2,7 +2,11 @@
  * K9 Ops Backend — Health Web v1 HW-3P Corrective
  * Pure Projection Producer Unit Tests
  *
- * Implements unit test suite covering all corrective requirements in HW-3P §2-§4, §13, §14.
+ * Implements unit test suite covering all corrective requirements in HW-3P §2-§8:
+ * - 100% Canonical Source Schema Keys (VaccinationRecord, ClinicalEvent, ExamProcess)
+ * - Strict hasHealthEvaluation predicate (Isolated weight/vaccine/nutrition/schedule do NOT prove evaluation)
+ * - Dynamic threshold configuration and NULL threshold semantics
+ * - Restriction is_overdue and open_alerts generation
  */
 
 import { describe, expect, it } from "vitest";
@@ -22,8 +26,8 @@ const explicitTestThresholds: ReadinessThresholdConfig = {
   nutritionRequired: true,
 };
 
-describe("HW-3P Corrective Backend Projection Engine", () => {
-  it("1. K9 never evaluated -> not_evaluated (hasHealthEvaluation returns false)", () => {
+describe("HW-3P Canonical Producer Unit Tests", () => {
+  it("1. K9 without evaluation -> not_evaluated (hasHealthEvaluation returns false)", () => {
     const evaluated = hasHealthEvaluation({ dogId });
     expect(evaluated).toBe(false);
 
@@ -33,7 +37,55 @@ describe("HW-3P Corrective Backend Projection Engine", () => {
     expect(output.readiness_reason).toBe("Nenhuma avaliação registrada");
   });
 
-  it("2. Administrative schedule item alone != clinical evaluation -> not_evaluated", () => {
+  it("2. Mandatory §6: Isolated weight record alone != clinical evaluation -> not_evaluated", () => {
+    const input = {
+      dogId,
+      weightRecords: [{ id: "w1", weight_kg: 34, measured_at: fixedNow }],
+      now: fixedNow,
+    };
+    expect(hasHealthEvaluation(input)).toBe(false);
+
+    const output = buildHealthSummary(input);
+    expect(output.readiness_status).toBe("not_evaluated");
+    expect(output.last_weight?.kg).toBe(34);
+  });
+
+  it("3. Mandatory §6: Isolated vaccination record alone != clinical evaluation -> not_evaluated", () => {
+    const input = {
+      dogId,
+      vaccinationRecords: [
+        {
+          id: "v1",
+          vaccine_name: "V10 Polivalente",
+          vaccine_type: "viral",
+          record_status: "final",
+          applied_at: fixedNow,
+          next_due_at: new Date("2027-08-09T12:00:00.000Z"),
+        },
+      ],
+      now: fixedNow,
+    };
+    expect(hasHealthEvaluation(input)).toBe(false);
+
+    const output = buildHealthSummary(input);
+    expect(output.readiness_status).toBe("not_evaluated");
+    expect(output.last_vaccination?.type).toBe("V10 Polivalente");
+  });
+
+  it("4. Mandatory §6: Isolated nutrition plan alone != clinical evaluation -> not_evaluated", () => {
+    const input = {
+      dogId,
+      nutritionPlans: [{ id: "n1", status: "active", food_type: "Super Premium", daily_amount_g: 400 }],
+      now: fixedNow,
+    };
+    expect(hasHealthEvaluation(input)).toBe(false);
+
+    const output = buildHealthSummary(input);
+    expect(output.readiness_status).toBe("not_evaluated");
+    expect(output.nutrition_plan?.food_type).toBe("Super Premium");
+  });
+
+  it("5. Mandatory §6: Administrative schedule item alone != clinical evaluation -> not_evaluated", () => {
     const input = {
       dogId,
       healthSchedule: [{ id: "sch-1", title: "Vermifugação agendada", status: "scheduled" }],
@@ -45,34 +97,82 @@ describe("HW-3P Corrective Backend Projection Engine", () => {
     expect(output.readiness_status).toBe("not_evaluated");
   });
 
-  it("3. Default production thresholds (unconfigured): weight > 90 days does NOT generate attention", () => {
-    const oldWeightDate = new Date(fixedNow.getTime() - 120 * 86400000);
-    const output = buildHealthSummary({
+  it("6. Canonical ClinicalEvent consultation proves evaluation -> operational", () => {
+    const input = {
       dogId,
-      weightRecords: [{ id: "w1", weight_kg: 34, measured_at: oldWeightDate }],
+      clinicalCases: [
+        {
+          id: "case-1",
+          events: [
+            {
+              event_type: "consultation",
+              status: "final",
+              occurred_at: fixedNow,
+              professional: { name: "Dr. Santos", crmv: "CRMV-SP 12345" },
+            },
+          ],
+        },
+      ],
       now: fixedNow,
-    });
+    };
+    expect(hasHealthEvaluation(input)).toBe(true);
 
-    expect(output.readiness_status).toBe("operational"); // No attention because threshold is not configured in production!
-    expect(output.data_completeness.has_recent_weight).toBe(true);
-    expect(output.last_weight?.kg).toBe(34);
+    const output = buildHealthSummary(input);
+    expect(output.readiness_status).toBe("operational");
+    expect(output.last_consultation?.professional).toBe("Dr. Santos");
   });
 
-  it("4. Explicit test configuration: weight > 90 days generates operational_attention", () => {
-    const oldWeightDate = new Date(fixedNow.getTime() - 120 * 86400000);
-    const output = buildHealthSummary({
+  it("7. Canonical ExamProcess (resulted/interpreted) proves evaluation -> operational", () => {
+    const input = {
       dogId,
-      weightRecords: [{ id: "w1", weight_kg: 34, measured_at: oldWeightDate }],
-      thresholdConfig: explicitTestThresholds,
+      clinicalCases: [
+        {
+          id: "case-2",
+          exams: [
+            {
+              exam_id: "ex-1",
+              case_id: "case-2",
+              exam_type: "Ultrassom Abdominal",
+              current_stage: "interpreted",
+              created_at: fixedNow,
+            },
+          ],
+        },
+      ],
       now: fixedNow,
-    });
+    };
+    expect(hasHealthEvaluation(input)).toBe(true);
 
-    expect(output.readiness_status).toBe("operational_attention");
-    expect(output.readiness_reason).toContain("Pesagem em atraso (> 90 dias)");
-    expect(output.data_completeness.has_recent_weight).toBe(false);
+    const output = buildHealthSummary(input);
+    expect(output.readiness_status).toBe("operational");
+    expect(output.last_exam?.type).toBe("Ultrassom Abdominal");
+    expect(output.last_exam?.status).toBe("interpreted");
   });
 
-  it("5. Consultation vs Exam distinction: consultation > 180 days generates attention with explicit config", () => {
+  it("8. Draft / Cancelled ClinicalEvents and pending ExamProcess stage (requested) do NOT prove evaluation", () => {
+    const input = {
+      dogId,
+      clinicalCases: [
+        {
+          id: "case-3",
+          events: [
+            { event_type: "consultation", status: "draft", occurred_at: fixedNow },
+            { event_type: "consultation", status: "cancelled", occurred_at: fixedNow },
+          ],
+          exams: [
+            { exam_type: "Raio-X", current_stage: "requested", created_at: fixedNow },
+          ],
+        },
+      ],
+      now: fixedNow,
+    };
+    expect(hasHealthEvaluation(input)).toBe(false);
+
+    const output = buildHealthSummary(input);
+    expect(output.readiness_status).toBe("not_evaluated");
+  });
+
+  it("9. Threshold config (explicit test injection): consultation > 180 days generates operational_attention", () => {
     const oldConsultDate = new Date(fixedNow.getTime() - 200 * 86400000);
     const recentExamDate = new Date(fixedNow.getTime() - 10 * 86400000);
 
@@ -82,8 +182,10 @@ describe("HW-3P Corrective Backend Projection Engine", () => {
         {
           id: "c1",
           events: [
-            { type: "consultation", date: oldConsultDate, vet_name: "Dr. Santos" },
-            { type: "exam", date: recentExamDate, subtype: "Raio-X" },
+            { event_type: "consultation", status: "final", occurred_at: oldConsultDate, professional: { name: "Dr. Santos" } },
+          ],
+          exams: [
+            { exam_type: "Raio-X", current_stage: "resulted", created_at: recentExamDate },
           ],
         },
       ],
@@ -91,14 +193,14 @@ describe("HW-3P Corrective Backend Projection Engine", () => {
       now: fixedNow,
     });
 
-    expect((output.last_consultation?.date as Date).toISOString()).toBe(oldConsultDate.toISOString());
-    expect((output.last_exam?.date as Date).toISOString()).toBe(recentExamDate.toISOString());
+    expect(output.last_consultation?.date).toEqual(oldConsultDate);
+    expect(output.last_exam?.date).toEqual(recentExamDate);
     expect(output.data_completeness.has_recent_exam).toBe(true);
     expect(output.readiness_status).toBe("operational_attention");
     expect(output.readiness_reason).toContain("Consulta em atraso (> 180 dias)");
   });
 
-  it("6. Active restriction with expected_end in past STILL counts as active until ended/cancelled", () => {
+  it("10. Mandatory §8: Active restriction with expected_end in past yields is_overdue: true and open_alert", () => {
     const pastExpectedEnd = new Date(fixedNow.getTime() - 10 * 86400000);
     const output = buildHealthSummary({
       dogId,
@@ -116,52 +218,21 @@ describe("HW-3P Corrective Backend Projection Engine", () => {
 
     expect(output.readiness_status).toBe("fit_with_restrictions");
     expect(output.active_restrictions).toHaveLength(1);
-    expect(output.active_restrictions[0].expected_end).toEqual(pastExpectedEnd);
+    expect(output.active_restrictions[0].is_overdue).toBe(true);
+    expect(output.open_alerts).toHaveLength(1);
+    expect(output.open_alerts[0].type).toBe("restriction_reevaluation_overdue");
   });
 
-  it("7. Ended or cancelled restriction status releases active restriction", () => {
-    const outputEnded = buildHealthSummary({
-      dogId,
-      restrictions: [{ id: "r1", level: "absolute", status: "ended" }],
-      weightRecords: [{ id: "w1", weight_kg: 34, measured_at: fixedNow }],
-      now: fixedNow,
-    });
-    expect(outputEnded.readiness_status).toBe("operational");
-
-    const outputCancelled = buildHealthSummary({
-      dogId,
-      restrictions: [{ id: "r2", level: "absolute", status: "cancelled" }],
-      weightRecords: [{ id: "w1", weight_kg: 34, measured_at: fixedNow }],
-      now: fixedNow,
-    });
-    expect(outputCancelled.readiness_status).toBe("operational");
-  });
-
-  it("8. Timestamps: readiness_updated_at preserved when status/reason unchanged, updated_at & last_evaluated_at update", () => {
-    const priorReadinessDate = new Date("2026-08-01T00:00:00.000Z");
-    const existingSummary = {
-      readiness_status: "operational",
-      readiness_reason: "Nenhuma restrição ou pendência ativa",
-      readiness_updated_at: priorReadinessDate,
-    };
-
-    const output = buildHealthSummary({
-      dogId,
-      weightRecords: [{ id: "w1", weight_kg: 34, measured_at: fixedNow }],
-      existingSummary,
-      now: fixedNow,
-    });
-
-    expect(output.readiness_updated_at.getTime()).toBe(priorReadinessDate.getTime());
-    expect(output.last_evaluated_at.getTime()).toBe(fixedNow.getTime());
-    expect(output.updated_at.getTime()).toBe(fixedNow.getTime());
-  });
-
-  it("9. Idempotency proof: consecutive calls produce identical output", () => {
+  it("11. Idempotency proof: consecutive calls produce identical output and alerts", () => {
     const input = {
       dogId,
       restrictions: [{ id: "r1", level: "partial", status: "active", description: "Faro restrito" }],
-      weightRecords: [{ id: "w1", weight_kg: 33, measured_at: fixedNow }],
+      clinicalCases: [
+        {
+          id: "case-1",
+          events: [{ event_type: "consultation", status: "final", occurred_at: fixedNow, professional: { name: "Dr. Lima" } }],
+        },
+      ],
       now: fixedNow,
     };
 

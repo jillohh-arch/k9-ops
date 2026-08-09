@@ -1918,6 +1918,11 @@ service cloud.firestore {
         allow update: if canAccessDogRecord(dogId) && canUpdateAuditedOrSoftDelete();
         allow delete: if false;
       }
+
+      match /health_summary/{summaryId} {
+        allow read: if signedIn() && canAccessDogRecord(dogId) && hasAccessPermission('health', 'read');
+        allow create, update, delete: if false;
+      }
     }
 
     match /occurrences/{occurrenceId} {

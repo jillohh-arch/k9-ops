@@ -537,6 +537,20 @@ export const onClinicalCaseWritten = onDocumentWritten(
   }
 );
 
+export const onClinicalExamWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/clinical_cases/{caseId}/exams/{examId}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "clinical_cases_exams");
+  }
+);
+
+export const onClinicalEventWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/clinical_cases/{caseId}/events/{eventId}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "clinical_cases_events");
+  }
+);
+
 export const onTreatmentProtocolWritten = onDocumentWritten(
   { document: "dogs/{dogId}/treatment_protocols/{id}", region: "southamerica-east1" },
   async (event) => {
@@ -548,20 +562,5 @@ export const onHealthScheduleWritten = onDocumentWritten(
   { document: "dogs/{dogId}/health_schedule/{id}", region: "southamerica-east1" },
   async (event) => {
     await handleHealthSourceChange(event.params.dogId, "health_schedule");
-  }
-);
-
-export const reconcileHealthSummaryCallable = onCall(
-  { region: "southamerica-east1", memory: "256MiB", timeoutSeconds: 30 },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Autenticação necessária.");
-    }
-    const dogId = request.data?.dogId as string;
-    if (!dogId || typeof dogId !== "string") {
-      throw new HttpsError("invalid-argument", "dogId é obrigatório.");
-    }
-    const result = await rebuildHealthSummary(db, dogId);
-    return { success: true, dogId, summary: result };
   }
 );

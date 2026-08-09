@@ -1,18 +1,18 @@
 /**
- * K9 Ops Backend — Health Web v1 HW-3P
+ * K9 Ops Backend — Health Web v1 HW-3P Corrective
  * Pure Health Summary Projection Producer
  *
  * Implements server-side readiness projection logic according to:
- * - HW-3P Specification §4-§15
+ * - HW-3P Corrective Review §2 (Thresholds), §3 (Consultation vs Exam), §4 (Has Evaluation Predicate)
  * - HEALTH_V1_READINESS_POLICY.md
  * - HEALTH_V1_FIRESTORE_SCHEMA.md
  *
  * CRITICAL MANDATES:
  * - PURE FUNCTION: 100% testable without Firestore or mocks.
- * - Strictly outputs canonical snake_case wire document.
- * - Calculates official readiness status using server-side decision matrix.
- * - Enforces schema_version = 1 (numeric).
- * - Distinguishes readiness_updated_at, last_evaluated_at, and updated_at.
+ * - Dynamic ReadinessThresholdConfig parameter (Default production: null / not configured).
+ * - Distinguishes consultation (veterinary) from exam.
+ * - Explicit hasHealthEvaluation predicate for not_evaluated status.
+ * - Strictly outputs canonical snake_case wire document with numeric schema_version = 1.
  */
 
 export type ReadinessStatus =
@@ -40,6 +40,20 @@ export const READINESS_STATUS_LABELS: Record<ReadinessStatus, string> = {
 
 export const CURRENT_CANONICAL_SCHEMA_VERSION = 1;
 
+export interface ReadinessThresholdConfig {
+  weightRecencyDays: number | null;
+  consultationRecencyDays: number | null;
+  vaccinationRequired: boolean;
+  nutritionRequired: boolean;
+}
+
+export const DEFAULT_PRODUCTION_THRESHOLDS: ReadinessThresholdConfig = {
+  weightRecencyDays: null,
+  consultationRecencyDays: null,
+  vaccinationRequired: false,
+  nutritionRequired: false,
+};
+
 export interface SourceDocument {
   id: string;
   [key: string]: unknown;
@@ -55,6 +69,7 @@ export interface BuildHealthSummaryInput {
   treatmentProtocols?: SourceDocument[];
   healthSchedule?: SourceDocument[];
   existingSummary?: Record<string, unknown> | null;
+  thresholdConfig?: ReadinessThresholdConfig;
   now?: Date;
 }
 
@@ -150,6 +165,28 @@ function parseDate(val: unknown): Date | null {
 }
 
 /**
+ * Predicate to determine if a K9 has any clinical health evaluation registered.
+ * Administrative records (e.g. mere schedule items) alone do NOT constitute a clinical evaluation.
+ */
+export function hasHealthEvaluation(input: BuildHealthSummaryInput): boolean {
+  const restrictions = input.restrictions ?? [];
+  const weightRecords = input.weightRecords ?? [];
+  const vaccinationRecords = input.vaccinationRecords ?? [];
+  const clinicalCases = input.clinicalCases ?? [];
+  const nutritionPlans = input.nutritionPlans ?? [];
+
+  if (restrictions.length > 0) return true;
+  if (weightRecords.length > 0) return true;
+  if (vaccinationRecords.length > 0) return true;
+  if (nutritionPlans.length > 0) return true;
+
+  // Check if clinical cases contain events/exams/consultations
+  if (clinicalCases.length > 0) return true;
+
+  return false;
+}
+
+/**
  * Pure function to build the canonical health_summary wire document.
  */
 export function buildHealthSummary(
@@ -157,8 +194,10 @@ export function buildHealthSummary(
 ): HealthSummaryWireOutput {
   const now = input.now ?? new Date();
   const dogId = input.dogId;
+  const thresholds = input.thresholdConfig ?? DEFAULT_PRODUCTION_THRESHOLDS;
 
   // 1. Process active operational restrictions
+  // MANDATE §14: Active restriction with expected_end in past STILL counts as active until status is ended/cancelled!
   const rawRestrictions = input.restrictions ?? [];
   const activeRestrictionsDocs = rawRestrictions.filter((r) => {
     const st = String(r.status ?? "active").toLowerCase();
@@ -189,7 +228,7 @@ export function buildHealthSummary(
     expected_end: parseDate(r.expected_end ?? r.expectedEnd),
   }));
 
-  // 2. Evaluate data completeness (boolean facts)
+  // 2. Extract Evidence Summaries
   const weightRecords = input.weightRecords ?? [];
   const validWeights = weightRecords
     .map((w) => ({ doc: w, date: parseDate(w.measured_at ?? w.measuredAt) }))
@@ -197,12 +236,9 @@ export function buildHealthSummary(
     .sort((a, b) => b.date.getTime() - a.date.getTime());
 
   const lastWeightDoc = validWeights.length > 0 ? validWeights[0] : null;
-  const daysSinceWeight = lastWeightDoc ? (now.getTime() - lastWeightDoc.date.getTime()) / (1000 * 60 * 60 * 24) : Infinity;
-  const has_recent_weight = daysSinceWeight <= 90;
 
   const nutritionPlans = input.nutritionPlans ?? [];
   const activeNutrition = nutritionPlans.find((n) => String(n.status ?? "active").toLowerCase() === "active");
-  const has_active_nutrition = Boolean(activeNutrition);
 
   const vaccinationRecords = input.vaccinationRecords ?? [];
   const validVaccinations = vaccinationRecords
@@ -221,19 +257,44 @@ export function buildHealthSummary(
   });
 
   const validExams: Array<{ doc: SourceDocument; date: Date }> = [];
+  const validConsultations: Array<{ doc: SourceDocument; date: Date; caseId: string | null }> = [];
+
   clinicalCases.forEach((c) => {
     const events = Array.isArray(c.events) ? c.events : [];
     events.forEach((ev: Record<string, unknown>) => {
-      if (String(ev.type).toLowerCase() === "exam") {
+      const type = String(ev.type ?? ev.event_type ?? "").toLowerCase();
+      if (type === "exam") {
         const d = parseDate(ev.date ?? ev.occurred_at);
         if (d) validExams.push({ doc: ev as SourceDocument, date: d });
+      } else if (type === "consultation" || type === "veterinary_consultation") {
+        const d = parseDate(ev.date ?? ev.occurred_at);
+        if (d) validConsultations.push({ doc: ev as SourceDocument, date: d, caseId: String(c.id) });
       }
     });
+
+    // Also check direct exams subcollection if present on case object
+    const exams = Array.isArray(c.exams) ? c.exams : [];
+    exams.forEach((ex: Record<string, unknown>) => {
+      const d = parseDate(ex.date ?? ex.performed_at);
+      if (d) validExams.push({ doc: ex as SourceDocument, date: d });
+    });
   });
+
   validExams.sort((a, b) => b.date.getTime() - a.date.getTime());
+  validConsultations.sort((a, b) => b.date.getTime() - a.date.getTime());
+
   const lastExamDoc = validExams.length > 0 ? validExams[0] : null;
-  const daysSinceExam = lastExamDoc ? (now.getTime() - lastExamDoc.date.getTime()) / (1000 * 60 * 60 * 24) : Infinity;
-  const has_recent_exam = daysSinceExam <= 180;
+  const lastConsultationDoc = validConsultations.length > 0 ? validConsultations[0] : null;
+
+  // 3. Evaluate Data Completeness Fact Booleans
+  let has_recent_weight = Boolean(lastWeightDoc);
+  if (thresholds.weightRecencyDays !== null && lastWeightDoc) {
+    const daysSinceWeight = (now.getTime() - lastWeightDoc.date.getTime()) / (1000 * 60 * 60 * 24);
+    has_recent_weight = daysSinceWeight <= thresholds.weightRecencyDays;
+  }
+
+  const has_recent_exam = Boolean(lastExamDoc);
+  const has_active_nutrition = Boolean(activeNutrition);
 
   const data_completeness = {
     has_recent_weight,
@@ -242,7 +303,8 @@ export function buildHealthSummary(
     has_recent_exam,
   };
 
-  // 3. Server-Side Readiness Matrix Evaluation
+  // 4. Server-Side Readiness Matrix Evaluation
+  const evaluated = hasHealthEvaluation(input);
   let readiness_status: ReadinessStatus = "operational";
   let readiness_reason = "Nenhuma restrição ou pendência ativa";
 
@@ -255,24 +317,37 @@ export function buildHealthSummary(
   } else if (activeAttention.length > 0) {
     readiness_status = "operational_attention";
     readiness_reason = String(activeAttention[0].description ?? activeAttention[0].reason ?? "Atenção operacional ativa");
-  } else if (
-    weightRecords.length === 0 &&
-    vaccinationRecords.length === 0 &&
-    clinicalCases.length === 0 &&
-    nutritionPlans.length === 0
-  ) {
+  } else if (!evaluated) {
     readiness_status = "not_evaluated";
     readiness_reason = "Nenhuma avaliação registrada";
-  } else if (!has_recent_weight || !has_active_nutrition || !has_vaccination_current) {
-    readiness_status = "operational_attention";
+  } else {
+    // Check if explicit configured thresholds generate attention
     const gaps: string[] = [];
-    if (!has_recent_weight) gaps.push("Pesagem em atraso (> 90 dias)");
-    if (!has_active_nutrition) gaps.push("Plano alimentar ausente");
-    if (!has_vaccination_current) gaps.push("Vacinação pendente");
-    readiness_reason = gaps.join("; ");
+    if (thresholds.weightRecencyDays !== null && !has_recent_weight) {
+      gaps.push(`Pesagem em atraso (> ${thresholds.weightRecencyDays} dias)`);
+    }
+    if (thresholds.consultationRecencyDays !== null && lastConsultationDoc) {
+      const daysSinceConsult = (now.getTime() - lastConsultationDoc.date.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceConsult > thresholds.consultationRecencyDays) {
+        gaps.push(`Consulta em atraso (> ${thresholds.consultationRecencyDays} dias)`);
+      }
+    } else if (thresholds.consultationRecencyDays !== null && !lastConsultationDoc) {
+      gaps.push("Sem consulta veterinária registrada");
+    }
+    if (thresholds.nutritionRequired && !has_active_nutrition) {
+      gaps.push("Plano alimentar ausente");
+    }
+    if (thresholds.vaccinationRequired && !has_vaccination_current) {
+      gaps.push("Vacinação pendente");
+    }
+
+    if (gaps.length > 0) {
+      readiness_status = "operational_attention";
+      readiness_reason = gaps.join("; ");
+    }
   }
 
-  // 4. Extract Evidence Summaries
+  // 5. Structure Summaries for Output
   const treatmentProtocols = input.treatmentProtocols ?? [];
   const activeTreatments = treatmentProtocols.filter((t) => String(t.status ?? "active").toLowerCase() === "active");
 
@@ -304,24 +379,11 @@ export function buildHealthSummary(
 
   const last_exam = lastExamDoc
     ? {
-        type: String(lastExamDoc.doc.subtype ?? lastExamDoc.doc.title ?? "Exame"),
+        type: String(lastExamDoc.doc.subtype ?? lastExamDoc.doc.title ?? lastExamDoc.doc.type ?? "Exame"),
         date: lastExamDoc.date,
         status: String(lastExamDoc.doc.status ?? "completed"),
       }
     : null;
-
-  const validConsultations: Array<{ doc: SourceDocument; date: Date; caseId: string | null }> = [];
-  clinicalCases.forEach((c) => {
-    const events = Array.isArray(c.events) ? c.events : [];
-    events.forEach((ev: Record<string, unknown>) => {
-      if (String(ev.type).toLowerCase() === "consultation") {
-        const d = parseDate(ev.date ?? ev.occurred_at);
-        if (d) validConsultations.push({ doc: ev as SourceDocument, date: d, caseId: String(c.id) });
-      }
-    });
-  });
-  validConsultations.sort((a, b) => b.date.getTime() - a.date.getTime());
-  const lastConsultationDoc = validConsultations.length > 0 ? validConsultations[0] : null;
 
   const last_consultation = lastConsultationDoc
     ? {
@@ -339,7 +401,7 @@ export function buildHealthSummary(
       }
     : null;
 
-  // 5. Timestamps Logic
+  // 6. Timestamps Logic
   const existingSummary = input.existingSummary;
   const existingStatus = existingSummary ? String(existingSummary.readiness_status ?? "") : "";
   const existingReason = existingSummary ? String(existingSummary.readiness_reason ?? "") : "";

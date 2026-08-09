@@ -1,12 +1,14 @@
 /**
  * K9 Ops Web — Health Web v1 HW-3A
- * Canonical Health Summary Firestore Reader
+ * Canonical Health Summary Firestore Reader (Corrected)
  *
- * Implements read-only access to dogs/{dogId}/health_summary/current.
+ * Reads raw snake_case document at dogs/{dogId}/health_summary/current
+ * and parses it using strict parseHealthSummaryWireDoc.
  *
- * CRITICAL MANDATE:
+ * CRITICAL MANDATES:
  * - Strictly READ-ONLY (no setDoc, addDoc, updateDoc, deleteDoc).
  * - No dual read from legacy.
+ * - Parses raw Firestore snake_case document through strict wire parser.
  * - Discriminated ReadState return type.
  */
 
@@ -14,10 +16,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { ReadState } from "../../domain/read-states";
 import type { CanonicalHealthSummaryDoc } from "../../domain/readiness-types";
-
-export interface ReadSummaryOptions {
-  timeoutMs?: number;
-}
+import { parseHealthSummaryWireDoc } from "../../domain/wire-parsers";
 
 /**
  * Reads the canonical health summary projection document for a K9.
@@ -46,20 +45,17 @@ export async function readCanonicalHealthSummary(
       };
     }
 
-    const data = snapshot.data();
-    const summaryDoc: CanonicalHealthSummaryDoc = {
-      dogId: data.dogId || dogId,
-      readinessStatus: data.readinessStatus || "not_evaluated",
-      readinessReason: data.readinessReason ?? null,
-      activeRestrictionsCount: typeof data.activeRestrictionsCount === "number" ? data.activeRestrictionsCount : 0,
-      activeTreatmentsCount: typeof data.activeTreatmentsCount === "number" ? data.activeTreatmentsCount : 0,
-      pendingExamsCount: typeof data.pendingExamsCount === "number" ? data.pendingExamsCount : 0,
-      dataCompleteness: typeof data.dataCompleteness === "number" ? data.dataCompleteness : null,
-      lastEvaluatedAt: data.lastEvaluatedAt ?? null,
-      updatedAt: data.updatedAt ?? null,
-      version: data.version ?? null,
-      source: data.source || `dogs/${dogId}/health_summary/current`,
-    };
+    const rawData = snapshot.data();
+    const summaryDoc = parseHealthSummaryWireDoc(rawData, dogId);
+
+    if (!summaryDoc) {
+      return {
+        status: "error",
+        code: "INVALID_WIRE_DOCUMENT",
+        message: `Documento health_summary/current do cão '${dogId}' possui formato inválido.`,
+        retryable: false,
+      };
+    }
 
     return {
       status: "success",

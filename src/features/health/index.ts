@@ -3,6 +3,7 @@ export * from "./domain/read-states";
 export * from "./domain/capabilities";
 export * from "./domain/paths";
 export * from "./domain/readiness-types";
+export * from "./domain/wire-parsers";
 export * from "./domain/freshness-policy";
 export * from "./domain/conflict-model";
 export * from "./domain/readiness-aggregator";

@@ -1,20 +1,21 @@
 /**
  * K9 Ops Web — Health Web v1 HW-3A
- * Pure Presentation Readiness Aggregator
+ * Pure Presentation Readiness Aggregator (Corrected)
  *
  * Implements read-only readiness presentation composition according to:
  * - HW-3A §11 (Read Models Web), §15 (Readiness Aggregation)
  * - HEALTH_WEB_READINESS_POLICY.md §21-§26
+ * - HW-3A Corrective Review
  *
- * CRITICAL MANDATE:
- * This aggregator is strictly for PRESENTATION.
- * It DOES NOT calculate clinical readiness, update Firestore, or assign scores.
- * It strictly preserves canonical status while deriving freshness, technical quality, and structural conflict.
+ * CRITICAL MANDATES:
+ * - Strictly for PRESENTATION.
+ * - DOES NOT calculate clinical readiness, update Firestore, or assign scores.
+ * - Strictly preserves canonical status while deriving freshness, technical quality, and structural conflict.
+ * - Uses readiness_updated_at as authoritative timestamp for readiness freshness.
+ * - Preserves partial !== conflict distinction.
  */
 
-import {
-  detectReadinessConflict,
-} from "./conflict-model";
+import { detectReadinessConflict } from "./conflict-model";
 import {
   evaluateFreshness,
   evaluateProjectionVersion,
@@ -46,15 +47,15 @@ export interface AggregateReadinessParams {
 }
 
 /**
- * Normalizes a raw Firestore restriction document into an OperationalRestrictionReadModel.
+ * Normalizes a canonical restriction document into an OperationalRestrictionReadModel for presentation.
  */
 export function normalizeRestrictionDoc(
   doc: CanonicalRestrictionDoc,
   now: Date = new Date()
 ): OperationalRestrictionReadModel {
-  const issuedAt = parseTimestamp(doc.issuedAt) ?? now;
-  const expectedEnd = parseTimestamp(doc.expectedEnd);
-  const actualEnd = parseTimestamp(doc.actualEnd);
+  const issuedAt = doc.issuedAt ?? now;
+  const expectedEnd = doc.expectedEnd;
+  const actualEnd = doc.actualEnd;
 
   const rawLevel = (doc.level || "attention").toLowerCase();
   const type: "absolute" | "partial" | "attention" =
@@ -67,21 +68,30 @@ export function normalizeRestrictionDoc(
   const isOverdueReevaluation =
     status === "active" && expectedEnd !== null && expectedEnd.getTime() < now.getTime();
 
+  let authorityLabel: string | null = null;
+  if (doc.professional) {
+    authorityLabel = doc.professional.clinic
+      ? `${doc.professional.name} (${doc.professional.clinic})`
+      : doc.professional.name;
+  }
+
   return {
     id: doc.id,
     dogId: doc.dogId,
     type,
     status,
-    reason: doc.reason || "Restrição operacional registrada",
-    description: doc.description ?? null,
-    restrictedActivities: doc.restrictedActivities ?? [],
+    reason: doc.description || "Restrição operacional registrada",
+    description: doc.description,
+    restrictedActivities: doc.activitiesRestricted ?? [],
     issuedAt,
-    issuedBy: doc.issuedBy || "Profissional Responsável",
+    recordedBy: doc.recordedBy,
+    professional: doc.professional,
+    sourceDocument: doc.sourceDocument,
     expectedEnd,
     actualEnd,
-    authority: doc.authority ?? null,
-    sourceDocumentUrl: doc.sourceDocumentUrl ?? null,
-    clinicalCaseId: doc.clinicalCaseId ?? null,
+    authorityLabel,
+    sourceDocumentUrl: doc.sourceDocument?.url ?? null,
+    clinicalCaseId: doc.caseId ?? null,
     isOverdueReevaluation,
   };
 }
@@ -95,10 +105,17 @@ export function aggregateReadinessListItem(
   const now = params.now ?? new Date();
   const { dog, summary, restrictions, freshnessOptions, dataQuality } = params;
 
-  // 1. Parse freshness & version
-  const rawTimestamp = summary?.updatedAt ?? summary?.lastEvaluatedAt ?? null;
-  const freshness = evaluateFreshness(rawTimestamp, { ...freshnessOptions, now });
-  const versionEval = evaluateProjectionVersion(summary?.version, { allowMissing: false });
+  // 1. Parse freshness (AUTHORITATIVE: readiness_updated_at!) & version
+  const freshness = evaluateFreshness(
+    {
+      readinessUpdatedAt: summary?.readinessUpdatedAt,
+      lastEvaluatedAt: summary?.lastEvaluatedAt,
+      updatedAt: summary?.updatedAt,
+    },
+    { ...freshnessOptions, now }
+  );
+
+  const versionEval = evaluateProjectionVersion(summary?.schemaVersion, { allowMissing: false });
 
   // 2. Normalize active restrictions
   const activeRestrictions = restrictions
@@ -112,7 +129,6 @@ export function aggregateReadinessListItem(
     restrictions,
     freshness,
     versionEvaluation: versionEval,
-    isPartialRead,
   });
 
   // 4. Determine domain readiness status & label
@@ -129,6 +145,7 @@ export function aggregateReadinessListItem(
   }
 
   // 5. Determine presentation quality label (technical quality state)
+  // MANDATE: partial !== conflict!
   let qualityLabel: QualityStateLabel = "Atualizada";
 
   if (!summary) {
@@ -143,13 +160,13 @@ export function aggregateReadinessListItem(
     qualityLabel = "Atualizada";
   }
 
-  const updatedAt = freshness.computedAt;
+  const updatedAt = freshness.readinessUpdatedAt ?? freshness.updatedAt;
   const reason = summary?.readinessReason ?? (readinessStatus === "not_evaluated" ? "Nenhuma avaliação registrada" : null);
 
   const projectionMetadata = summary
     ? {
-        version: summary.version ?? null,
-        source: summary.source ?? "dogs/{dogId}/health_summary/current",
+        version: summary.schemaVersion ?? null,
+        source: "dogs/{dogId}/health_summary/current",
       }
     : null;
 
@@ -159,14 +176,14 @@ export function aggregateReadinessListItem(
         ? {
             status: "stale",
             data: summary,
-            computedAt: freshness.computedAt ?? now,
+            computedAt: freshness.readinessUpdatedAt ?? now,
             ageMs: freshness.ageMs ?? 0,
             maxAgeMs: freshness.maxAgeMs,
           }
         : {
             status: "success",
             data: summary,
-            fetchedAt: freshness.computedAt ?? now,
+            fetchedAt: freshness.readinessUpdatedAt ?? now,
           }
       : {
           status: "empty",

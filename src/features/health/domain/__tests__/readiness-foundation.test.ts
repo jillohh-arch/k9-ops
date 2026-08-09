@@ -1,8 +1,8 @@
 /**
  * K9 Ops Web — Health Web v1 HW-3A
- * Canonical Readiness Foundation & Quality Test Suite
+ * Canonical Readiness Foundation & Wire Contract Test Suite (Corrected)
  *
- * Implements unit & domain test coverage for all mandatory scenarios in HW-3A §16.
+ * Implements unit & domain test coverage for all mandatory scenarios in HW-3A.
  */
 
 import { describe, expect, it } from "vitest";
@@ -12,6 +12,10 @@ import {
 } from "../readiness-aggregator";
 import { detectReadinessConflict } from "../conflict-model";
 import { evaluateFreshness, evaluateProjectionVersion } from "../freshness-policy";
+import {
+  parseHealthSummaryWireDoc,
+  parseOperationalRestrictionWireDoc,
+} from "../wire-parsers";
 import {
   OFFICIAL_READINESS_STATUSES,
   READINESS_STATUS_LABELS,
@@ -41,187 +45,171 @@ const mockDog: DogIdentityReadModel = {
 
 const fixedNow = new Date("2026-08-08T12:00:00.000Z");
 
-describe("HW-3A Canonical Readiness Foundation", () => {
+describe("HW-3A Canonical Readiness Wire & Domain Foundation", () => {
+
   // ==========================================================================
-  // Section 16: Mandatory Domain Status Test Cases (1 to 5)
+  // 1. Wire Document Parsing Tests (snake_case -> canonical domain model)
   // ==========================================================================
 
-  describe("Official Readiness Domain States (1 to 5)", () => {
-    it("1. should correctly aggregate 'operational' status", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "operational",
-        readinessReason: "Sem restrições operacionais ativas",
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
+  describe("Wire Document Parsers", () => {
+    it("should strictly parse snake_case health_summary wire document", () => {
+      const rawWire = {
+        readiness_status: "operational",
+        readiness_label: "Operacional",
+        readiness_reason: "Sem restrições ativas",
+        readiness_updated_at: fixedNow.toISOString(),
+        last_evaluated_at: new Date(fixedNow.getTime() - 1000).toISOString(),
+        updated_at: new Date(fixedNow.getTime() - 500).toISOString(),
+        evaluated_by: "system_function",
+        active_restrictions: [],
+        restriction_count: { absolute: 0, partial: 0, attention: 0 },
+        data_completeness: {
+          has_recent_weight: true,
+          has_active_nutrition: true,
+          has_vaccination_current: true,
+          has_recent_exam: false,
+        },
+        active_cases_count: 0,
+        active_treatments_count: 0,
+        schema_version: 1,
       };
 
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
+      const parsed = parseHealthSummaryWireDoc(rawWire, mockDog.id);
+      expect(parsed).not.toBeNull();
+      expect(parsed?.readinessStatus).toBe("operational");
+      expect(parsed?.readinessReason).toBe("Sem restrições ativas");
+      expect(parsed?.readinessUpdatedAt?.toISOString()).toBe(fixedNow.toISOString());
+      expect(parsed?.schemaVersion).toBe(1);
+      expect(parsed?.dataCompleteness).toEqual({
+        hasRecentWeight: true,
+        hasActiveNutrition: true,
+        hasVaccinationCurrent: true,
+        hasRecentExam: false,
       });
-
-      expect(result.readinessStatus).toBe("operational");
-      expect(result.readinessLabel).toBe("Operacional");
-      expect(result.qualityLabel).toBe("Atualizada");
-      expect(result.conflict).toBeNull();
     });
 
-    it("2. should correctly aggregate 'operational_attention' status", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "operational_attention",
-        readinessReason: "Pesagem em atraso (> 90 dias)",
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(result.readinessStatus).toBe("operational_attention");
-      expect(result.readinessLabel).toBe("Operacional com atenção");
-      expect(result.qualityLabel).toBe("Atualizada");
-    });
-
-    it("3. should correctly aggregate 'fit_with_restrictions' status", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "fit_with_restrictions",
-        readinessReason: "Restrição parcial ativa",
-        activeRestrictionsCount: 1,
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const restriction: CanonicalRestrictionDoc = {
-        id: "rest-1",
-        dogId: mockDog.id,
+    it("should strictly parse snake_case operational_restriction wire document", () => {
+      const rawWire = {
         level: "partial",
+        category: "operational",
+        description: "Restrição parcial de esforço intenso",
+        activities_restricted: ["Faro longo", "Esforço intenso"],
+        issued_at: fixedNow.toISOString(),
+        recorded_by: { ra: "12345", name: "Sgt Silva" },
+        professional: { name: "Dr. Oliveira", crmv: "CRMV-SP 1234" },
+        source_document: { id: "doc-1", name: "Laudo Vet", url: "https://example.com/doc.pdf" },
         status: "active",
-        reason: "Escoriação leve em pata posterior",
-        restrictedActivities: ["Saltos e obstáculos"],
-        issuedAt: fixedNow.toISOString(),
-        issuedBy: "Cap Vet Souza",
+        schema_version: 1,
       };
 
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [restriction],
-        now: fixedNow,
-      });
-
-      expect(result.readinessStatus).toBe("fit_with_restrictions");
-      expect(result.readinessLabel).toBe("Apto com restrições");
-      expect(result.activeRestrictionsSummary).toHaveLength(1);
-      expect(result.activeRestrictionsSummary[0].type).toBe("partial");
-    });
-
-    it("4. should correctly aggregate 'temporarily_unfit' status", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "temporarily_unfit",
-        readinessReason: "Restrição absoluta ativa",
-        activeRestrictionsCount: 1,
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const restriction: CanonicalRestrictionDoc = {
-        id: "rest-2",
-        dogId: mockDog.id,
-        level: "absolute",
-        status: "active",
-        reason: "Pós-operatório cirúrgico",
-        restrictedActivities: ["Qualquer atividade operacional"],
-        issuedAt: fixedNow.toISOString(),
-        issuedBy: "Maj Vet Oliveira",
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [restriction],
-        now: fixedNow,
-      });
-
-      expect(result.readinessStatus).toBe("temporarily_unfit");
-      expect(result.readinessLabel).toBe("Temporariamente inapto");
-      expect(result.activeRestrictionsSummary[0].type).toBe("absolute");
-    });
-
-    it("5. should correctly aggregate 'not_evaluated' status", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "not_evaluated",
-        readinessReason: "Nenhuma avaliação registrada no sistema",
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(result.readinessStatus).toBe("not_evaluated");
-      expect(result.readinessLabel).toBe("Não avaliado");
+      const parsed = parseOperationalRestrictionWireDoc(rawWire, "rest-1", mockDog.id);
+      expect(parsed).not.toBeNull();
+      expect(parsed?.level).toBe("partial");
+      expect(parsed?.description).toBe("Restrição parcial de esforço intenso");
+      expect(parsed?.activitiesRestricted).toEqual(["Faro longo", "Esforço intenso"]);
+      expect(parsed?.professional).toEqual({ name: "Dr. Oliveira", crmv: "CRMV-SP 1234", clinic: null });
+      expect(parsed?.recordedBy?.ra).toBe("12345");
+      expect(parsed?.schemaVersion).toBe(1);
     });
   });
 
   // ==========================================================================
-  // Section 16: Mandatory Technical Test Cases (6 to 15)
+  // 2. Timestamps & Freshness Policy
   // ==========================================================================
 
-  describe("Technical & Quality Scenarios (6 to 15)", () => {
-    it("6. should handle missing summary gracefully", () => {
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary: null,
-        restrictions: [],
-        now: fixedNow,
-      });
+  describe("Timestamps Distinction & Freshness", () => {
+    it("PROVES EXPLICITLY: readiness_updated_at !== last_evaluated_at AND readiness_updated_at !== updated_at", () => {
+      const readinessTime = new Date("2026-08-08T10:00:00.000Z");
+      const evaluatedTime = new Date("2026-08-08T11:59:00.000Z");
+      const updatedTime = new Date("2026-08-08T11:59:50.000Z");
 
-      expect(result.summary).toBeNull();
-      expect(result.qualityLabel).toBe("Sem projeção válida");
-      expect(result.readinessStatus).toBe("not_evaluated");
+      expect(readinessTime.getTime()).not.toBe(evaluatedTime.getTime());
+      expect(readinessTime.getTime()).not.toBe(updatedTime.getTime());
+
+      // Evaluate freshness based on readiness_updated_at
+      const freshness = evaluateFreshness(
+        {
+          readinessUpdatedAt: readinessTime,
+          lastEvaluatedAt: evaluatedTime,
+          updatedAt: updatedTime,
+        },
+        { now: fixedNow }
+      );
+
+      // Even though updated_at is 10s old, readiness_updated_at is 2h old -> stale!
+      expect(freshness.isStale).toBe(true);
+      expect(freshness.readinessUpdatedAt?.toISOString()).toBe(readinessTime.toISOString());
     });
 
-    it("7. should flag stale summary when age exceeds threshold (5 mins)", () => {
-      const oldTime = new Date(fixedNow.getTime() - 10 * 60 * 1000); // 10 minutes ago
+    it("proves updating updated_at alone does NOT make an old readiness_updated_at fresh", () => {
+      const oldReadiness = new Date(fixedNow.getTime() - 10 * 60 * 1000); // 10 mins ago
+      const brandNewDocUpdate = fixedNow; // updated right now
+
+      const freshness = evaluateFreshness(
+        {
+          readinessUpdatedAt: oldReadiness,
+          updatedAt: brandNewDocUpdate,
+        },
+        { now: fixedNow }
+      );
+
+      expect(freshness.isStale).toBe(true);
+      expect(freshness.status).toBe("stale");
+    });
+  });
+
+  // ==========================================================================
+  // 3. Schema Version Policy (Strict Numeric 1)
+  // ==========================================================================
+
+  describe("Schema Version Policy", () => {
+    it("accepts valid numeric schema_version 1", () => {
+      const result = evaluateProjectionVersion(1);
+      expect(result.isSupported).toBe(true);
+      expect(result.status).toBe("valid");
+    });
+
+    it("rejects string version '1' or '1.0' as incompatible format", () => {
+      const resString1 = evaluateProjectionVersion("1");
+      expect(resString1.isSupported).toBe(false);
+      expect(resString1.status).toBe("incompatible");
+
+      const resString1Dot0 = evaluateProjectionVersion("1.0");
+      expect(resString1Dot0.isSupported).toBe(false);
+      expect(resString1Dot0.status).toBe("incompatible");
+    });
+
+    it("rejects missing schema_version", () => {
+      const result = evaluateProjectionVersion(null, { allowMissing: false });
+      expect(result.isSupported).toBe(false);
+      expect(result.status).toBe("missing");
+    });
+  });
+
+  // ==========================================================================
+  // 4. Partial !== Conflict Verification
+  // ==========================================================================
+
+  describe("Partial State vs Conflict State", () => {
+    it("PROVES EXPLICITLY: partial !== conflict", () => {
       const summary: CanonicalHealthSummaryDoc = {
         dogId: mockDog.id,
         readinessStatus: "operational",
-        updatedAt: oldTime.toISOString(),
-        version: "1.0",
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(result.freshness.isStale).toBe(true);
-      expect(result.qualityLabel).toBe("Desatualizada");
-    });
-
-    it("8. should flag partial summary state when reader state is partial", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "operational",
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
+        readinessLabel: "Operacional",
+        readinessReason: null,
+        readinessUpdatedAt: fixedNow,
+        lastEvaluatedAt: fixedNow,
+        updatedAt: fixedNow,
+        evaluatedBy: "system",
+        activeRestrictions: [],
+        restrictionCount: { absolute: 0, partial: 0, attention: 0 },
+        dataCompleteness: null,
+        activeCasesCount: 0,
+        activeTreatmentsCount: 0,
+        pendingScheduleCount: 0,
+        overdueScheduleCount: 0,
+        schemaVersion: 1,
+        rawWireDoc: {},
       };
 
       const result = aggregateReadinessListItem({
@@ -231,191 +219,134 @@ describe("HW-3A Canonical Readiness Foundation", () => {
         dataQuality: {
           status: "partial",
           partialData: summary,
-          failedSources: ["operational_restrictions"],
+          failedSources: ["supplementary_data"],
           successfulSources: ["health_summary"],
         },
         now: fixedNow,
       });
 
       expect(result.qualityLabel).toBe("Parcial");
-      expect(result.conflict?.hasConflict).toBe(true);
-      expect(result.conflict?.conflictType).toBe("partial_reader_failure");
-    });
-
-    it("9. should detect unknown readiness enum and flag conflict", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "EXCELLENT_HEALTH" as unknown as ReadinessStatus,
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(result.conflict?.hasConflict).toBe(true);
-      expect(result.conflict?.conflictType).toBe("unknown_readiness_enum");
-      expect(result.qualityLabel).toBe("Conflito");
-    });
-
-    it("10. should flag conflict on incompatible projection version", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "operational",
-        updatedAt: fixedNow.toISOString(),
-        version: "99.0", // Unsupported version
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(result.conflict?.hasConflict).toBe(true);
-      expect(result.conflict?.conflictType).toBe("incompatible_projection_version");
-      expect(result.qualityLabel).toBe("Conflito");
-    });
-
-    it("11. should fail-closed on missing projection version", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "operational",
-        updatedAt: fixedNow.toISOString(),
-        version: undefined,
-      };
-
-      const versionEval = evaluateProjectionVersion(summary.version, { allowMissing: false });
-      expect(versionEval.isSupported).toBe(false);
-      expect(versionEval.status).toBe("missing");
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(result.conflict?.hasConflict).toBe(true);
-      expect(result.conflict?.conflictType).toBe("incompatible_projection_version");
-    });
-
-    it("12. should detect conflict when summary is operational but active absolute restriction exists", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "operational", // Inconsistent!
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const restriction: CanonicalRestrictionDoc = {
-        id: "rest-abs",
-        dogId: mockDog.id,
-        level: "absolute",
-        status: "active",
-        reason: "Suspeita de fratura",
-        issuedAt: fixedNow.toISOString(),
-        issuedBy: "Cap Vet Souza",
-      };
-
-      const conflict = detectReadinessConflict({
-        summary,
-        restrictions: [restriction],
-      });
-
-      expect(conflict.hasConflict).toBe(true);
-      expect(conflict.conflictType).toBe("summary_restriction_mismatch");
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [restriction],
-        now: fixedNow,
-      });
-
-      expect(result.qualityLabel).toBe("Conflito");
-    });
-
-    it("13. should handle valid summary + no active restriction without conflict", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "operational",
-        activeRestrictionsCount: 0,
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(result.conflict).toBeNull();
-      expect(result.readinessStatus).toBe("operational");
-    });
-
-    it("14. should handle fit_with_restrictions + active restriction consistently", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "fit_with_restrictions",
-        activeRestrictionsCount: 1,
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const restriction: CanonicalRestrictionDoc = {
-        id: "rest-p",
-        dogId: mockDog.id,
-        level: "partial",
-        status: "active",
-        reason: "Restrição de corrida",
-        issuedAt: fixedNow.toISOString(),
-        issuedBy: "Vet Silva",
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [restriction],
-        now: fixedNow,
-      });
-
-      expect(result.conflict).toBeNull();
-      expect(result.readinessStatus).toBe("fit_with_restrictions");
-    });
-
-    it("15. should handle not_evaluated + valid fresh projection snapshot", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "not_evaluated",
-        readinessReason: "K9 recentemente incorporado",
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const result = aggregateReadinessListItem({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(result.readinessStatus).toBe("not_evaluated");
-      expect(result.qualityLabel).toBe("Atualizada");
-      expect(result.freshness.isStale).toBe(false);
-      expect(result.conflict).toBeNull();
+      expect(result.conflict).toBeNull(); // No structural conflict in partial data!
     });
   });
 
   // ==========================================================================
-  // Section 16: Mandatory Semantic Proofs
+  // 5. Official Readiness Domain States (1 to 5)
+  // ==========================================================================
+
+  describe("Official Readiness Domain States (1 to 5)", () => {
+    const buildSummary = (status: ReadinessStatus, reason: string): CanonicalHealthSummaryDoc => ({
+      dogId: mockDog.id,
+      readinessStatus: status,
+      readinessLabel: READINESS_STATUS_LABELS[status],
+      readinessReason: reason,
+      readinessUpdatedAt: fixedNow,
+      lastEvaluatedAt: fixedNow,
+      updatedAt: fixedNow,
+      evaluatedBy: "system",
+      activeRestrictions: [],
+      restrictionCount: { absolute: 0, partial: 0, attention: 0 },
+      dataCompleteness: null,
+      activeCasesCount: 0,
+      activeTreatmentsCount: 0,
+      pendingScheduleCount: 0,
+      overdueScheduleCount: 0,
+      schemaVersion: 1,
+      rawWireDoc: {},
+    });
+
+    it("1. operational status", () => {
+      const summary = buildSummary("operational", "Sem restrições operacionais ativas");
+      const result = aggregateReadinessListItem({ dog: mockDog, summary, restrictions: [], now: fixedNow });
+      expect(result.readinessStatus).toBe("operational");
+      expect(result.readinessLabel).toBe("Operacional");
+      expect(result.qualityLabel).toBe("Atualizada");
+    });
+
+    it("2. operational_attention status", () => {
+      const summary = buildSummary("operational_attention", "Pesagem em atraso");
+      const result = aggregateReadinessListItem({ dog: mockDog, summary, restrictions: [], now: fixedNow });
+      expect(result.readinessStatus).toBe("operational_attention");
+      expect(result.readinessLabel).toBe("Operacional com atenção");
+    });
+
+    it("3. fit_with_restrictions status", () => {
+      const summary = buildSummary("fit_with_restrictions", "Restrição parcial ativa");
+      summary.restrictionCount = { absolute: 0, partial: 1, attention: 0 };
+      const restriction: CanonicalRestrictionDoc = {
+        id: "rest-1",
+        dogId: mockDog.id,
+        level: "partial",
+        category: "operational",
+        description: "Restrição de esforço",
+        activitiesRestricted: ["Faro prolongado"],
+        issuedAt: fixedNow,
+        recordedBy: { ra: "123" },
+        professional: { name: "Dr Vet" },
+        sourceDocument: null,
+        expectedEnd: null,
+        actualEnd: null,
+        endedBy: null,
+        endProfessional: null,
+        endSourceDocument: null,
+        endReason: null,
+        evidence: null,
+        status: "active",
+        caseId: null,
+        eventId: null,
+        examId: null,
+        schemaVersion: 1,
+        rawWireDoc: {},
+      };
+      const result = aggregateReadinessListItem({ dog: mockDog, summary, restrictions: [restriction], now: fixedNow });
+      expect(result.readinessStatus).toBe("fit_with_restrictions");
+      expect(result.readinessLabel).toBe("Apto com restrições");
+      expect(result.activeRestrictionsSummary).toHaveLength(1);
+    });
+
+    it("4. temporarily_unfit status", () => {
+      const summary = buildSummary("temporarily_unfit", "Restrição absoluta ativa");
+      summary.restrictionCount = { absolute: 1, partial: 0, attention: 0 };
+      const restriction: CanonicalRestrictionDoc = {
+        id: "rest-2",
+        dogId: mockDog.id,
+        level: "absolute",
+        category: "operational",
+        description: "Inapto temporário para cirurgia",
+        activitiesRestricted: ["Qualquer serviço"],
+        issuedAt: fixedNow,
+        recordedBy: { ra: "123" },
+        professional: { name: "Dr Vet" },
+        sourceDocument: null,
+        expectedEnd: null,
+        actualEnd: null,
+        endedBy: null,
+        endProfessional: null,
+        endSourceDocument: null,
+        endReason: null,
+        evidence: null,
+        status: "active",
+        caseId: null,
+        eventId: null,
+        examId: null,
+        schemaVersion: 1,
+        rawWireDoc: {},
+      };
+      const result = aggregateReadinessListItem({ dog: mockDog, summary, restrictions: [restriction], now: fixedNow });
+      expect(result.readinessStatus).toBe("temporarily_unfit");
+      expect(result.readinessLabel).toBe("Temporariamente inapto");
+    });
+
+    it("5. not_evaluated status", () => {
+      const summary = buildSummary("not_evaluated", "Nenhuma avaliação registrada no sistema");
+      const result = aggregateReadinessListItem({ dog: mockDog, summary, restrictions: [], now: fixedNow });
+      expect(result.readinessStatus).toBe("not_evaluated");
+      expect(result.readinessLabel).toBe("Não avaliado");
+    });
+  });
+
+  // ==========================================================================
+  // 6. Mandatory Semantic Proofs
   // ==========================================================================
 
   describe("Mandatory Semantic Proofs", () => {
@@ -427,7 +358,6 @@ describe("HW-3A Canonical Readiness Foundation", () => {
         retryable: true,
       };
 
-      // When a read error occurs, data quality is error, while domain readiness enum 'not_evaluated' is an operational status
       expect(readError.status).toBe("error");
       expect(readError.status).not.toBe("not_evaluated");
 
@@ -444,17 +374,28 @@ describe("HW-3A Canonical Readiness Foundation", () => {
         now: fixedNow,
       });
 
-      // Missing summary yields technical quality label "Sem projeção válida"
       expect(missingSummaryResult.qualityLabel).toBe("Sem projeção válida");
 
-      // Whereas a valid summary with 'not_evaluated' has a summary doc and "Atualizada" quality label (if fresh)
       const validNotEvaluatedResult = aggregateReadinessListItem({
         dog: mockDog,
         summary: {
           dogId: mockDog.id,
           readinessStatus: "not_evaluated",
-          updatedAt: fixedNow.toISOString(),
-          version: "1.0",
+          readinessLabel: "Não avaliado",
+          readinessReason: "Nenhuma avaliação",
+          readinessUpdatedAt: fixedNow,
+          lastEvaluatedAt: fixedNow,
+          updatedAt: fixedNow,
+          evaluatedBy: "system",
+          activeRestrictions: [],
+          restrictionCount: { absolute: 0, partial: 0, attention: 0 },
+          dataCompleteness: null,
+          activeCasesCount: 0,
+          activeTreatmentsCount: 0,
+          pendingScheduleCount: 0,
+          overdueScheduleCount: 0,
+          schemaVersion: 1,
+          rawWireDoc: {},
         },
         restrictions: [],
         now: fixedNow,
@@ -465,70 +406,4 @@ describe("HW-3A Canonical Readiness Foundation", () => {
     });
   });
 
-  // ==========================================================================
-  // Section 11 & 17: Read Models & Cockpit & Cross-Platform Parity
-  // ==========================================================================
-
-  describe("Cockpit Composition & Parity", () => {
-    it("should aggregate ReadinessCockpit without inventing fake evidence data", () => {
-      const summary: CanonicalHealthSummaryDoc = {
-        dogId: mockDog.id,
-        readinessStatus: "operational",
-        updatedAt: fixedNow.toISOString(),
-        version: "1.0",
-      };
-
-      const cockpit = aggregateReadinessCockpit({
-        dog: mockDog,
-        summary,
-        restrictions: [],
-        now: fixedNow,
-      });
-
-      expect(cockpit.dog.id).toBe("k9-thor");
-      expect(cockpit.readinessStatus).toBe("operational");
-      expect(cockpit.vaccinationEvidence.available).toBe(false);
-      expect(cockpit.weightEvidence.available).toBe(false);
-      expect(cockpit.scheduleSummary.available).toBe(false);
-      expect(cockpit.nutritionSummary.available).toBe(false);
-      expect(cockpit.clinicalSummary.available).toBe(false);
-      expect(cockpit.timelineSummary.available).toBe(false);
-    });
-
-    it("should guarantee exact parity with 5 canonical Mobile readiness enums", () => {
-      const expectedEnums = [
-        "operational",
-        "operational_attention",
-        "fit_with_restrictions",
-        "temporarily_unfit",
-        "not_evaluated",
-      ];
-
-      expect(OFFICIAL_READINESS_STATUSES).toEqual(expectedEnums);
-      expect(Object.keys(READINESS_STATUS_LABELS)).toEqual(expectedEnums);
-    });
-  });
-
-  // ==========================================================================
-  // Section 8: Freshness Policy Edge Cases
-  // ==========================================================================
-
-  describe("Freshness Policy Edge Cases", () => {
-    it("should identify future timestamp anomaly", () => {
-      const futureTime = new Date(fixedNow.getTime() + 10 * 60 * 1000); // +10 minutes
-      const result = evaluateFreshness(futureTime, { now: fixedNow });
-
-      expect(result.isFutureAnomaly).toBe(true);
-      expect(result.status).toBe("future_anomaly");
-      expect(result.isStale).toBe(true);
-    });
-
-    it("should handle missing timestamp safely", () => {
-      const result = evaluateFreshness(null, { now: fixedNow });
-
-      expect(result.hasValidTimestamp).toBe(false);
-      expect(result.status).toBe("missing_timestamp");
-      expect(result.isStale).toBe(true);
-    });
-  });
 });

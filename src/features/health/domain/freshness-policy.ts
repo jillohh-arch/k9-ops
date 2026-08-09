@@ -3,14 +3,14 @@
  * Pure Freshness & Projection Version Policy Helpers
  *
  * Implements pure evaluation logic according to:
- * - HW-3A §8 (Freshness Policy), §9 (Projection Version)
- * - HEALTH_WEB_READINESS_POLICY.md §39, §44
+ * - HW-3A Corrective Review §2 (Timestamps), §3 (Schema Version)
+ * - HEALTH_V1_READINESS_POLICY.md
  */
 
 import {
-  CURRENT_PROJECTION_VERSION,
+  CURRENT_CANONICAL_SCHEMA_VERSION,
   DEFAULT_MAX_FRESHNESS_AGE_MS,
-  SUPPORTED_PROJECTION_VERSIONS,
+  SUPPORTED_CANONICAL_SCHEMA_VERSIONS,
   type FreshnessEvaluationResult,
   type VersionEvaluationResult,
 } from "./readiness-types";
@@ -61,25 +61,56 @@ export interface FreshnessOptions {
   futureToleranceMs?: number;
 }
 
+export interface ProjectionTimestamps {
+  readinessUpdatedAt?: unknown;
+  lastEvaluatedAt?: unknown;
+  updatedAt?: unknown;
+}
+
 /**
- * Evaluates the freshness of a projection timestamp.
+ * Evaluates the freshness of a readiness projection.
  *
- * PURE HELPER: Classifies projection freshness without computing clinical readiness.
+ * CRITICAL RULE:
+ * `readiness_updated_at` is the ONLY authoritative timestamp for readiness freshness!
+ * `last_evaluated_at` is Function evaluation execution context.
+ * `updated_at` is summary document overall update context.
+ * NO fallback collapsing between timestamps!
  */
 export function evaluateFreshness(
-  rawTimestamp: unknown,
+  timestamps: ProjectionTimestamps | unknown,
   options: FreshnessOptions = {}
 ): FreshnessEvaluationResult {
   const now = options.now ?? new Date();
   const maxAgeMs = options.maxAgeMs ?? DEFAULT_MAX_FRESHNESS_AGE_MS;
   const futureToleranceMs = options.futureToleranceMs ?? 60 * 1000; // 1 minute clock skew tolerance
 
-  const computedAt = parseTimestamp(rawTimestamp);
+  let rawReadinessUpdatedAt: unknown = null;
+  let rawLastEvaluatedAt: unknown = null;
+  let rawUpdatedAt: unknown = null;
 
-  if (!computedAt) {
+  if (typeof timestamps === "object" && timestamps !== null) {
+    const obj = timestamps as Record<string, unknown>;
+    if ("readinessUpdatedAt" in obj || "lastEvaluatedAt" in obj || "updatedAt" in obj) {
+      rawReadinessUpdatedAt = obj.readinessUpdatedAt;
+      rawLastEvaluatedAt = obj.lastEvaluatedAt;
+      rawUpdatedAt = obj.updatedAt;
+    } else {
+      rawReadinessUpdatedAt = timestamps;
+    }
+  } else {
+    rawReadinessUpdatedAt = timestamps;
+  }
+
+  const readinessUpdatedAt = parseTimestamp(rawReadinessUpdatedAt);
+  const lastEvaluatedAt = parseTimestamp(rawLastEvaluatedAt);
+  const updatedAt = parseTimestamp(rawUpdatedAt);
+
+  if (!readinessUpdatedAt) {
     return {
       evaluatedAt: now,
-      computedAt: null,
+      readinessUpdatedAt: null,
+      lastEvaluatedAt,
+      updatedAt,
       ageMs: null,
       maxAgeMs,
       isStale: true,
@@ -89,13 +120,15 @@ export function evaluateFreshness(
     };
   }
 
-  const ageMs = now.getTime() - computedAt.getTime();
+  const ageMs = now.getTime() - readinessUpdatedAt.getTime();
 
   // Check for future timestamp anomaly (beyond clock skew tolerance)
   if (ageMs < -futureToleranceMs) {
     return {
       evaluatedAt: now,
-      computedAt,
+      readinessUpdatedAt,
+      lastEvaluatedAt,
+      updatedAt,
       ageMs,
       maxAgeMs,
       isStale: true,
@@ -109,7 +142,9 @@ export function evaluateFreshness(
 
   return {
     evaluatedAt: now,
-    computedAt,
+    readinessUpdatedAt,
+    lastEvaluatedAt,
+    updatedAt,
     ageMs: Math.max(0, ageMs),
     maxAgeMs,
     isStale,
@@ -120,61 +155,76 @@ export function evaluateFreshness(
 }
 
 export interface VersionOptions {
-  supportedVersions?: readonly (string | number)[];
+  supportedVersions?: readonly number[];
   allowMissing?: boolean;
 }
 
 /**
  * Evaluates whether a projection schema version is supported by the Web application.
  *
- * PURE HELPER: Fails closed on unknown/incompatible versions.
+ * CRITICAL RULE:
+ * Canonical schema_version MUST be a numeric value matching supported version number (e.g. 1).
+ * Strings (like "1", "1.0") or unsupported numbers are fail-closed rejected.
  */
 export function evaluateProjectionVersion(
   rawVersion: unknown,
   options: VersionOptions = {}
 ): VersionEvaluationResult {
-  const supported = options.supportedVersions ?? SUPPORTED_PROJECTION_VERSIONS;
+  const supported = options.supportedVersions ?? SUPPORTED_CANONICAL_SCHEMA_VERSIONS;
   const allowMissing = options.allowMissing ?? false;
 
   if (rawVersion === null || rawVersion === undefined || rawVersion === "") {
     if (allowMissing) {
       return {
         rawVersion: null,
+        parsedVersion: null,
         isSupported: true,
         isMissing: true,
         status: "missing",
-        details: "Projection version is missing but allowed by policy",
+        details: "Projection schema_version is missing but allowed by policy",
       };
     }
     return {
       rawVersion: null,
+      parsedVersion: null,
       isSupported: false,
       isMissing: true,
       status: "missing",
-      details: "Projection version is missing; fail-closed requirement",
+      details: "Projection schema_version is missing; fail-closed requirement",
     };
   }
 
-  const normalized = typeof rawVersion === "string" ? rawVersion.trim() : rawVersion;
-  const isSupported = supported.some(
-    (v) => String(v).trim() === String(normalized).trim()
-  );
+  // Schema version MUST be strict numeric type
+  if (typeof rawVersion !== "number" || isNaN(rawVersion)) {
+    return {
+      rawVersion,
+      parsedVersion: null,
+      isSupported: false,
+      isMissing: false,
+      status: "incompatible",
+      details: `Incompatible schema_version format '${String(rawVersion)}'. Must be numeric (expected ${CURRENT_CANONICAL_SCHEMA_VERSION})`,
+    };
+  }
+
+  const isSupported = supported.includes(rawVersion);
 
   if (isSupported) {
     return {
-      rawVersion: normalized as string | number,
+      rawVersion,
+      parsedVersion: rawVersion,
       isSupported: true,
       isMissing: false,
       status: "valid",
-      details: `Version ${normalized} is supported`,
+      details: `Numeric schema_version ${rawVersion} is supported`,
     };
   }
 
   return {
-    rawVersion: normalized as string | number,
+    rawVersion,
+    parsedVersion: rawVersion,
     isSupported: false,
     isMissing: false,
     status: "incompatible",
-    details: `Incompatible projection version '${normalized}'. Expected one of: ${supported.join(", ")} (Current expected: ${CURRENT_PROJECTION_VERSION})`,
+    details: `Incompatible numeric schema_version ${rawVersion}. Supported: ${supported.join(", ")}`,
   };
 }

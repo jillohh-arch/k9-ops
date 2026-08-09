@@ -1,11 +1,13 @@
 /**
  * K9 Ops Web — Health Web v1 HW-3A
- * Operational Restrictions Firestore Reader
+ * Operational Restrictions Firestore Reader (Corrected)
  *
- * Implements read-only access to dogs/{dogId}/operational_restrictions.
+ * Reads raw snake_case documents at dogs/{dogId}/operational_restrictions
+ * and parses them using strict parseOperationalRestrictionWireDoc.
  *
- * CRITICAL MANDATE:
+ * CRITICAL MANDATES:
  * - Strictly READ-ONLY (no setDoc, addDoc, updateDoc, deleteDoc).
+ * - Parses raw Firestore snake_case documents through strict wire parser.
  * - Discriminated ReadState return type.
  */
 
@@ -13,6 +15,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { ReadState } from "../../domain/read-states";
 import type { CanonicalRestrictionDoc } from "../../domain/readiness-types";
+import { parseOperationalRestrictionWireDoc } from "../../domain/wire-parsers";
 
 /**
  * Reads active operational restrictions for a K9.
@@ -42,26 +45,21 @@ export async function readCanonicalOperationalRestrictions(
       };
     }
 
-    const restrictions: CanonicalRestrictionDoc[] = snapshot.docs.map((docSnap) => {
-      const data = docSnap.data();
+    const restrictions: CanonicalRestrictionDoc[] = [];
+
+    for (const docSnap of snapshot.docs) {
+      const parsed = parseOperationalRestrictionWireDoc(docSnap.data(), docSnap.id, dogId);
+      if (parsed) {
+        restrictions.push(parsed);
+      }
+    }
+
+    if (restrictions.length === 0) {
       return {
-        id: docSnap.id,
-        dogId: data.dogId || dogId,
-        level: data.level || data.type || "attention",
-        status: data.status || "active",
-        category: data.category || "operational",
-        reason: data.reason || "Restrição registrada",
-        description: data.description ?? null,
-        restrictedActivities: Array.isArray(data.restrictedActivities) ? data.restrictedActivities : [],
-        issuedAt: data.issuedAt ?? new Date(),
-        issuedBy: data.issuedBy || "Profissional Responsável",
-        expectedEnd: data.expectedEnd ?? null,
-        actualEnd: data.actualEnd ?? null,
-        authority: data.authority ?? null,
-        sourceDocumentUrl: data.sourceDocumentUrl ?? null,
-        clinicalCaseId: data.clinicalCaseId ?? null,
+        status: "empty",
+        query: `dogs/${dogId}/operational_restrictions?status=active`,
       };
-    });
+    }
 
     return {
       status: "success",

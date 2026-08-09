@@ -1,11 +1,12 @@
 /**
  * K9 Ops Web — Health Web v1 HW-3A
- * Canonical Readiness Read Models & Foundation Types
+ * Canonical Readiness Wire Contracts & Domain Types (Corrected)
  *
  * Implements canonical readiness foundation contracts according to:
- * - HW-3A Specification §5-§15
- * - HEALTH_WEB_READINESS_POLICY.md §5-§10
- * - HEALTH_WEB_TARGET_ARCHITECTURE.md §14, §25
+ * - HEALTH_V1_FIRESTORE_SCHEMA.md
+ * - HEALTH_V1_READINESS_POLICY.md
+ * - HEALTH_WEB_DATA_SOURCE_MATRIX.md
+ * - HW-3A Corrective Review
  */
 
 import type { ReadState } from "./read-states";
@@ -60,51 +61,153 @@ export type QualityStateLabel =
 // Projection Version & Policy Constants
 // ============================================================================
 
-export const CURRENT_PROJECTION_VERSION = "1.0";
-export const SUPPORTED_PROJECTION_VERSIONS: readonly (string | number)[] = [
-  "1.0",
-  1,
-  "1",
-] as const;
+/** Canonical schema version is strict numeric 1 */
+export const CURRENT_CANONICAL_SCHEMA_VERSION = 1;
+export const SUPPORTED_CANONICAL_SCHEMA_VERSIONS: readonly number[] = [1] as const;
 
 export const DEFAULT_MAX_FRESHNESS_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
 // ============================================================================
-// Canonical Server-Owned Projections / Documents
-// Path: dogs/{dogId}/health_summary/current
+// Firestore Wire Document Contracts (snake_case)
+// ============================================================================
+
+export interface DataCompletenessWire {
+  has_recent_weight?: boolean;
+  has_active_nutrition?: boolean;
+  has_vaccination_current?: boolean;
+  has_recent_exam?: boolean;
+}
+
+export interface RestrictionCountWire {
+  absolute?: number;
+  partial?: number;
+  attention?: number;
+}
+
+export interface RecordedByWire {
+  ra: string;
+  name?: string | null;
+  role?: string | null;
+}
+
+export interface ProfessionalIdentityWire {
+  name: string;
+  crmv?: string | null;
+  clinic?: string | null;
+}
+
+export interface HealthDocumentRefWire {
+  id?: string | null;
+  name?: string | null;
+  url?: string | null;
+}
+
+/** Wire document at dogs/{dogId}/health_summary/current */
+export interface HealthSummaryWireDoc {
+  readiness_status?: string;
+  readiness_label?: string | null;
+  readiness_reason?: string | null;
+  readiness_updated_at?: unknown;
+  active_restrictions?: Array<Record<string, unknown>> | null;
+  restriction_count?: RestrictionCountWire | null;
+  last_evaluated_at?: unknown;
+  evaluated_by?: string | null;
+  data_completeness?: DataCompletenessWire | null;
+  active_cases_count?: number | null;
+  active_treatments_count?: number | null;
+  last_weight?: Record<string, unknown> | null;
+  last_vaccination?: Record<string, unknown> | null;
+  last_exam?: Record<string, unknown> | null;
+  last_consultation?: Record<string, unknown> | null;
+  nutrition_plan?: Record<string, unknown> | null;
+  pending_schedule_count?: number | null;
+  overdue_schedule_count?: number | null;
+  open_alerts?: Array<Record<string, unknown>> | null;
+  updated_at?: unknown;
+  schema_version?: unknown;
+}
+
+/** Wire document at dogs/{dogId}/operational_restrictions/{restrictionId} */
+export interface OperationalRestrictionWireDoc {
+  level?: string;
+  category?: string;
+  description?: string;
+  activities_restricted?: string[];
+  issued_at?: unknown;
+  recorded_by?: RecordedByWire | string | null;
+  professional?: ProfessionalIdentityWire | string | null;
+  source_document?: HealthDocumentRefWire | string | null;
+  expected_end?: unknown;
+  actual_end?: unknown;
+  ended_by?: RecordedByWire | string | null;
+  end_professional?: ProfessionalIdentityWire | string | null;
+  end_source_document?: HealthDocumentRefWire | string | null;
+  end_reason?: string | null;
+  evidence?: Record<string, unknown> | null;
+  status?: string;
+  case_id?: string | null;
+  event_id?: string | null;
+  exam_id?: string | null;
+  schema_version?: unknown;
+}
+
+// ============================================================================
+// Canonical Parsed Domain Models (Structured Post-Parsing)
 // ============================================================================
 
 export interface CanonicalHealthSummaryDoc {
   dogId: string;
   readinessStatus: ReadinessStatus | string;
-  readinessReason?: string | null;
-  activeRestrictionsCount?: number;
-  activeTreatmentsCount?: number;
-  pendingExamsCount?: number;
-  dataCompleteness?: number | null;
-  lastEvaluatedAt?: string | Date | number | { toMillis?: () => number; seconds?: number } | null;
-  updatedAt?: string | Date | number | { toMillis?: () => number; seconds?: number } | null;
-  version?: string | number | null;
-  source?: string;
+  readinessLabel: string | null;
+  readinessReason: string | null;
+  readinessUpdatedAt: Date | null;
+  lastEvaluatedAt: Date | null;
+  updatedAt: Date | null;
+  evaluatedBy: string | null;
+  activeRestrictions: Array<Record<string, unknown>>;
+  restrictionCount: {
+    absolute: number;
+    partial: number;
+    attention: number;
+  };
+  dataCompleteness: {
+    hasRecentWeight: boolean;
+    hasActiveNutrition: boolean;
+    hasVaccinationCurrent: boolean;
+    hasRecentExam: boolean;
+  } | null;
+  activeCasesCount: number;
+  activeTreatmentsCount: number;
+  pendingScheduleCount: number;
+  overdueScheduleCount: number;
+  schemaVersion: number | null;
+  rawWireDoc: HealthSummaryWireDoc;
 }
 
-// Path: dogs/{dogId}/operational_restrictions/{restrictionId}
 export interface CanonicalRestrictionDoc {
   id: string;
   dogId: string;
   level: "absolute" | "partial" | "attention" | string;
+  category: string;
+  description: string;
+  activitiesRestricted: string[];
+  issuedAt: Date;
+  recordedBy: RecordedByWire | null;
+  professional: ProfessionalIdentityWire | null;
+  sourceDocument: HealthDocumentRefWire | null;
+  expectedEnd: Date | null;
+  actualEnd: Date | null;
+  endedBy: RecordedByWire | null;
+  endProfessional: ProfessionalIdentityWire | null;
+  endSourceDocument: HealthDocumentRefWire | null;
+  endReason: string | null;
+  evidence: Record<string, unknown> | null;
   status: "active" | "ended" | "cancelled" | string;
-  category?: string;
-  reason: string;
-  description?: string | null;
-  restrictedActivities?: string[];
-  issuedAt: string | Date | number | { toMillis?: () => number; seconds?: number };
-  issuedBy: string;
-  expectedEnd?: string | Date | number | { toMillis?: () => number; seconds?: number } | null;
-  actualEnd?: string | Date | number | { toMillis?: () => number; seconds?: number } | null;
-  authority?: string | null;
-  sourceDocumentUrl?: string | null;
-  clinicalCaseId?: string | null;
+  caseId: string | null;
+  eventId: string | null;
+  examId: string | null;
+  schemaVersion: number | null;
+  rawWireDoc: OperationalRestrictionWireDoc;
 }
 
 // ============================================================================
@@ -131,7 +234,7 @@ export interface DogIdentityReadModel {
 }
 
 // ============================================================================
-// Restriction Read Model
+// Restriction Presentation Read Model
 // ============================================================================
 
 export interface OperationalRestrictionReadModel {
@@ -140,13 +243,15 @@ export interface OperationalRestrictionReadModel {
   type: "absolute" | "partial" | "attention";
   status: "active" | "ended" | "cancelled";
   reason: string;
-  description: string | null;
+  description: string;
   restrictedActivities: string[];
   issuedAt: Date;
-  issuedBy: string;
+  recordedBy: RecordedByWire | null;
+  professional: ProfessionalIdentityWire | null;
+  sourceDocument: HealthDocumentRefWire | null;
   expectedEnd: Date | null;
   actualEnd: Date | null;
-  authority: string | null;
+  authorityLabel: string | null;
   sourceDocumentUrl: string | null;
   clinicalCaseId: string | null;
   isOverdueReevaluation: boolean;
@@ -158,7 +263,9 @@ export interface OperationalRestrictionReadModel {
 
 export interface FreshnessEvaluationResult {
   evaluatedAt: Date;
-  computedAt: Date | null;
+  readinessUpdatedAt: Date | null;
+  lastEvaluatedAt: Date | null;
+  updatedAt: Date | null;
   ageMs: number | null;
   maxAgeMs: number;
   isStale: boolean;
@@ -168,7 +275,8 @@ export interface FreshnessEvaluationResult {
 }
 
 export interface VersionEvaluationResult {
-  rawVersion: string | number | null | undefined;
+  rawVersion: unknown;
+  parsedVersion: number | null;
   isSupported: boolean;
   isMissing: boolean;
   status: "valid" | "missing" | "incompatible";
@@ -181,7 +289,6 @@ export type ReadinessConflictType =
   | "missing_summary"
   | "unknown_readiness_enum"
   | "incompatible_projection_version"
-  | "partial_reader_failure"
   | "restriction_reference_inconsistency"
   | "future_timestamp_anomaly";
 
@@ -209,7 +316,7 @@ export interface ReadinessListItem {
   qualityLabel: QualityStateLabel;
   conflict: ReadinessConflictResult | null;
   projectionMetadata: {
-    version: string | number | null;
+    version: number | null;
     source: string;
   } | null;
   cockpitAvailable: boolean;
@@ -239,7 +346,7 @@ export interface ReadinessCockpit {
   qualityLabel: QualityStateLabel;
   conflict: ReadinessConflictResult | null;
   projectionMetadata: {
-    version: string | number | null;
+    version: number | null;
     source: string;
   } | null;
 }

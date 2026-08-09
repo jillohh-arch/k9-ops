@@ -4,6 +4,7 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions/v2";
 
 initializeApp();
@@ -486,3 +487,81 @@ export const shiftReminders = onSchedule(
     });
   }
 );
+
+// ─── Health Summary Projection Producer & Triggers ─────────────────────────────
+
+import { rebuildHealthSummary } from "./health/reconcile-health-summary";
+
+async function handleHealthSourceChange(dogId: string, eventName: string): Promise<void> {
+  if (!dogId) return;
+  try {
+    await rebuildHealthSummary(db, dogId);
+    logger.info(`Rebuilt health_summary/current for dog '${dogId}' triggered by ${eventName}`);
+  } catch (err) {
+    logger.error(`Failed to rebuild health_summary/current for dog '${dogId}' on ${eventName}`, err);
+  }
+}
+
+export const onOperationalRestrictionWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/operational_restrictions/{id}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "operational_restrictions");
+  }
+);
+
+export const onWeightRecordWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/weight_records/{id}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "weight_records");
+  }
+);
+
+export const onVaccinationRecordWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/vaccination_records/{id}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "vaccination_records");
+  }
+);
+
+export const onNutritionPlanWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/nutrition_plans/{id}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "nutrition_plans");
+  }
+);
+
+export const onClinicalCaseWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/clinical_cases/{id}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "clinical_cases");
+  }
+);
+
+export const onTreatmentProtocolWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/treatment_protocols/{id}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "treatment_protocols");
+  }
+);
+
+export const onHealthScheduleWritten = onDocumentWritten(
+  { document: "dogs/{dogId}/health_schedule/{id}", region: "southamerica-east1" },
+  async (event) => {
+    await handleHealthSourceChange(event.params.dogId, "health_schedule");
+  }
+);
+
+export const reconcileHealthSummaryCallable = onCall(
+  { region: "southamerica-east1", memory: "256MiB", timeoutSeconds: 30 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Autenticação necessária.");
+    }
+    const dogId = request.data?.dogId as string;
+    if (!dogId || typeof dogId !== "string") {
+      throw new HttpsError("invalid-argument", "dogId é obrigatório.");
+    }
+    const result = await rebuildHealthSummary(db, dogId);
+    return { success: true, dogId, summary: result };
+  }
+);

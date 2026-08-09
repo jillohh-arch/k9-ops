@@ -129,6 +129,48 @@ export function parseHealthSummaryWireDoc(
 
   const schemaVersion = typeof wire.schema_version === "number" ? wire.schema_version : null;
 
+  const lastWeight = wire.last_weight && typeof wire.last_weight === "object" && typeof wire.last_weight.kg === "number"
+    ? {
+        kg: wire.last_weight.kg as number,
+        measuredAt: parseTimestamp(wire.last_weight.measured_at ?? wire.last_weight.measuredAt) ?? new Date(),
+        bcs: typeof wire.last_weight.bcs === "number" ? (wire.last_weight.bcs as number) : null,
+      }
+    : null;
+
+  const lastVaccination = wire.last_vaccination && typeof wire.last_vaccination === "object" && typeof wire.last_vaccination.type === "string"
+    ? {
+        type: wire.last_vaccination.type as string,
+        date: parseTimestamp(wire.last_vaccination.date) ?? new Date(),
+        nextDue: parseTimestamp(wire.last_vaccination.next_due ?? wire.last_vaccination.nextDue),
+      }
+    : null;
+
+  const lastExam = wire.last_exam && typeof wire.last_exam === "object" && typeof wire.last_exam.type === "string"
+    ? {
+        type: wire.last_exam.type as string,
+        date: parseTimestamp(wire.last_exam.date) ?? new Date(),
+        status: typeof wire.last_exam.status === "string" ? (wire.last_exam.status as string) : "completed",
+      }
+    : null;
+
+  const lastConsultation = wire.last_consultation && typeof wire.last_consultation === "object" && parseTimestamp(wire.last_consultation.date)
+    ? {
+        date: parseTimestamp(wire.last_consultation.date)!,
+        professional: typeof wire.last_consultation.professional === "string" ? (wire.last_consultation.professional as string) : null,
+        caseId: typeof wire.last_consultation.case_id === "string" ? (wire.last_consultation.case_id as string) : null,
+      }
+    : null;
+
+  const nutritionPlan = wire.nutrition_plan && typeof wire.nutrition_plan === "object"
+    ? {
+        active: Boolean(wire.nutrition_plan.active),
+        foodType: typeof wire.nutrition_plan.food_type === "string" ? (wire.nutrition_plan.food_type as string) : null,
+        amountGrams: typeof wire.nutrition_plan.amount_grams === "number" ? (wire.nutrition_plan.amount_grams as number) : null,
+      }
+    : null;
+
+  const openAlerts = Array.isArray(wire.open_alerts) ? wire.open_alerts : [];
+
   return {
     dogId,
     readinessStatus,
@@ -143,6 +185,12 @@ export function parseHealthSummaryWireDoc(
     dataCompleteness,
     activeCasesCount: typeof wire.active_cases_count === "number" ? wire.active_cases_count : 0,
     activeTreatmentsCount: typeof wire.active_treatments_count === "number" ? wire.active_treatments_count : 0,
+    lastWeight,
+    lastVaccination,
+    lastExam,
+    lastConsultation,
+    nutritionPlan,
+    openAlerts,
     pendingScheduleCount: typeof wire.pending_schedule_count === "number" ? wire.pending_schedule_count : 0,
     overdueScheduleCount: typeof wire.overdue_schedule_count === "number" ? wire.overdue_schedule_count : 0,
     schemaVersion,

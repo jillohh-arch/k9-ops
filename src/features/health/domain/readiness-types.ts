@@ -178,6 +178,12 @@ export interface CanonicalHealthSummaryDoc {
   } | null;
   activeCasesCount: number;
   activeTreatmentsCount: number;
+  lastWeight?: { kg: number; measuredAt: Date; bcs?: number | null } | null;
+  lastVaccination?: { type: string; date: Date; nextDue?: Date | null } | null;
+  lastExam?: { type: string; date: Date; status: string } | null;
+  lastConsultation?: { date: Date; professional: string | null; caseId: string | null } | null;
+  nutritionPlan?: { active: boolean; foodType: string | null; amountGrams: number | null } | null;
+  openAlerts?: Array<Record<string, unknown>>;
   pendingScheduleCount: number;
   overdueScheduleCount: number;
   schemaVersion: number | null;

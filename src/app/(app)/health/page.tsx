@@ -491,7 +491,8 @@ function AttentionCard({ dog }: { dog: HealthDogSummary }) {
 function DataGapRow({ dog }: { dog: HealthDogSummary }) {
   const gaps = [
     dog.weight === "missing_range" ? "faixa ideal" : null,
-    dog.weight === "missing" ? "peso canonico" : null,
+    lacksWeightRecord(dog) ? "peso canonico" : null,
+    dog.weightCurrentState === "inconclusive" ? "pesagem inconsistente" : null,
     dog.vaccine === "missing" ? "vacina" : null,
     dog.exam === "missing" ? "exame" : null,
   ].filter((item): item is string => Boolean(item));
@@ -515,7 +516,10 @@ function DataGapRow({ dog }: { dog: HealthDogSummary }) {
               faixa {formatRange(dog.idealRange)}
             </Badge>
             <Badge tone={dog.weight === "missing" ? "yellow" : "slate"}>
-              peso {formatWeight(dog.latestWeightKg)}
+              peso{" "}
+              {dog.weightCurrentState === "inconclusive"
+                ? "não conclusivo"
+                : formatWeight(dog.latestWeightKg)}
             </Badge>
           </div>
         </div>
@@ -560,6 +564,16 @@ function vaccineStatus(dog: HealthDogSummary) {
   return { label: "Sem registro", tone: "slate" as const };
 }
 
+/**
+ * Verdadeiro apenas quando não há nenhuma pesagem conhecida.
+ *
+ * Peso não conclusivo também chega como `missing`, mas ali existem registros:
+ * afirmar ausência de cadastro seria falso.
+ */
+function lacksWeightRecord(dog: HealthDogSummary) {
+  return dog.weight === "missing" && dog.weightCurrentState === "none";
+}
+
 function weightStatus(dog: HealthDogSummary) {
   if (dog.weight === "in_range") {
     return { label: "Na faixa", tone: "green" as const };
@@ -569,6 +583,9 @@ function weightStatus(dog: HealthDogSummary) {
   }
   if (dog.weight === "missing_range") {
     return { label: "Sem faixa ideal", tone: "yellow" as const };
+  }
+  if (dog.weightCurrentState === "inconclusive") {
+    return { label: "Não conclusivo", tone: "yellow" as const };
   }
   return { label: "Sem pesagem", tone: "slate" as const };
 }
@@ -762,7 +779,10 @@ export default function HealthPage() {
   const missingRange = data.dogs.filter(
     (dog) => dog.weight === "missing_range",
   ).length;
-  const missingWeight = data.dogs.filter((dog) => dog.weight === "missing").length;
+  const missingWeight = data.dogs.filter(lacksWeightRecord).length;
+  const inconclusiveWeight = data.dogs.filter(
+    (dog) => dog.weightCurrentState === "inconclusive",
+  ).length;
   const missingVaccine = data.dogs.filter(
     (dog) => dog.vaccine === "missing",
   ).length;
@@ -773,6 +793,10 @@ export default function HealthPage() {
       dog.vaccine === "missing" ||
       dog.exam === "missing",
   );
+  const weightRecordGapFooter =
+    inconclusiveWeight > 0
+      ? `${formatNumber(missingWeight)} sem peso | ${formatNumber(inconclusiveWeight)} não conclusivo(s)`
+      : `${formatNumber(missingWeight)} sem peso`;
   const medicationEvents = data.recentEvents.filter((event) =>
     event.type.toLowerCase().includes("med"),
   ).length;
@@ -917,7 +941,7 @@ export default function HealthPage() {
         />
         <MetricCard
           detail="Fora do intervalo ideal"
-          footer={`${formatNumber(missingRange)} sem faixa ideal | ${formatNumber(missingWeight)} sem peso`}
+          footer={`${formatNumber(missingRange)} sem faixa ideal | ${weightRecordGapFooter}`}
           icon={Scale}
           label="Peso em atenção"
           tone="blue"
@@ -959,7 +983,9 @@ export default function HealthPage() {
                 {formatNumber(missingWeight)}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                sem registro em weight_records
+                {inconclusiveWeight > 0
+                  ? `sem registro em weight_records | ${formatNumber(inconclusiveWeight)} não conclusivo(s)`
+                  : "sem registro em weight_records"}
               </p>
             </div>
             <div className="rounded-2xl border border-cyan-200/10 bg-white/[0.035] p-4">

@@ -11,6 +11,12 @@ import {
 
 import type { DashboardPeriodDays } from "@/features/dashboard/providers/dashboard-period-provider";
 import { useEntities } from "@/features/effective/providers/entities-provider";
+import {
+  analyzeWeightDocuments,
+  type WeightCollectionAnalysis,
+  type WeightCurrentSelection,
+  type WeightDocumentInput,
+} from "@/features/health/data/weight/weight-collection-policy";
 import { db } from "@/lib/firebase/client";
 
 export type HealthTone =
@@ -23,6 +29,13 @@ export type HealthTone =
   | "violet";
 
 type RawRecord = Record<string, unknown> & {
+  /**
+   * Documento Firestore bruto, preservado sem as chaves de metadata injetadas
+   * (`_id`/`_dogId`/`_path`). Existe para que caminhos canônicos — hoje
+   * Pesagem — entreguem `doc.data()` intacto ao parser em vez do registro
+   * achatado. Somente leitura: nunca é mutado.
+   */
+  _data?: unknown;
   _dogId?: string;
   _id: string;
   _path?: string;
@@ -58,6 +71,15 @@ export type HealthDogSummary = {
   status: string;
   vaccine: "current" | "due_soon" | "missing" | "overdue";
   weight: "in_range" | "missing" | "missing_range" | "out_of_range";
+  /**
+   * Estado canônico do peso atual, vindo da política coletiva.
+   *
+   * `current` — há peso factual (`latestWeightKg`/`latestWeightAt` preenchidos).
+   * `none` — não há registro válido conhecido.
+   * `inconclusive` — a coleção tem bloqueio de integridade; o peso é
+   * desconhecido e deliberadamente não é substituído por valor anterior.
+   */
+  weightCurrentState: WeightCurrentSelection["kind"];
 };
 
 export type HealthEventSummary = {
@@ -133,8 +155,10 @@ function subscribeQuery(
         records: snapshot.docs.map((item) => {
           const path = item.ref.path;
           const metadata = metadataFromPath(path);
+          const data = item.data();
           return {
-            ...item.data(),
+            ...data,
+            _data: data,
             _dogId: metadata.dogId,
             _id: item.id,
             _path: path,
@@ -189,8 +213,10 @@ function subscribeManyCollections(
           snapshot.docs.map((item) => {
             const path = item.ref.path;
             const metadata = metadataFromPath(path);
+            const data = item.data();
             return {
-              ...item.data(),
+              ...data,
+              _data: data,
               _dogId: metadata.dogId,
               _id: item.id,
               _path: path,
@@ -400,20 +426,54 @@ function eventLabel(record: RawRecord) {
   return title ?? labels[type] ?? type.replaceAll("_", " ");
 }
 
-function weightRecordDate(record: RawRecord) {
-  return dateValue(
-    record.measured_at ??
-      record.measuredAt ??
-      record.date ??
-      record.created_at ??
-      record.createdAt,
-  );
-}
+/**
+ * Projeção de peso do R1 derivada da análise canônica.
+ *
+ * `analysis` fica disponível para consumidores que precisem da série válida;
+ * `latestWeightKg`/`latestWeightAt` existem apenas quando há peso factual.
+ */
+export type DogWeightReadModel = {
+  readonly analysis: WeightCollectionAnalysis;
+  readonly latestWeightAt: Date | null;
+  readonly latestWeightKg: number | null;
+  readonly weightCurrentState: WeightCurrentSelection["kind"];
+};
 
-function weightRecordValue(record: RawRecord) {
-  return numberValue(
-    record.weight_kg ?? record.weightKg ?? record.weight ?? record.peso,
-  );
+/**
+ * Handoff cru da coleção `weight_records` de um cão para a política canônica.
+ *
+ * A coleção é entregue completa e na ordem recebida do snapshot: sem
+ * pré-filtro de soft-delete, status, `measured_at` ou schema; sem alias local;
+ * sem ordenação, deduplicação ou seleção de mais recente. Toda classificação e
+ * toda escolha de peso atual pertencem a `analyzeWeightDocuments`.
+ *
+ * `_data` preserva o `doc.data()` original; o fallback para o registro achatado
+ * mantém a função utilizável em cenários sem esse metadata.
+ *
+ * Somente `current` produz peso: `none` e `inconclusive` mantêm valor e data
+ * nulos, sem rollback para registro válido anterior, para invalidado, para
+ * `dogs.weight` ou para projeção denormalizada.
+ */
+export function resolveDogWeightReadModel(
+  dogId: string,
+  records: readonly RawRecord[],
+): DogWeightReadModel {
+  const documents: WeightDocumentInput[] = records.map((record) => ({
+    data: record._data ?? record,
+    dogId,
+    entityId: record._id,
+    sourceCollection: "weight_records",
+  }));
+  const analysis = analyzeWeightDocuments({ documents });
+  const current = analysis.current;
+  return {
+    analysis,
+    latestWeightAt:
+      current.kind === "current" ? current.assessment.measuredAt : null,
+    latestWeightKg:
+      current.kind === "current" ? current.assessment.weightKg : null,
+    weightCurrentState: current.kind,
+  };
 }
 
 function documentDate(record: RawRecord) {
@@ -540,7 +600,11 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
       ...healthEventsState.records,
       ...rootHealthLogsState.records,
     ].filter((record) => !isDeleted(record));
-    const weights = weightRecordsState.records.filter((record) => !isDeleted(record));
+    // Pesagem não é pré-filtrada: `isDeleted` sairia daqui escondendo
+    // documentos malformados/unsupported da política, e traduzir `deleted` para
+    // `invalidated` criaria uma segunda semântica de invalidação. O contrato
+    // canônico é `status: invalidated`, decidido pela política.
+    const weights = weightRecordsState.records;
     const documentsRaw = [
       ...documentsState.records,
       ...rootDocumentsState.records,
@@ -555,8 +619,11 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
       eventsByDog.set(dogId, [...(eventsByDog.get(dogId) ?? []), event]);
     }
 
+    // O dono da pesagem é o segmento `dogs/{dogId}` do path, não um alias
+    // embutido: usar `dog_id` do próprio documento como contexto anularia a
+    // checagem de divergência de identidade feita pelo parser.
     for (const record of weights) {
-      const dogId = dogIdentity(record);
+      const dogId = record._dogId;
       if (!dogId) continue;
       weightsByDog.set(dogId, [...(weightsByDog.get(dogId) ?? []), record]);
     }
@@ -570,9 +637,10 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
     const dogs = activeDogs.map((dog): HealthDogSummary => {
       const dogId = dog._id;
       const dogEvents = eventsByDog.get(dogId) ?? [];
-      const dogWeights = (weightsByDog.get(dogId) ?? [])
-        .filter((record) => weightRecordDate(record) != null)
-        .sort((a, b) => sortDateDesc(weightRecordDate(a), weightRecordDate(b)));
+      const weightRead = resolveDogWeightReadModel(
+        dogId,
+        weightsByDog.get(dogId) ?? [],
+      );
       const dogDocuments = documentsByDog.get(dogId) ?? [];
       const vaccines = dogEvents
         .filter((event) => healthEventType(event) === "vaccination")
@@ -606,12 +674,10 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
               ? "due_soon"
               : "current";
 
-      const latestWeight = dogWeights[0];
-      const latestWeightKg = latestWeight ? weightRecordValue(latestWeight) : null;
-      const latestWeightAt = latestWeight ? weightRecordDate(latestWeight) : null;
+      const { latestWeightAt, latestWeightKg, weightCurrentState } = weightRead;
       const idealRange = dogIdealWeightRange(dog);
       const weight: HealthDogSummary["weight"] =
-        latestWeight == null || latestWeightKg == null || latestWeightKg <= 0
+        latestWeightKg == null
           ? "missing"
           : idealRange == null
             ? "missing_range"
@@ -664,6 +730,14 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
           label: "Peso fora da faixa",
           severity: "warning",
         });
+      } else if (weight === "missing" && weightCurrentState === "inconclusive") {
+        // Ausência de peso por bloqueio de integridade não é ausência de
+        // registro: a pendência é revisar a coleção, não pesar o K9.
+        issues.push({
+          detail: "registro de pesagem inconsistente; revisar weight_records",
+          label: "Peso não conclusivo",
+          severity: "warning",
+        });
       } else if (weight === "missing") {
         issues.push({
           detail: "sem pesagem em weight_records",
@@ -703,6 +777,7 @@ export function useHealthData(periodDays: DashboardPeriodDays): HealthData {
         latestWeightAt,
         latestWeightKg,
         photoUrl: dogPhoto(dog),
+        weightCurrentState,
         ready: vaccine === "current" && weight === "in_range",
         status: text(dog.status, dog.situação) ?? "Ativo",
         vaccine,

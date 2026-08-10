@@ -17,26 +17,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
-import { readCanonicalHealthSummary } from "../../data/readers/summary-reader";
-import { readCanonicalOperationalRestrictions } from "../../data/readers/restrictions-reader";
-import {
-  aggregateReadinessListItem,
-  normalizeRestrictionDoc,
-} from "../../domain/readiness-aggregator";
+import { loadReadinessScope } from "./load-readiness-scope";
 import {
   OFFICIAL_READINESS_STATUSES,
   READINESS_STATUS_LABELS,
   READINESS_STATUS_PRIORITY,
-  type CanonicalHealthSummaryDoc,
-  type CanonicalRestrictionDoc,
-  type DogIdentityReadModel,
   type OperationalRestrictionReadModel,
   type ReadinessListItem,
   type ReadinessStatus,
 } from "../../domain/readiness-types";
-import type { ReadState } from "../../domain/read-states";
 
 export interface StatusCounts {
   operational: number;
@@ -121,83 +110,15 @@ export function useHealthOverview(): HealthOverviewState {
 
     async function loadOverview() {
       try {
-        const dogsRef = collection(db, "dogs");
-        const dogsSnap = await getDocs(dogsRef);
+        // Single shared canonical composition path (see load-readiness-scope.ts).
+        const scope = await loadReadinessScope();
 
         if (!isSubscribed) return;
 
-        if (dogsSnap.empty) {
-          setItems([]);
-          setActiveRestrictions([]);
-          setLoading(false);
-          return;
-        }
-
-        const rawDogs = dogsSnap.docs.map((docSnap) => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            name: String(data.name ?? data.nome ?? `K9-${docSnap.id}`),
-            registrationNumber: typeof data.registrationNumber === "string" ? data.registrationNumber : typeof data.rg === "string" ? data.rg : null,
-            photoUrl: typeof data.photoUrl === "string" ? data.photoUrl : typeof data.profileImageUrl === "string" ? data.profileImageUrl : null,
-            breed: typeof data.breed === "string" ? data.breed : typeof data.raca === "string" ? data.raca : null,
-            sex: typeof data.sex === "string" ? data.sex : typeof data.sexo === "string" ? data.sexo : null,
-            dateOfBirth: null,
-            conductor: data.conductorRa
-              ? {
-                  ra: String(data.conductorRa),
-                  name: typeof data.conductorName === "string" ? data.conductorName : null,
-                }
-              : null,
-            specialties: [],
-          } as DogIdentityReadModel;
-        });
-
-        let encounteredPartial = false;
-        let restrictionsFullyRead = true;
-        const allItems: ReadinessListItem[] = [];
-        const allActiveRestrictions: OperationalRestrictionReadModel[] = [];
-
-        await Promise.all(
-          rawDogs.map(async (dog) => {
-            const summaryState = await readCanonicalHealthSummary(dog.id);
-            let summary: CanonicalHealthSummaryDoc | null = null;
-            const dataQuality: ReadState = summaryState;
-
-            if (summaryState.status === "success") {
-              summary = summaryState.data;
-            } else if (summaryState.status === "error" || summaryState.status === "partial") {
-              encounteredPartial = true;
-            }
-
-            let restrictions: CanonicalRestrictionDoc[] = [];
-            const restrictionsState = await readCanonicalOperationalRestrictions(dog.id);
-            if (restrictionsState.status === "success") {
-              restrictions = restrictionsState.data;
-              const normalized = restrictions.map((r) => normalizeRestrictionDoc(r));
-              allActiveRestrictions.push(...normalized);
-            } else if (restrictionsState.status === "error") {
-              encounteredPartial = true;
-              restrictionsFullyRead = false;
-            }
-
-            const listItem = aggregateReadinessListItem({
-              dog,
-              summary,
-              restrictions,
-              dataQuality,
-            });
-
-            allItems.push(listItem);
-          })
-        );
-
-        if (!isSubscribed) return;
-
-        setItems(allItems);
-        setActiveRestrictions(allActiveRestrictions);
-        setIsPartial(encounteredPartial);
-        setRestrictionsCoverageComplete(restrictionsFullyRead);
+        setItems(scope.items);
+        setActiveRestrictions(scope.activeRestrictions);
+        setIsPartial(scope.isPartial);
+        setRestrictionsCoverageComplete(scope.restrictionsCoverageComplete);
         setLoading(false);
       } catch (err: unknown) {
         if (!isSubscribed) return;

@@ -49,7 +49,12 @@ export interface ReadinessScope {
  * Maps an institutional dog document into the identity read model.
  * Tolerates the legacy pt-BR field names present in the canonical collection.
  */
-function toDogIdentity(id: string, data: Record<string, unknown>): DogIdentityReadModel {
+/**
+ * Exported so the single-dog cockpit loader composes identity through exactly
+ * the same institutional mapping as the workforce list — the Health projection
+ * never becomes the owner of dog identity. Behaviour unchanged.
+ */
+export function toDogIdentity(id: string, data: Record<string, unknown>): DogIdentityReadModel {
   return {
     id,
     name: String(data.name ?? data.nome ?? `K9-${id}`),

@@ -219,11 +219,45 @@ export function aggregateReadinessCockpit(
 
   const allRestrictions = params.restrictions.map((r) => normalizeRestrictionDoc(r, now));
 
-  const pendingIntegration: EvidenceAvailability = {
+  const summary = listItem.summary;
+
+  /**
+   * Secondary evidence is classified by WHERE THE FACT ACTUALLY CAME FROM.
+   *
+   * `health_summary/current` is an integrated, server-owned projection that
+   * already carries projected digests of weight, vaccination, nutrition, cases
+   * and schedule. When such a field is present it is real canonical data, so it
+   * is surfaced: marking it "pending integration" would be a false unavailable,
+   * the mirror of the false zero this module refuses to render.
+   *
+   * This does NOT move domain authority. The authorities remain:
+   *   weight       -> WeightAssessment / weight_records
+   *   vaccination  -> VaccinationRecord
+   *   nutrition    -> NutritionPlan
+   *   cases        -> ClinicalCase
+   *   schedule     -> HealthScheduleItem
+   *   restrictions -> operational_restrictions (read canonically, never from summary)
+   *
+   * `reason` records provenance so the cockpit can state that a value came from
+   * the readiness projection rather than from a detailed aggregate reader, and
+   * so drill-down stays disabled until that reader/route exists.
+   */
+  const pendingIntegration = <T = unknown>(domain: string): EvidenceAvailability<T> => ({
     available: false,
-    reason: "Source pending integration in HW-3",
+    reason: `${domain}: leitura detalhada ainda não integrada nesta versão.`,
     data: null,
-  };
+  });
+
+  const PROJECTED_REASON = "Resumo projetado da prontidão canônica.";
+
+  /** Present projected digest -> available; absent/null -> unavailable, never zero. */
+  const projected = <T>(
+    value: T | null | undefined,
+    domain: string
+  ): EvidenceAvailability<T> =>
+    value == null
+      ? pendingIntegration(domain)
+      : { available: true, reason: PROJECTED_REASON, data: value };
 
   return {
     dog: listItem.dog,
@@ -232,12 +266,33 @@ export function aggregateReadinessCockpit(
     readinessLabel: listItem.readinessLabel,
     reason: listItem.reason,
     restrictions: allRestrictions,
-    vaccinationEvidence: pendingIntegration,
-    weightEvidence: pendingIntegration,
-    scheduleSummary: pendingIntegration,
-    nutritionSummary: pendingIntegration,
-    clinicalSummary: pendingIntegration,
-    timelineSummary: pendingIntegration,
+    vaccinationEvidence: projected(summary?.lastVaccination ?? null, "Vacinação"),
+    weightEvidence: projected(summary?.lastWeight ?? null, "Peso"),
+    scheduleSummary: summary
+      ? {
+          available: true,
+          reason: PROJECTED_REASON,
+          data: {
+            pending: summary.pendingScheduleCount,
+            overdue: summary.overdueScheduleCount,
+          },
+        }
+      : pendingIntegration("Agenda"),
+    nutritionSummary: projected(summary?.nutritionPlan ?? null, "Nutrição"),
+    clinicalSummary: summary
+      ? {
+          available: true,
+          reason: PROJECTED_REASON,
+          data: {
+            activeCases: summary.activeCasesCount,
+            activeTreatments: summary.activeTreatmentsCount,
+            lastExam: summary.lastExam ?? null,
+            lastConsultation: summary.lastConsultation ?? null,
+          },
+        }
+      : pendingIntegration("Casos clínicos"),
+    // health_timeline has no reader yet: genuinely not integrated.
+    timelineSummary: pendingIntegration("Histórico"),
     freshness: listItem.freshness,
     dataQuality: listItem.dataQuality,
     qualityLabel: listItem.qualityLabel,

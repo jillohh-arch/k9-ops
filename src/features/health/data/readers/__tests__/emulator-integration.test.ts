@@ -397,8 +397,76 @@ describe("HW-3A Readers & Wire Contract Integration", () => {
       expect(cockpit.restrictions[0].recordedBy).toEqual({ ra: "888", name: "Sgt Silva", role: "Instrutor" });
       expect(cockpit.restrictions[0].professional).toEqual({ name: "Dr. Mendes", crmv: "CRMV-RJ 9999", clinic: "Clínica Militar" });
       expect(cockpit.restrictions[0].authorityLabel).toBe("Dr. Mendes (Clínica Militar)");
+      /*
+       * Unavailable here because THIS fixture's summary carries no last_weight /
+       * last_vaccination digest — not because the domain is permanently
+       * unintegrated. Evidence is now classified by whether the projected fact is
+       * actually present, so a summary that does carry the digest reports
+       * available: true (see the projected-evidence cases below). Canonical
+       * authority is unchanged: WeightAssessment / VaccinationRecord.
+       */
       expect(cockpit.vaccinationEvidence.available).toBe(false);
       expect(cockpit.weightEvidence.available).toBe(false);
+      // health_timeline still has no reader: genuinely not integrated.
+      expect(cockpit.timelineSummary.available).toBe(false);
+    });
+
+    it("should surface projected evidence digests when the canonical summary carries them", () => {
+      const rawWireSummary: HealthSummaryWireDoc = {
+        readiness_status: "operational",
+        readiness_updated_at: fixedNow.toISOString(),
+        last_weight: { kg: 29.8, measured_at: fixedNow.toISOString(), bcs: 5 },
+        last_vaccination: { type: "V10", date: fixedNow.toISOString() },
+        nutrition_plan: { active: true, food_type: "Ração Premium", amount_grams: 600 },
+        active_cases_count: 2,
+        active_treatments_count: 1,
+        pending_schedule_count: 3,
+        overdue_schedule_count: 0,
+        schema_version: 1,
+      } as HealthSummaryWireDoc;
+
+      const parsedSummary = parseHealthSummaryWireDoc(
+        rawWireSummary as Record<string, unknown>,
+        mockDog.id,
+      )!;
+      const cockpit = aggregateReadinessCockpit({
+        dog: mockDog,
+        summary: parsedSummary,
+        restrictions: [],
+        now: fixedNow,
+      });
+
+      // Projected digests are real canonical data: available, with provenance.
+      expect(cockpit.weightEvidence.available).toBe(true);
+      expect(cockpit.weightEvidence.reason).toBe("Resumo projetado da prontidão canônica.");
+      expect(cockpit.vaccinationEvidence.available).toBe(true);
+      expect(cockpit.nutritionSummary.available).toBe(true);
+      expect(cockpit.scheduleSummary.available).toBe(true);
+      expect(cockpit.clinicalSummary.available).toBe(true);
+
+      // Timeline has no reader regardless of summary contents.
+      expect(cockpit.timelineSummary.available).toBe(false);
+    });
+
+    it("should keep evidence unavailable — never zero — when there is no valid summary", () => {
+      const cockpit = aggregateReadinessCockpit({
+        dog: mockDog,
+        summary: null,
+        restrictions: [],
+        now: fixedNow,
+      });
+
+      for (const evidence of [
+        cockpit.weightEvidence,
+        cockpit.vaccinationEvidence,
+        cockpit.nutritionSummary,
+        cockpit.scheduleSummary,
+        cockpit.clinicalSummary,
+        cockpit.timelineSummary,
+      ]) {
+        expect(evidence.available).toBe(false);
+        expect(evidence.data).toBeNull();
+      }
     });
   });
 });

@@ -324,11 +324,21 @@ export async function saveK9({
     ? await uploadProfilePhoto(resolvedDogId, photoFile)
     : values.profileImageUrl;
 
+  // WEIGHT-01E-C2C-B: `weight` NÃO é enviado no save cadastral.
+  //
+  // O spread de `values` reenviava o peso mesmo sem input no formulário, e o
+  // Backend criava um `weight_records` a partir dele. O campo é descartado
+  // explicitamente aqui — esconder o input não bastaria.
+  //
+  // Pesagem clínica nasce apenas pelos comandos do módulo Saúde.
+  const profileValues = { ...values };
+  delete (profileValues as { weight?: string }).weight;
+
   const result = await callAdminUpsertK9({
     dogId: resolvedDogId,
     mode,
     profile: {
-      ...values,
+      ...profileValues,
       profileImageUrl: photoUrl || null,
       specialties: canônicalizeModalities(values.specialties),
     },

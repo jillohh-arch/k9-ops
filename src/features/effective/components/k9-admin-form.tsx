@@ -78,10 +78,10 @@ function validate(values: K9FormValues) {
     errors.operationalStatus = "Informe a situação cadastral.";
   }
 
-  const weight = parseNumber(values.weight);
+  // WEIGHT-01E-C2C-B: peso atual não é requisito cadastral. Criar um K9 sem
+  // nenhuma pesagem é válido; a evidência clínica nasce no módulo Saúde.
   const min = parseNumber(values.idealWeightMin);
   const max = parseNumber(values.idealWeightMax);
-  if (weight == null || weight <= 0) errors.weight = "Informe o peso atual.";
   if (min == null || min <= 0) {
     errors.idealWeightMin = "Informe o peso ideal mínimo.";
   }
@@ -241,10 +241,10 @@ export function K9AdminForm({
         label: "Dados básicos",
       },
       {
-        done: Boolean(
-          values.weight && values.idealWeightMin && values.idealWeightMax,
-        ),
-        label: "Peso e faixa ideal",
+        // WEIGHT-01E-C2C-B: sem `values.weight` — a etapa cadastral cobre
+        // apenas a faixa ideal; peso atual não é dado de cadastro.
+        done: Boolean(values.idealWeightMin && values.idealWeightMax),
+        label: "Faixa de peso ideal",
       },
       {
         done: values.specialties.length > 0,
@@ -576,19 +576,12 @@ export function K9AdminForm({
             index={2}
             title="Dados físicos e vínculo"
           >
+            {/* WEIGHT-01E-C2C-B: o input "Peso atual (kg)" foi removido.
+                Cadastro de K9 não é pesagem clínica: o campo obrigatório fazia
+                um save cadastral criar registro em `weight_records` com
+                `measured_at` do save, fabricando evidência sem medição.
+                Pesagens são registradas pelo módulo Saúde. */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Field error={errors.weight} label="Peso atual (kg)" required>
-                <input
-                  className={inputClass}
-                  inputMode="decimal"
-                  min="0.1"
-                  onChange={(event) => setField("weight", event.target.value)}
-                  placeholder="Ex.: 28,5"
-                  step="0.1"
-                  type="number"
-                  value={values.weight}
-                />
-              </Field>
               <Field
                 error={errors.idealWeightMin}
                 label="Peso ideal mínimo (kg)"
@@ -852,7 +845,7 @@ export function K9AdminForm({
               </p>
               <p className="flex gap-3">
                 <Scale className="h-4 w-4 shrink-0 text-cyan-300" />
-                Alterar o peso gera um novo registro canonico em weight_records.
+                Pesagens são registradas no módulo Saúde.
               </p>
               <p className="flex gap-3">
                 <UserRound className="h-4 w-4 shrink-0 text-cyan-300" />

@@ -91,6 +91,12 @@ export default function HealthReadinessPage() {
       description="Estado operacional de todos os K9s"
       activeNavKey="readiness"
       technicalState={technicalState}
+      /*
+       * HealthReadinessHeader below is the page's full identity region (HW-M02
+       * composes a single header), so the shell's own title row is suppressed to
+       * avoid two stacked readiness titles. Same treatment as /health.
+       */
+      hideModuleHeading
     >
       <div className="flex flex-col gap-6" data-testid="health-readiness-container">
         {status === "loading" && <HealthReadinessSkeleton />}

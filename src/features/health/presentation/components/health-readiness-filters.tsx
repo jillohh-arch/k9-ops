@@ -49,10 +49,22 @@ const RESTRICTION_LABELS: Record<ReadinessRestrictionsFilter, string> = {
   without: "Sem restrições ativas",
 };
 
+/*
+ * Native <select> kept deliberately: it carries keyboard and screen-reader
+ * behaviour a custom dropdown would have to re-implement, and no existing K9 Ops
+ * component provides an equivalent contract. Only the surface is restyled.
+ * `bg-[#0b1628]` (opaque) rather than an alpha navy, because the popup list
+ * inherits this background in most browsers and must stay legible.
+ */
 const selectClass = cn(
-  "h-9 rounded-lg border border-border/70 bg-background px-2.5 text-xs font-medium text-foreground",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  "h-9 rounded-lg border border-cyan-200/12 bg-[#0b1628] px-2.5 text-xs font-semibold text-foreground",
+  "transition-colors hover:border-cyan-200/25",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 );
+
+/** Uppercase operational micro-label for each control. */
+const filterLabelClass =
+  "text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground";
 
 export function HealthReadinessFilters({
   filters,
@@ -62,48 +74,82 @@ export function HealthReadinessFilters({
   resultCount,
 }: HealthReadinessFiltersProps) {
   return (
-    <div className="flex flex-col gap-3" data-testid="health-readiness-filters">
+    <div className="flex flex-col gap-3.5" data-testid="health-readiness-filters">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300/90">
+            Filtros operacionais
+          </p>
+          <h2 className="mt-1 text-base font-semibold tracking-tight text-foreground">
             Efetivo monitorado
           </h2>
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Lista consolidada dos K9s e das condições que influenciam sua prontidão operacional.
           </p>
         </div>
-        <span className="text-xs font-medium text-muted-foreground" aria-live="polite">
+        <span
+          className="rounded-lg border border-border bg-muted/30 px-2 py-1 text-[11px] font-bold tabular-nums text-muted-foreground"
+          aria-live="polite"
+        >
           {resultCount} {resultCount === 1 ? "resultado" : "resultados"}
         </span>
       </div>
 
-      <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center">
-        <div className="relative min-w-0 flex-1 lg:max-w-xs">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
+      {/*
+        Operational filtering surface: one layered navy bar holding search plus
+        every control, so the toolbar reads as a single instrument instead of
+        loose browser form fields. Active state is marked by a cyan edge.
+      */}
+      <div
+        className={cn(
+          "flex flex-col gap-2.5 rounded-2xl border bg-[#0b1628]/82 p-3 lg:flex-row lg:flex-wrap lg:items-end",
+          filtersActive ? "border-cyan-300/25" : "border-cyan-200/12",
+        )}
+      >
+        <div className="min-w-0 flex-1 lg:max-w-xs">
+          {/*
+            The full descriptive text stays the control's accessible name; the
+            short uppercase word is decorative only, so screen readers still get
+            "Buscar por K9, matrícula ou condutor".
+          */}
           <label className="sr-only" htmlFor="readiness-search">
             Buscar por K9, matrícula ou condutor
           </label>
-          <input
-            id="readiness-search"
-            type="search"
-            value={filters.search}
-            onChange={(event) => onChange({ search: event.target.value })}
-            placeholder="Buscar por K9, matrícula ou condutor..."
-            className={cn(
-              "h-9 w-full rounded-lg border border-border/70 bg-background pl-8 pr-2.5 text-xs text-foreground",
-              "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            )}
-          />
+          <span className={cn(filterLabelClass, "block")} aria-hidden="true">
+            Buscar
+          </span>
+          <div className="relative mt-1">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-cyan-300/70"
+              aria-hidden="true"
+            />
+            <input
+              id="readiness-search"
+              type="search"
+              value={filters.search}
+              onChange={(event) => onChange({ search: event.target.value })}
+              placeholder="Buscar por K9, matrícula ou condutor..."
+              className={cn(
+                "h-9 w-full rounded-lg border border-cyan-200/12 bg-[#0b1628] pl-8 pr-2.5 text-xs text-foreground",
+                "transition-colors hover:border-cyan-200/25",
+                "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              )}
+            />
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground" htmlFor="readiness-status">
+        <div className="flex flex-wrap items-end gap-2.5">
+          <div className="flex flex-col gap-1">
+            {/*
+              Accessible name stays "Status:" (locked by the a11y tests); the
+              visible chip is a substring of it, so WCAG 2.5.3 Label in Name holds.
+            */}
+            <label className="sr-only" htmlFor="readiness-status">
               Status:
             </label>
+            <span className={filterLabelClass} aria-hidden="true">
+              Status
+            </span>
             <select
               id="readiness-status"
               value={filters.status}
@@ -121,10 +167,13 @@ export function HealthReadinessFilters({
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground" htmlFor="readiness-quality">
+          <div className="flex flex-col gap-1">
+            <label className="sr-only" htmlFor="readiness-quality">
               Leitura:
             </label>
+            <span className={filterLabelClass} aria-hidden="true">
+              Leitura
+            </span>
             <select
               id="readiness-quality"
               value={filters.quality}
@@ -142,10 +191,13 @@ export function HealthReadinessFilters({
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground" htmlFor="readiness-restrictions">
+          <div className="flex flex-col gap-1">
+            <label className="sr-only" htmlFor="readiness-restrictions">
               Restrições:
             </label>
+            <span className={filterLabelClass} aria-hidden="true">
+              Restrições
+            </span>
             <select
               id="readiness-restrictions"
               value={filters.restrictions}
@@ -162,10 +214,13 @@ export function HealthReadinessFilters({
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground" htmlFor="readiness-sort">
+          <div className="flex flex-col gap-1">
+            <label className="sr-only" htmlFor="readiness-sort">
               Ordenação:
             </label>
+            <span className={filterLabelClass} aria-hidden="true">
+              Ordenação
+            </span>
             <select
               id="readiness-sort"
               value={filters.sort}
@@ -185,8 +240,8 @@ export function HealthReadinessFilters({
               type="button"
               onClick={onReset}
               className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/70 bg-background px-3 text-xs font-medium text-foreground transition-colors",
-                "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "inline-flex h-9 items-center gap-1.5 rounded-lg border border-cyan-300/25 bg-cyan-300/[0.08] px-3 text-xs font-semibold text-cyan-200 transition-colors",
+                "hover:bg-cyan-300/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               )}
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />

@@ -25,6 +25,8 @@ import {
   HelpCircle,
   ShieldAlert,
   GitCompareArrows,
+  RotateCcw,
+  SearchX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { QualityStateLabel, ReadinessListItem, ReadinessStatus } from "../../domain/readiness-types";
@@ -134,25 +136,55 @@ export function HealthReadinessTable({
 }: HealthReadinessTableProps) {
   if (items.length === 0) {
     return (
+      /*
+        Two distinct meanings, kept distinct: zero RESULTS from filtering is not
+        the same as zero K9s in scope, and neither is a technical failure.
+      */
       <div
-        className="rounded-xl border border-border/60 bg-card p-8 text-center"
+        className="flex flex-col items-center justify-center rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 px-6 py-10 text-center shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
         data-testid="health-readiness-no-results"
       >
-        <p className="text-sm font-semibold text-foreground">
+        <span
+          className={cn(
+            "flex h-14 w-14 items-center justify-center rounded-2xl border",
+            filtersActive
+              ? "border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-300"
+              : "border-slate-500/25 bg-slate-500/10 text-slate-300",
+          )}
+        >
+          {filtersActive ? (
+            <SearchX className="h-7 w-7" aria-hidden="true" />
+          ) : (
+            <Dog className="h-7 w-7" aria-hidden="true" />
+          )}
+        </span>
+
+        <p
+          className={cn(
+            "mt-3.5 text-[10px] font-black uppercase tracking-[0.22em]",
+            filtersActive ? "text-cyan-300/80" : "text-slate-400",
+          )}
+        >
+          {filtersActive ? "Filtros operacionais" : "Efetivo monitorado"}
+        </p>
+
+        <p className="mt-1.5 text-sm font-semibold text-foreground">
           {filtersActive
             ? "Nenhum K9 corresponde aos filtros aplicados."
             : "Nenhum K9 disponível no escopo atual."}
         </p>
+
         {filtersActive && (
           <button
             type="button"
             onClick={onResetFilters}
             className={cn(
-              "mt-3 inline-flex items-center rounded-lg border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground",
-              "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "mt-4 inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/25 bg-cyan-300/[0.08] px-3.5 py-1.5 text-xs font-semibold text-cyan-200 transition-colors",
+              "hover:bg-cyan-300/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             )}
           >
-            Limpar filtros
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Limpar filtros</span>
           </button>
         )}
       </div>
@@ -161,7 +193,7 @@ export function HealthReadinessTable({
 
   return (
     <div
-      className="rounded-xl border border-border/60 bg-card shadow-sm"
+      className="overflow-hidden rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
       data-testid="health-readiness-table"
     >
       {/* Desktop/tablet: semantic table. Narrow widths reflow to stacked cards below. */}
@@ -171,7 +203,7 @@ export function HealthReadinessTable({
             Prontidão operacional consolidada do efetivo K9, com estado da leitura canônica.
           </caption>
           <thead>
-            <tr className="border-b border-border/60 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b border-border bg-muted/30 text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">
               <th className="px-4 py-3 font-medium" scope="col">
                 K9
               </th>
@@ -207,18 +239,25 @@ export function HealthReadinessTable({
               const restrictionCount = item.activeRestrictionsSummary.length;
 
               return (
-                <tr key={item.dog.id} className="transition-colors hover:bg-muted/20">
+                <tr
+                  key={item.dog.id}
+                  className="transition-colors hover:bg-cyan-300/[0.04] focus-within:bg-cyan-300/[0.06]"
+                >
                   <th className="px-4 py-3 font-normal" scope="row">
                     <div className="flex items-center gap-2.5">
+                      {/*
+                        Rounded-rect frame with a cyan edge (HW-M02 + homologated
+                        /health), kept at 36px so dense rows stay compact.
+                      */}
                       {item.dog.photoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={item.dog.photoUrl}
                           alt=""
-                          className="h-9 w-9 shrink-0 rounded-full border border-border object-cover"
+                          className="h-9 w-9 shrink-0 rounded-lg border border-cyan-200/20 object-cover"
                         />
                       ) : (
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted/60 text-muted-foreground">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-cyan-200/20 bg-muted/60 text-muted-foreground">
                           <Dog className="h-4 w-4" aria-hidden="true" />
                         </div>
                       )}
@@ -289,8 +328,8 @@ export function HealthReadinessTable({
                     <Link
                       href={`/health/readiness/${item.dog.id}`}
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors",
-                        "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "inline-flex items-center gap-1 rounded-xl border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm transition-colors",
+                        "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                       )}
                       aria-label={`Ver cockpit de prontidão do K9 ${item.dog.name}`}
                     >
@@ -326,10 +365,10 @@ export function HealthReadinessTable({
                     <img
                       src={item.dog.photoUrl}
                       alt=""
-                      className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
+                      className="h-11 w-11 shrink-0 rounded-xl border border-cyan-200/20 object-cover"
                     />
                   ) : (
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-muted/60 text-muted-foreground">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-200/20 bg-muted/60 text-muted-foreground">
                       <Dog className="h-5 w-5" aria-hidden="true" />
                     </div>
                   )}

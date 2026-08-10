@@ -34,6 +34,7 @@ interface CardConfig {
   textClass: string;
   borderClass: string;
   bgClass: string;
+  tileClass: string;
 }
 
 export function HealthReadinessSummaryCards({
@@ -49,8 +50,9 @@ export function HealthReadinessSummaryCards({
       count: counts.operational,
       icon: CheckCircle2,
       textClass: "text-emerald-400",
-      borderClass: "border-emerald-500/20",
+      borderClass: "border-emerald-500/25",
       bgClass: "bg-emerald-500/10",
+      tileClass: "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
     },
     {
       key: "operational_attention",
@@ -59,8 +61,9 @@ export function HealthReadinessSummaryCards({
       count: counts.operational_attention,
       icon: AlertTriangle,
       textClass: "text-amber-400",
-      borderClass: "border-amber-500/20",
+      borderClass: "border-amber-500/25",
       bgClass: "bg-amber-500/10",
+      tileClass: "border-amber-500/25 bg-amber-500/10 text-amber-400",
     },
     {
       key: "fit_with_restrictions",
@@ -69,8 +72,9 @@ export function HealthReadinessSummaryCards({
       count: counts.fit_with_restrictions,
       icon: AlertCircle,
       textClass: "text-indigo-300",
-      borderClass: "border-indigo-500/20",
+      borderClass: "border-indigo-500/25",
       bgClass: "bg-indigo-500/10",
+      tileClass: "border-indigo-500/25 bg-indigo-500/10 text-indigo-300",
     },
     {
       key: "temporarily_unfit",
@@ -79,8 +83,9 @@ export function HealthReadinessSummaryCards({
       count: counts.temporarily_unfit,
       icon: ShieldOff,
       textClass: "text-red-400",
-      borderClass: "border-red-500/20",
+      borderClass: "border-red-500/25",
       bgClass: "bg-red-500/10",
+      tileClass: "border-red-500/25 bg-red-500/10 text-red-400",
     },
     {
       key: "not_evaluated",
@@ -89,8 +94,9 @@ export function HealthReadinessSummaryCards({
       count: counts.not_evaluated,
       icon: HelpCircle,
       textClass: "text-slate-300",
-      borderClass: "border-border/70",
-      bgClass: "bg-muted/40",
+      borderClass: "border-slate-500/25",
+      bgClass: "bg-slate-500/10",
+      tileClass: "border-slate-500/25 bg-slate-500/10 text-slate-300",
     },
   ];
 
@@ -112,27 +118,51 @@ export function HealthReadinessSummaryCards({
             aria-pressed={isSelected}
             aria-label={`${card.label}: ${card.count} K9s. ${card.hint}. Filtrar por este estado.`}
             className={cn(
-              "flex flex-col gap-2 rounded-xl border p-4 text-left transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              // Same instrument grammar as /health, one step denser: p-3.5 and a
+              // smaller tile, since this view is scanned while triaging.
+              "group relative flex flex-col overflow-hidden rounded-2xl border p-3.5 text-left transition-all duration-200",
+              "bg-[#0b1628]/82 shadow-[0_18px_60px_rgba(0,0,0,0.22)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               card.borderClass,
-              card.bgClass,
-              isSelected ? "ring-2 ring-ring" : "hover:brightness-125",
+              isSelected
+                ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                : "hover:brightness-125",
             )}
           >
-            <div className="flex items-start justify-between gap-2">
-              <span className={cn("text-2xl font-bold tracking-tight", card.textClass)}>
+            {/* Semantic wash: each instrument keeps its own tonal surface. */}
+            <span
+              className={cn("pointer-events-none absolute inset-0", card.bgClass)}
+              aria-hidden="true"
+            />
+
+            <span className="relative flex items-start justify-between gap-2">
+              <span
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
+                  card.tileClass,
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+              <span
+                className={cn(
+                  "text-2xl font-black leading-none tabular-nums tracking-tight",
+                  card.textClass,
+                )}
+              >
                 {card.count}
               </span>
-              <Icon className={cn("h-4 w-4 shrink-0", card.textClass)} aria-hidden="true" />
-            </div>
+            </span>
 
-            <div className="flex flex-col gap-0.5">
+            <span className="relative mt-2.5 block">
               {/* Full semantic label — never truncated into ambiguity. */}
-              <span className="text-xs font-semibold leading-snug text-foreground">
+              <span className="block text-xs font-semibold leading-snug text-foreground">
                 {card.label}
               </span>
-              <span className="text-[11px] leading-snug text-muted-foreground">{card.hint}</span>
-            </div>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                {card.hint}
+              </span>
+            </span>
           </button>
         );
       })}

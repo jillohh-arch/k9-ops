@@ -21,8 +21,9 @@ const DOT_COLORS: Record<ReadinessStatus, string> = {
 
 export function HealthReadinessLegend() {
   return (
+    /* Quiet supporting rail: must not compete with the table above it. */
     <div
-      className="flex flex-col gap-3 text-[11px] text-muted-foreground lg:flex-row lg:items-center lg:justify-between"
+      className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-[11px] text-muted-foreground lg:flex-row lg:items-center lg:justify-between"
       data-testid="health-readiness-legend"
     >
       <ul className="flex flex-wrap items-center gap-x-4 gap-y-2">

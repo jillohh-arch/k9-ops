@@ -5,7 +5,6 @@ import {
   HeartPulse,
   LoaderCircle,
   Pill,
-  Scale,
   Stethoscope,
   Syringe,
   Upload,
@@ -17,17 +16,21 @@ import { useMemo, useState, type FormEvent } from "react";
 import {
   createHealthDocument,
   createHealthEvent,
-  createHealthWeight,
 } from "@/features/health/data/health-admin-service";
 import type { HealthDogSummary } from "@/features/health/hooks/use-health-data";
 import { cn } from "@/lib/utils";
 
+// WEIGHT-01E-C2C-C: "weight" não é mais uma seção do hub.
+//
+// Registrar pesagem pelo Web usava um writer legado sem receipt/idempotência,
+// sem validação de cronologia e com dual-write em `weight_history`, concorrendo
+// com o comando canônico. O Web permanece leitura para peso operacional; o
+// registro acontece no app K9 Ops.
 export type HealthHubSection =
   | "clínical"
   | "document"
   | "medication"
-  | "vaccination"
-  | "weight";
+  | "vaccination";
 
 const sections: Array<{
   description: string;
@@ -40,12 +43,6 @@ const sections: Array<{
     icon: Syringe,
     id: "vaccination",
     label: "Vacina",
-  },
-  {
-    description: "Novo registro canonico de peso",
-    icon: Scale,
-    id: "weight",
-    label: "Pesagem",
   },
   {
     description: "Exame ou consulta veterinária",
@@ -131,8 +128,6 @@ export function HealthEventHub({
   const [professionalClinic, setProfessionalClinic] = useState("");
   const [costBrl, setCostBrl] = useState("");
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-  const [weightKg, setWeightKg] = useState("");
-  const [weightContext, setWeightContext] = useState("canil");
   const [clínicalType, setClínicalType] =
     useState<"consultation" | "exam">("exam");
   const [documentType, setDocumentType] = useState("laudo");
@@ -157,8 +152,6 @@ export function HealthEventHub({
     setProfessionalClinic("");
     setCostBrl("");
     setAttachmentFile(null);
-    setWeightKg("");
-    setWeightContext("canil");
     setClínicalType("exam");
     setDocumentType("laudo");
     setDocumentIssuer("");
@@ -182,16 +175,7 @@ export function HealthEventHub({
 
     setSaving(true);
     try {
-      if (section === "weight") {
-        if (!weightKg.trim()) throw new Error("Informe o peso.");
-        await createHealthWeight({
-          context: weightContext,
-          dogId: resolvedDogId,
-          measuredAt: date,
-          notes: observations,
-          weightKg,
-        });
-      } else if (section === "document") {
+      if (section === "document") {
         if (!subtype.trim()) throw new Error("Informe o nome do documento.");
         if (!documentFile) throw new Error("Selecione o arquivo.");
         await createHealthDocument({
@@ -331,10 +315,7 @@ export function HealthEventHub({
                 </select>
               </Field>
               {section !== "document" ? (
-                <Field
-                  label={section === "weight" ? "Data da pesagem" : "Data do evento"}
-                  required
-                >
+                <Field label="Data do evento" required>
                   <input
                     className={inputClass}
                     onChange={(event) => setDate(event.target.value)}
@@ -366,44 +347,7 @@ export function HealthEventHub({
                 </Field>
               )}
 
-              {section === "weight" ? (
-                <>
-                  <Field label="Peso (kg)" required>
-                    <input
-                      className={inputClass}
-                      inputMode="decimal"
-                      max="100"
-                      min="1"
-                      onChange={(event) => setWeightKg(event.target.value)}
-                      placeholder="Ex.: 27,4"
-                      required
-                      step="0.1"
-                      type="number"
-                      value={weightKg}
-                    />
-                  </Field>
-                  <Field label="Local / contexto">
-                    <select
-                      className={inputClass}
-                      onChange={(event) => setWeightContext(event.target.value)}
-                      value={weightContext}
-                    >
-                      <option className="bg-[#0b1628]" value="canil">
-                        Canil
-                      </option>
-                      <option className="bg-[#0b1628]" value="clínica_vet">
-                        Clínica veterinária
-                      </option>
-                      <option className="bg-[#0b1628]" value="casa">
-                        Residencia
-                      </option>
-                      <option className="bg-[#0b1628]" value="outro">
-                        Outro
-                      </option>
-                    </select>
-                  </Field>
-                </>
-              ) : section === "document" ? (
+              {section === "document" ? (
                 <>
                   <Field label="Nome do documento" required>
                     <input
@@ -560,13 +504,7 @@ export function HealthEventHub({
 
             <div className="mt-4">
               <Field
-                label={
-                  section === "document"
-                    ? "Descrição"
-                    : section === "weight"
-                      ? "Observações da pesagem"
-                      : "Observações"
-                }
+                label={section === "document" ? "Descrição" : "Observações"}
               >
                 <textarea
                   className="min-h-28 w-full resize-y rounded-xl border border-white/10 bg-white/[0.035] p-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35"

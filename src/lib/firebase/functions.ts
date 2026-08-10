@@ -67,10 +67,8 @@ export const callAdminCreateHealthEvent = httpsCallable<
   { dogId?: string; id?: string; type?: string }
 >(functions, "adminCreateHealthEvent");
 
-export const callAdminCreateK9WeightRecord = httpsCallable<
-  { dogId: string; payload: Record<string, unknown> },
-  { dogId?: string; id?: string; weightKg?: number }
->(functions, "adminCreateK9WeightRecord");
+// WEIGHT-01E-C2C-C: wrapper de `adminCreateK9WeightRecord` removido junto com
+// o writer legado que o consumia. O Web não registra pesagem operacional.
 
 export const callAdminCreateK9HealthDocument = httpsCallable<
   { dogId: string; payload: Record<string, unknown> },

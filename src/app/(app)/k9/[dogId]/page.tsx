@@ -1275,16 +1275,9 @@ export default function K9ProfilePage() {
                     Serie canônica de dogs/{dogId}/weight_records.
                   </p>
                 </div>
-                {canWriteHealth ? (
-                  <button
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-2.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
-                    onClick={() => openHealthHub("weight")}
-                    type="button"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Registrar pesagem
-                  </button>
-                ) : null}
+                {/* WEIGHT-01E-C2C-C: o botão "Registrar pesagem" foi removido.
+                    O Web lê a série canônica de `weight_records`; o registro
+                    operacional acontece no app K9 Ops. */}
               </div>
 
               <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_280px]">

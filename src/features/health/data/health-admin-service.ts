@@ -7,7 +7,6 @@ import { db, storage } from "@/lib/firebase/client";
 import {
   callAdminCreateHealthEvent,
   callAdminCreateK9HealthDocument,
-  callAdminCreateK9WeightRecord,
 } from "@/lib/firebase/functions";
 
 export type HealthEventInput = {
@@ -30,14 +29,6 @@ export type HealthEventInput = {
     | "symptom"
     | "vaccination";
   vetName: string;
-};
-
-export type HealthWeightInput = {
-  context: string;
-  dogId: string;
-  measuredAt: string;
-  notes: string;
-  weightKg: string;
 };
 
 export type HealthDocumentInput = {
@@ -150,33 +141,16 @@ export async function createHealthEvent(input: HealthEventInput) {
   return result.data;
 }
 
-export async function createHealthWeight(input: HealthWeightInput) {
-  const result = await callAdminCreateK9WeightRecord({
-    dogId: input.dogId,
-    payload: {
-      context: input.context,
-      measuredAt: new Date(`${input.measuredAt}T12:00:00`).toISOString(),
-      notes: input.notes || null,
-      weightKg: input.weightKg,
-    },
-  });
-
-  try {
-    const dogRef = doc(db, "dogs", input.dogId);
-    const weightKg = Number(input.weightKg);
-    const measuredAt = Timestamp.fromDate(new Date(`${input.measuredAt}T12:00:00`));
-    if (Number.isFinite(weightKg) && weightKg > 0) {
-      await updateDoc(dogRef, {
-        _last_weight_kg: weightKg,
-        _last_weight_at: measuredAt,
-      });
-    }
-  } catch {
-    // Best-effort denormalization — don't fail the main operation
-  }
-
-  return result.data;
-}
+// WEIGHT-01E-C2C-C: `createHealthWeight` removido.
+//
+// Era o writer operacional legado do Web: chamava `adminCreateK9WeightRecord`
+// (sem receipt/idempotência, sem validação de data futura, com dual-write em
+// `weight_history`) e, em seguida, gravava `_last_weight_kg`/`_last_weight_at`
+// direto do cliente num `catch {}` silencioso — a projeção podia divergir da
+// coleção canônica sem que ninguém soubesse.
+//
+// Registro operacional de peso agora existe apenas no caminho canônico
+// (`healthWeightCreateRecord`, app K9 Ops). O Web permanece leitura.
 
 export async function createHealthDocument(input: HealthDocumentInput) {
   const uploaded = await uploadHealthFile(input.dogId, input.file, "document");

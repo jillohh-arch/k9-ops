@@ -21,8 +21,8 @@ vi.mock("firebase/firestore", () => ({
 }));
 vi.mock("@/lib/firebase/client", () => ({ db: {} }));
 
+import { resolveDogWeightReadModel } from "../../data/weight/weight-read-model";
 import * as fixtures from "../../domain/weight/__tests__/weight-document-fixtures";
-import { resolveDogWeightReadModel } from "../use-health-data";
 
 const { FIXTURE_DOG_ID } = fixtures;
 
@@ -53,13 +53,26 @@ const HOOK_SOURCE = readFileSync(
   "utf8",
 );
 
+const READ_MODEL_SOURCE = readFileSync(
+  path.resolve(__dirname, "../../data/weight/weight-read-model.ts"),
+  "utf8",
+);
+
+/**
+ * Superfície completa de leitura do R1: o hook que assina a coleção mais o
+ * resolver compartilhado (WEIGHT-01E-R2B extraiu o resolver para
+ * `data/weight/weight-read-model.ts`). As garantias de fonte valem para as duas
+ * unidades — um alias proibido em qualquer uma delas reintroduz o problema.
+ */
+const READER_SOURCE = `${HOOK_SOURCE}\n${READ_MODEL_SOURCE}`;
+
 /**
  * Fonte do reader sem comentários.
  *
  * Comentários citam nomes de wire legados ao documentar a decisão do gate; as
  * asserções de alias precisam olhar apenas o código executável.
  */
-const HOOK_CODE = HOOK_SOURCE.replaceAll(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
+const READER_CODE = READER_SOURCE.replaceAll(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
 
 // ─── 1–2. Recência não depende da ordem da fonte ───────────────────────────
 
@@ -294,26 +307,28 @@ describe("handoff cru para a política", () => {
 
 describe("superfície de leitura do reader", () => {
   it("não referencia weight_history", () => {
-    expect(HOOK_SOURCE).not.toContain("weight_history");
+    expect(READER_SOURCE).not.toContain("weight_history");
   });
 
   it("não usa projeção denormalizada de peso como fallback", () => {
-    expect(HOOK_SOURCE).not.toContain("_last_weight_kg");
-    expect(HOOK_SOURCE).not.toContain("_last_weight_at");
+    expect(READER_SOURCE).not.toContain("_last_weight_kg");
+    expect(READER_SOURCE).not.toContain("_last_weight_at");
   });
 
   it("não interpreta aliases de peso vindos do documento bruto", () => {
     // As formas de wire não existem mais no código do reader. Comentários
     // podem citá-las ao documentar a decisão, então a checagem olha só o código.
-    expect(HOOK_CODE).not.toContain("weight_kg");
-    expect(HOOK_CODE).not.toContain("measured_at");
-    // `weightKg`/`measuredAt` só podem aparecer como campo do assessment
-    // canônico, nunca lidos de um registro bruto.
+    // `sourceCollection: "weight_records"` é o nome da coleção, não um alias de
+    // campo, então a checagem de `weight_kg` continua válida.
+    expect(READER_CODE).not.toContain("weight_kg");
+    expect(READER_CODE).not.toContain("measured_at");
     // `weightKg`/`measuredAt` só podem aparecer como acesso a campo do
-    // assessment canônico, nunca lidos de um registro bruto.
+    // assessment canônico, nunca lidos de um registro bruto. O prefixo exigido
+    // é estrito de propósito: alternativas genéricas como `latest` aceitariam
+    // `latest.weightKg`, que é exatamente a leitura crua paralela proibida.
     for (const alias of ["weightKg", "measuredAt"] as const) {
       const occurrences = [
-        ...HOOK_CODE.matchAll(new RegExp(`(.{0,12})\\b${alias}\\b`, "g")),
+        ...READER_CODE.matchAll(new RegExp(`(.{0,12})\\b${alias}\\b`, "g")),
       ];
       expect(occurrences.length).toBeGreaterThan(0);
       for (const occurrence of occurrences) {
@@ -322,19 +337,25 @@ describe("superfície de leitura do reader", () => {
     }
     // `peso` isolado seria alias de valor de pesagem. `peso_mínimo`/
     // `peso_máximo` pertencem à faixa ideal do perfil e continuam válidos.
-    expect(HOOK_CODE).not.toMatch(/record\s*\.\s*peso\b/);
-    expect(HOOK_CODE).not.toMatch(/\.\s*weight\b\s*\?\?/);
+    expect(READER_CODE).not.toMatch(/record\s*\.\s*peso\b/);
+    expect(READER_CODE).not.toMatch(/\.\s*weight\b\s*\?\?/);
   });
 
   it("assina apenas a subcoleção canônica por cão", () => {
     expect(HOOK_SOURCE).toContain("weight_records");
-    expect(HOOK_SOURCE).not.toContain("collectionGroup");
+    expect(READER_SOURCE).not.toContain("collectionGroup");
   });
 
   it("não pré-filtra a coleção de pesagem por soft-delete", () => {
     expect(HOOK_SOURCE).toContain(
       "const weights = weightRecordsState.records;",
     );
+  });
+
+  it("delega a seleção de current ao resolver compartilhado", () => {
+    // O hook não pode reimplementar a decisão: nem sort local, nem `[0]`.
+    expect(HOOK_SOURCE).toContain("resolveDogWeightReadModel");
+    expect(READ_MODEL_SOURCE).toContain("analyzeWeightDocuments");
   });
 });
 

@@ -58,6 +58,8 @@ import {
   HealthEventHub,
   type HealthHubSection,
 } from "@/features/health/components/health-event-hub";
+import type { WeightCurrentSelection } from "@/features/health/data/weight/weight-collection-policy";
+import { resolveDogWeightReadModel } from "@/features/health/data/weight/weight-read-model";
 import { paths } from "@/lib/routes/paths";
 import { db } from "@/lib/firebase/client";
 import { doc, getDoc } from "firebase/firestore";
@@ -224,8 +226,20 @@ function dogStatus(dog: ProfileRecord, specialties: ProfileRecord[]) {
   return { label: "Ativo", tone: "slate" as const };
 }
 
-function weightValue(record: ProfileRecord | null) {
-  return profileNumber(record, ["weight_kg", "weightKg", "weight", "peso"]);
+/**
+ * Rótulo único do peso atual do K9.
+ *
+ * Fonte exclusiva: peso canônico da política. `none` e `inconclusive` são
+ * estados distintos — ausência de registro não é o mesmo que coleção com
+ * bloqueio de integridade, e nenhum dos dois pode exibir um número.
+ */
+function weightLabel(
+  state: WeightCurrentSelection["kind"],
+  weightKg: number | null,
+) {
+  if (state === "inconclusive") return "Não conclusivo";
+  if (weightKg == null) return "Sem registro";
+  return `${weightKg.toFixed(1)} kg`;
 }
 
 function recordUrl(record: ProfileRecord) {
@@ -397,24 +411,31 @@ export default function K9ProfilePage() {
       "handler_id",
     ]);
     // conductor is now fetched via useEffect (QW-2 fix) — do not re-find here
-    const weights = [...data.weightRecords].sort(
-      (a, b) =>
-        (profileRecordDate(b)?.getTime() ?? 0) -
-        (profileRecordDate(a)?.getTime() ?? 0),
-    );
-    const latestWeight = weights[0] ?? null;
-    const canônicalWeight = weightValue(latestWeight);
-    const currentWeight = canônicalWeight ?? profileNumber(dog, ["weight"]);
+    // Peso atual pertence à política canônica: a coleção crua completa vai para
+    // `resolveDogWeightReadModel`, que decide `current`/`none`/`inconclusive`.
+    // A página não ordena, não escolhe `[0]` e não interpreta alias de peso ou
+    // de data. `dogs.weight` não é fallback: é campo cadastral, não pesagem.
+    const weightRead = resolveDogWeightReadModel(dogId, data.weightRecords);
+    const { analysis, latestWeightAt, latestWeightKg, weightCurrentState } =
+      weightRead;
+    // Série factual: somente registros validados pela política, já ordenados por
+    // recência canônica. Invalidated, malformed e unsupported ficam fora.
+    const weights = analysis.validRecords;
     const idealMin = profileNumber(dog, ["idealWeightMin", "ideal_weight_min"]);
     const idealMax = profileNumber(dog, ["idealWeightMax", "ideal_weight_max"]);
+    // Faixa ideal só é avaliada sobre peso factual. Sob bloqueio de integridade
+    // o peso é desconhecido, então "dentro/fora da faixa" seria uma afirmação
+    // sem base.
     const weightState =
-      canônicalWeight == null
-        ? { label: "Sem pesagem canônica", tone: "violet" as const }
-        : idealMin == null || idealMax == null
-          ? { label: "Faixa ideal ausente", tone: "amber" as const }
-          : canônicalWeight >= idealMin && canônicalWeight <= idealMax
-            ? { label: "Dentro da faixa ideal", tone: "green" as const }
-            : { label: "Fora da faixa ideal", tone: "amber" as const };
+      weightCurrentState === "inconclusive"
+        ? { label: "Pesagem não conclusiva", tone: "red" as const }
+        : latestWeightKg == null
+          ? { label: "Sem pesagem canônica", tone: "violet" as const }
+          : idealMin == null || idealMax == null
+            ? { label: "Faixa ideal ausente", tone: "amber" as const }
+            : latestWeightKg >= idealMin && latestWeightKg <= idealMax
+              ? { label: "Dentro da faixa ideal", tone: "green" as const }
+              : { label: "Fora da faixa ideal", tone: "amber" as const };
 
     const healthEvents = [...data.healthEvents].sort(
       (a, b) =>
@@ -489,11 +510,11 @@ export default function K9ProfilePage() {
         id: `health:${record._id}`,
         title: eventTitle(record),
       })),
-      ...weights.map((record) => ({
+      ...weights.map((assessment) => ({
         category: "weight" as const,
-        date: profileRecordDate(record) ?? new Date(0),
-        detail: `${weightValue(record)?.toFixed(1) ?? "--"} kg`,
-        id: `weight:${record._id}`,
+        date: assessment.measuredAt,
+        detail: `${assessment.weightKg.toFixed(1)} kg`,
+        id: `weight:${assessment.entityId}`,
         title: "Pesagem registrada",
       })),
       ...sessions.map((record) => ({
@@ -525,17 +546,18 @@ export default function K9ProfilePage() {
       .slice(0, 7);
 
     return {
+      analysis,
       conductor,
       conductorRa,
-      canônicalWeight,
       clínicalEvents,
-      currentWeight,
       dog,
       documents,
       healthEvents,
       idealMax,
       idealMin,
       latestVaccine,
+      latestWeightAt,
+      latestWeightKg,
       occurrences,
       occurrences30,
       sessions,
@@ -546,11 +568,13 @@ export default function K9ProfilePage() {
       vaccineDate,
       vaccineDue,
       vaccineState,
+      weightCurrentState,
       weights,
       weightState,
     };
-    // conductor is a useState variable; re-run when it arrives from getDoc
-  }, [conductor, data]);
+    // conductor is a useState variable; re-run when it arrives from getDoc.
+    // dogId is the per-dog authority handed to the canonical weight resolver.
+  }, [conductor, data, dogId]);
 
   if (data.loading && !data.dog) {
     return <DataState error={null} loading noun="o perfil do K9" />;
@@ -635,20 +659,13 @@ export default function K9ProfilePage() {
   };
   const canEditK9 = can("k9", "edit");
   const canWriteHealth = can("health", "create") || can("health", "edit");
-  const weightChartData = [...view.weights]
-    .reverse()
-    .map((record) => {
-      const date = profileRecordDate(record);
-      return {
-        date: date ? dateFormatter.format(date) : "--",
-        fullDate: date ? dateTimeFormatter.format(date) : "Data não informada",
-        weight: weightValue(record),
-      };
-    })
-    .filter(
-      (item): item is { date: string; fullDate: string; weight: number } =>
-        item.weight != null,
-    );
+  // A série plotada vem de `analysis.validRecords`: peso e data já validados
+  // pelo parser canônico, sem reinterpretação de alias e sem filtro extra.
+  const weightChartData = [...view.weights].reverse().map((assessment) => ({
+    date: dateFormatter.format(assessment.measuredAt),
+    fullDate: dateTimeFormatter.format(assessment.measuredAt),
+    weight: assessment.weightKg,
+  }));
   const weightValues = weightChartData.map((item) => item.weight);
   const weightDomainValues = [
     ...weightValues,
@@ -662,11 +679,12 @@ export default function K9ProfilePage() {
           Math.ceil(Math.max(...weightDomainValues) + 1),
         ]
       : [0, 40];
-  const previousWeight =
-    view.weights.length > 1 ? weightValue(view.weights[1]) : null;
+  // Delta só existe entre dois pesos factuais. Sob `none`/`inconclusive` não há
+  // peso atual, então não há variação a apresentar.
+  const previousWeight = view.weights[1]?.weightKg ?? null;
   const weightDelta =
-    view.canônicalWeight != null && previousWeight != null
-      ? view.canônicalWeight - previousWeight
+    view.latestWeightKg != null && previousWeight != null
+      ? view.latestWeightKg - previousWeight
       : null;
 
   function openHealthHub(section: HealthHubSection) {
@@ -742,10 +760,10 @@ export default function K9ProfilePage() {
                 {
                   icon: Scale,
                   label: "Peso atual",
-                  value:
-                    view.currentWeight == null
-                      ? "Sem registro"
-                      : `${view.currentWeight.toFixed(1)} kg`,
+                  value: weightLabel(
+                    view.weightCurrentState,
+                    view.latestWeightKg,
+                  ),
                 },
               ].map((item) => (
                 <div className="flex items-center gap-3" key={item.label}>
@@ -799,11 +817,7 @@ export default function K9ProfilePage() {
           icon={Scale}
           label="Peso canonico"
           tone="cyan"
-          value={
-            view.canônicalWeight == null
-              ? "--"
-              : `${view.canônicalWeight.toFixed(1)} kg`
-          }
+          value={weightLabel(view.weightCurrentState, view.latestWeightKg)}
         />
         <MetricCard
           detail="sessões registradas nos últimos 30 dias"
@@ -1094,9 +1108,7 @@ export default function K9ProfilePage() {
                     Peso atual
                   </p>
                   <p className="mt-2 font-mono text-2xl font-black text-white">
-                    {view.canônicalWeight == null
-                      ? "--"
-                      : `${view.canônicalWeight.toFixed(1)} kg`}
+                    {weightLabel(view.weightCurrentState, view.latestWeightKg)}
                   </p>
                   <p className="mt-2 text-xs text-slate-500">
                     Ideal:{" "}
@@ -1353,9 +1365,7 @@ export default function K9ProfilePage() {
                   <article className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
                     <p className="text-xs text-slate-500">Peso atual</p>
                     <p className="mt-2 font-mono text-2xl font-black text-white">
-                      {view.canônicalWeight == null
-                        ? "--"
-                        : `${view.canônicalWeight.toFixed(1)} kg`}
+                      {weightLabel(view.weightCurrentState, view.latestWeightKg)}
                     </p>
                     {weightDelta != null ? (
                       <p
@@ -1403,21 +1413,23 @@ export default function K9ProfilePage() {
               </div>
 
               <div className="mt-4 overflow-hidden rounded-2xl border border-white/8">
-                {view.weights.slice(0, 8).map((record, index) => (
+                {view.weights.slice(0, 8).map((assessment, index) => (
                   <div
                     className="grid gap-2 border-b border-white/7 bg-white/[0.018] px-4 py-3 last:border-b-0 sm:grid-cols-[8rem_1fr_auto]"
-                    key={record._id}
+                    key={assessment.entityId}
                   >
                     <span className="font-mono text-xs text-slate-500">
-                      {dateLabel(profileRecordDate(record))}
+                      {dateLabel(assessment.measuredAt)}
                     </span>
                     <span className="text-sm text-slate-400">
-                      {profileText(record, ["context"])?.replaceAll("_", " ") ??
+                      {assessment.context?.replaceAll("_", " ") ??
                         "Contexto não informado"}
-                      {index === 0 ? " - registro atual" : ""}
+                      {index === 0 && view.weightCurrentState === "current"
+                        ? " - registro atual"
+                        : ""}
                     </span>
                     <span className="font-mono text-sm font-black text-white">
-                      {weightValue(record)?.toFixed(1) ?? "--"} kg
+                      {assessment.weightKg.toFixed(1)} kg
                     </span>
                   </div>
                 ))}

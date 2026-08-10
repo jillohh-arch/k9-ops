@@ -11,12 +11,11 @@ import {
 
 import type { DashboardPeriodDays } from "@/features/dashboard/providers/dashboard-period-provider";
 import { useEntities } from "@/features/effective/providers/entities-provider";
+import type { WeightCurrentSelection } from "@/features/health/data/weight/weight-collection-policy";
 import {
-  analyzeWeightDocuments,
-  type WeightCollectionAnalysis,
-  type WeightCurrentSelection,
-  type WeightDocumentInput,
-} from "@/features/health/data/weight/weight-collection-policy";
+  resolveDogWeightReadModel,
+  type DogWeightReadModel,
+} from "@/features/health/data/weight/weight-read-model";
 import { db } from "@/lib/firebase/client";
 
 export type HealthTone =
@@ -427,54 +426,12 @@ function eventLabel(record: RawRecord) {
 }
 
 /**
- * Projeção de peso do R1 derivada da análise canônica.
- *
- * `analysis` fica disponível para consumidores que precisem da série válida;
- * `latestWeightKg`/`latestWeightAt` existem apenas quando há peso factual.
+ * A projeção de peso e o resolver canônico vivem em
+ * `@/features/health/data/weight/weight-read-model`: são puros e passaram a ter
+ * um segundo consumidor (Perfil do K9, WEIGHT-01E-R2B). O reader R1 apenas os
+ * consome; a semântica é a mesma de antes da extração.
  */
-export type DogWeightReadModel = {
-  readonly analysis: WeightCollectionAnalysis;
-  readonly latestWeightAt: Date | null;
-  readonly latestWeightKg: number | null;
-  readonly weightCurrentState: WeightCurrentSelection["kind"];
-};
-
-/**
- * Handoff cru da coleção `weight_records` de um cão para a política canônica.
- *
- * A coleção é entregue completa e na ordem recebida do snapshot: sem
- * pré-filtro de soft-delete, status, `measured_at` ou schema; sem alias local;
- * sem ordenação, deduplicação ou seleção de mais recente. Toda classificação e
- * toda escolha de peso atual pertencem a `analyzeWeightDocuments`.
- *
- * `_data` preserva o `doc.data()` original; o fallback para o registro achatado
- * mantém a função utilizável em cenários sem esse metadata.
- *
- * Somente `current` produz peso: `none` e `inconclusive` mantêm valor e data
- * nulos, sem rollback para registro válido anterior, para invalidado, para
- * `dogs.weight` ou para projeção denormalizada.
- */
-export function resolveDogWeightReadModel(
-  dogId: string,
-  records: readonly RawRecord[],
-): DogWeightReadModel {
-  const documents: WeightDocumentInput[] = records.map((record) => ({
-    data: record._data ?? record,
-    dogId,
-    entityId: record._id,
-    sourceCollection: "weight_records",
-  }));
-  const analysis = analyzeWeightDocuments({ documents });
-  const current = analysis.current;
-  return {
-    analysis,
-    latestWeightAt:
-      current.kind === "current" ? current.assessment.measuredAt : null,
-    latestWeightKg:
-      current.kind === "current" ? current.assessment.weightKg : null,
-    weightCurrentState: current.kind,
-  };
-}
+export type { DogWeightReadModel };
 
 function documentDate(record: RawRecord) {
   return dateValue(

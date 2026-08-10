@@ -17,6 +17,17 @@ export type ProfileRecord = Record<string, unknown> & {
   _source?: string;
 };
 
+/**
+ * Registro cru de `weight_records` (WEIGHT-01E-R2B).
+ *
+ * `_data` preserva o `doc.data()` original para que a política canônica receba
+ * o documento intacto em vez do registro achatado. Só o caminho de Pesagem
+ * produz esse metadata: os demais domínios do Perfil seguem em `ProfileRecord`.
+ */
+export type ProfileWeightRecord = ProfileRecord & {
+  _data: unknown;
+};
+
 export type K9ProfileState = {
   dog: ProfileRecord | null;
   documents: ProfileRecord[];
@@ -27,7 +38,15 @@ export type K9ProfileState = {
   specialties: ProfileRecord[];
   trainingProgress: ProfileRecord[];
   trainingSessions: ProfileRecord[];
-  weightRecords: ProfileRecord[];
+  /**
+   * Coleção `weight_records` crua e completa, na ordem recebida do snapshot.
+   *
+   * Sem pré-filtro de soft-delete, status ou schema, sem ordenação e sem
+   * deduplicação: um documento problemático pode ser exatamente a razão do
+   * resultado canônico ser `inconclusive`, então nada pode desaparecer antes de
+   * `analyzeWeightDocuments`.
+   */
+  weightRecords: ProfileWeightRecord[];
 };
 
 type NamedRecords = {
@@ -36,11 +55,62 @@ type NamedRecords = {
   records: ProfileRecord[];
 };
 
+type WeightRecords = {
+  error: string | null;
+  loading: boolean;
+  records: ProfileWeightRecord[];
+};
+
 const emptyRecords: NamedRecords = {
   error: null,
   loading: true,
   records: [],
 };
+
+const emptyWeightRecords: WeightRecords = {
+  error: null,
+  loading: true,
+  records: [],
+};
+
+/**
+ * Assina a subcoleção canônica de Pesagem de um K9 e entrega o snapshot cru.
+ *
+ * Caminho deliberadamente separado de `subscribeMany`: aquele aplica
+ * `mergeRecords`/`isArchived`, que removeriam documentos antes da política
+ * canônica e esconderiam bloqueios de integridade. Aqui não há filtro,
+ * ordenação, dedupe ou alias — apenas `doc.data()` preservado em `_data` mais o
+ * metadata mínimo de identidade.
+ *
+ * O dono da pesagem é o segmento `dogs/{dogId}` do path, nunca um alias
+ * embutido no documento.
+ */
+function subscribeWeightRecords(
+  dogId: string,
+  setter: React.Dispatch<React.SetStateAction<WeightRecords>>,
+) {
+  return onSnapshot(
+    query(collection(db, "dogs", dogId, "weight_records")),
+    (snapshot) => {
+      setter({
+        error: null,
+        loading: false,
+        records: snapshot.docs.map((item) => {
+          const data = item.data();
+          return {
+            ...data,
+            _data: data,
+            _id: item.id,
+            _source: "dog-weight-records",
+          };
+        }),
+      });
+    },
+    (error) => {
+      setter({ error: error.message, loading: false, records: [] });
+    },
+  );
+}
 
 function isArchived(record: ProfileRecord) {
   return (
@@ -119,7 +189,8 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
   const [dogError, setDogError] = useState<string | null>(null);
   const [specialties, setSpecialties] = useState<NamedRecords>(emptyRecords);
   const [healthEvents, setHealthEvents] = useState<NamedRecords>(emptyRecords);
-  const [weightRecords, setWeightRecords] = useState<NamedRecords>(emptyRecords);
+  const [weightRecords, setWeightRecords] =
+    useState<WeightRecords>(emptyWeightRecords);
   const [trainingSessions, setTrainingSessions] =
     useState<NamedRecords>(emptyRecords);
   const [trainingProgress, setTrainingProgress] =
@@ -189,15 +260,7 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
 
   useEffect(() => {
     if (!dogId) return;
-    return subscribeMany(
-      [
-        {
-          key: "dog-weight-records",
-          source: query(collection(db, "dogs", dogId, "weight_records")),
-        },
-      ],
-      setWeightRecords,
-    );
+    return subscribeWeightRecords(dogId, setWeightRecords);
   }, [dogId]);
 
   useEffect(() => {

@@ -1,14 +1,14 @@
 /**
- * K9 Ops Backend — Health Web v1 HW-3P Final Closure Gate
+ * K9 Ops Backend — Health Web v1 HW-3P Final Contract Closure
  * Firestore Triggers End-to-End Black-Box Tests
  *
  * Validates real source writes -> Firestore trigger / reconciler -> Admin SDK write -> health_summary/current
  * using 100% CANONICAL SOURCE SCHEMAS according to HEALTH_V1_FIRESTORE_SCHEMA.md:
- * - OperationalRestriction (level, category, description, activities_restricted, issued_at, recorded_by, status, schema_version, expected_end)
+ * - OperationalRestriction (level, category: injury, description, activities_restricted, issued_at, recorded_by, professional, source_document, status, schema_version, expected_end)
  * - WeightAssessment (weight_kg, measured_at, recorded_by, schema_version)
- * - VaccinationRecord (vaccine_name, vaccine_type, record_status, applied_at, next_due_at, recorded_by, schema_version)
- * - ClinicalEvent (event_type, status, occurred_at, recorded_at, recorded_by, professional, payload_type, payload_version, schema_version)
- * - ExamProcess (exam_id, case_id, exam_type, current_stage, created_at, recorded_by, schema_version)
+ * - VaccinationRecord (vaccine_name, vaccine_type, record_status: final, applied_at, next_due_at, recorded_by, schema_version)
+ * - ClinicalEvent (event_type, status, occurred_at, recorded_at, recorded_by, professional, content, payload_type, payload_version, schema_version)
+ * - ExamProcess (exam_id, case_id, exam_type, title, current_stage: interpreted, created_at, recorded_by, interpreted_at, interpreted_by, interpretation_professional, interpretation_text, interpretation_document_id, schema_version)
  * - NutritionPlan (status, food_type, amount_grams_per_day, meals_per_day, vigent_from, recorded_by, created_at, schema_version)
  */
 
@@ -18,15 +18,22 @@ import { buildHealthSummary } from "../health-summary-builder";
 const fixedNow = new Date("2026-08-09T12:00:00.000Z");
 const dogId = "k9-trigger-e2e";
 
-const canonicalRecordedBy = {
-  ra: "12345",
-  name: "Cabo Silva",
-  role: "handler",
+const CANONICAL_RECORDED_BY = {
+  uid: "user-test-001",
+  name: "GCM Teste",
+  internal_role: "condutor" as const,
 };
 
-const canonicalProfessional = {
+const CANONICAL_PROFESSIONAL = {
   name: "Dr. Oliveira",
-  crmv: "CRMV-SP 9999",
+  registration_type: "CRMV",
+  registration_number: "SP-9999",
+  clinic: "Clínica Veterinária Central",
+};
+
+const CANONICAL_SOURCE_DOC = {
+  health_document_id: "doc-restriction-test",
+  description: "Laudo clínico de lesão articular",
 };
 
 describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
@@ -36,11 +43,13 @@ describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
       {
         id: "r1",
         level: "absolute",
-        category: "operational",
-        description: "Repouso veterinário absoluto",
+        category: "injury",
+        description: "Repouso absoluto por lesão articular",
         activities_restricted: ["all_activities"],
         issued_at: fixedNow,
-        recorded_by: canonicalRecordedBy,
+        recorded_by: CANONICAL_RECORDED_BY,
+        professional: CANONICAL_PROFESSIONAL,
+        source_document: CANONICAL_SOURCE_DOC,
         status: "active",
         schema_version: 1,
         expected_end: pastExpectedEnd,
@@ -51,7 +60,7 @@ describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
     expect(summaryActive.readiness_status).toBe("temporarily_unfit");
     expect(summaryActive.restriction_count.absolute).toBe(1);
     expect(summaryActive.active_restrictions[0].is_overdue).toBe(true);
-    expect(summaryActive.open_alerts).toHaveLength(1);
+    expect(summaryActive.open_alerts).toHaveLength(0); // Immediate overdue alert omitted per prompt §8
   });
 
   it("2. WeightAssessment canonical write -> updates last_weight summary", async () => {
@@ -63,14 +72,52 @@ describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
           weight_kg: 36.5,
           measured_at: fixedNow,
           bcs: 5,
-          recorded_by: canonicalRecordedBy,
+          recorded_by: CANONICAL_RECORDED_BY,
+          schema_version: 1,
+        },
+      ],
+      vaccinationRecords: [
+        {
+          id: "v101",
+          vaccine_name: "Raiva Canina",
+          vaccine_type: "viral",
+          record_status: "final",
+          applied_at: fixedNow,
+          next_due_at: new Date("2027-08-09T12:00:00.000Z"),
+          recorded_by: CANONICAL_RECORDED_BY,
+          schema_version: 1,
+        },
+      ],
+      nutritionPlans: [
+        {
+          id: "nut-1",
+          status: "active",
+          food_type: "Ração Prescrita Hipercalórica",
+          amount_grams_per_day: 450,
+          meals_per_day: 2,
+          vigent_from: fixedNow,
+          recorded_by: CANONICAL_RECORDED_BY,
+          created_at: fixedNow,
           schema_version: 1,
         },
       ],
       clinicalCases: [
         {
           id: "c-1",
-          events: [{ event_type: "consultation", status: "final", occurred_at: fixedNow, recorded_at: fixedNow, recorded_by: canonicalRecordedBy, professional: canonicalProfessional, payload_type: "none", payload_version: 1, schema_version: 1 }],
+          events: [
+            {
+              event_type: "consultation",
+              status: "final",
+              occurred_at: fixedNow,
+              recorded_at: fixedNow,
+              recorded_by: CANONICAL_RECORDED_BY,
+              professional: CANONICAL_PROFESSIONAL,
+              content: "Consulta de rotina",
+              payload_type: "consultation_v1",
+              payload_version: 1,
+              schema_version: 1,
+            },
+          ],
         },
       ],
       now: fixedNow,
@@ -79,6 +126,7 @@ describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
     expect(summary.last_weight?.kg).toBe(36.5);
     expect(summary.last_weight?.bcs).toBe(5);
     expect(summary.data_completeness.has_recent_weight).toBe(true);
+    expect(summary.readiness_status).toBe("operational");
   });
 
   it("3. VaccinationRecord canonical write -> updates last_vaccination summary", async () => {
@@ -92,7 +140,7 @@ describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
           record_status: "final",
           applied_at: fixedNow,
           next_due_at: new Date("2027-08-09T12:00:00.000Z"),
-          recorded_by: canonicalRecordedBy,
+          recorded_by: CANONICAL_RECORDED_BY,
           schema_version: 1,
         },
       ],
@@ -115,8 +163,9 @@ describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
               status: "final",
               occurred_at: fixedNow,
               recorded_at: fixedNow,
-              recorded_by: canonicalRecordedBy,
-              professional: canonicalProfessional,
+              recorded_by: CANONICAL_RECORDED_BY,
+              professional: CANONICAL_PROFESSIONAL,
+              content: "Exame físico de rotina",
               payload_type: "consultation_v1",
               payload_version: 1,
               schema_version: 1,
@@ -142,9 +191,15 @@ describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
               exam_id: "ex-1",
               case_id: "case-100",
               exam_type: "Ultrassom Abdominal",
+              title: "Ultrassom de Rotina",
               current_stage: "interpreted",
               created_at: fixedNow,
-              recorded_by: canonicalRecordedBy,
+              recorded_by: CANONICAL_RECORDED_BY,
+              interpreted_at: fixedNow,
+              interpreted_by: CANONICAL_RECORDED_BY,
+              interpretation_professional: CANONICAL_PROFESSIONAL,
+              interpretation_text: "Dentro da normalidade",
+              interpretation_document_id: "doc-exam-001",
               schema_version: 1,
             },
           ],
@@ -169,7 +224,7 @@ describe("HW-3P Canonical Firestore Triggers End-to-End Test Suite", () => {
           amount_grams_per_day: 450,
           meals_per_day: 2,
           vigent_from: fixedNow,
-          recorded_by: canonicalRecordedBy,
+          recorded_by: CANONICAL_RECORDED_BY,
           created_at: fixedNow,
           schema_version: 1,
         },

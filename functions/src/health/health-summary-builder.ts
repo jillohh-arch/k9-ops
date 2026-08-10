@@ -1,23 +1,24 @@
 /**
- * K9 Ops Backend — Health Web v1 HW-3P Final Closure Gate
+ * K9 Ops Backend — Health Web v1 HW-3P Final Contract Closure
  * Pure Health Summary Projection Producer
  *
  * Implements server-side readiness projection logic according to:
  * - HEALTH_V1_FIRESTORE_SCHEMA.md
  * - HEALTH_V1_READINESS_POLICY.md
- * - HW-3P Final Closure Gate Approved Configurable Defaults
+ * - HW-3P Final Contract Closure Directives
  *
  * CRITICAL MANDATES:
  * - PURE FUNCTION: 100% testable without Firestore or mocks.
- * - Health v1 approved configurable defaults: weightRecencyDays = 90, consultationRecencyDays = 180.
+ * - Approved Defaults: weightRecencyDays = 90, consultationRecencyDays = 180, vaccinationRequired = true, nutritionRequired = true.
  * - Parses canonical Firestore wire schemas:
- *   - OperationalRestriction: level, category, description, activities_restricted, issued_at, recorded_by, status, schema_version, expected_end
- *   - WeightAssessment: weight_kg, measured_at, recorded_by, schema_version
+ *   - OperationalRestriction: level, category (injury, post_surgical, etc.), description, activities_restricted, issued_at, recorded_by { uid, name, internal_role }, professional, source_document, status, schema_version, expected_end
+ *   - WeightAssessment: weight_kg, measured_at, recorded_by { uid, name, internal_role }, schema_version
  *   - VaccinationRecord: vaccine_name, vaccine_type, record_status, applied_at, next_due_at/validity_until, recorded_by, schema_version
- *   - ClinicalEvent: event_type, status, occurred_at, recorded_at, recorded_by, professional, payload_type, payload_version, schema_version
- *   - ExamProcess: exam_id, case_id, exam_type, current_stage, created_at, recorded_by, schema_version
+ *   - ClinicalEvent: event_type, status, occurred_at, recorded_at, recorded_by, professional, content, payload_type, payload_version, schema_version
+ *   - ExamProcess: exam_id, case_id, exam_type, current_stage (resulted | interpreted | impact_assessed), title, created_at, recorded_by, schema_version
  *   - NutritionPlan: status, food_type, amount_grams_per_day, meals_per_day, vigent_from, recorded_by, created_at, schema_version
  * - Predicate hasHealthEvaluation strictly requires a clinical evaluation event or restriction.
+ * - is_overdue = true for active restrictions with expected_end < now. Immediate overdue alerts are omitted per policy.
  * - Outputs canonical snake_case wire document with numeric schema_version = 1.
  */
 
@@ -54,16 +55,17 @@ export interface ReadinessThresholdConfig {
 }
 
 /**
- * Health v1 approved configurable defaults:
+ * Health v1 approved defaults:
  * - weightRecencyDays: 90
  * - consultationRecencyDays: 180
- * Note: These are configurable parameters, not hardcoded immutable clinical constants.
+ * - vaccinationRequired: true
+ * - nutritionRequired: true
  */
 export const DEFAULT_PRODUCTION_THRESHOLDS: ReadinessThresholdConfig = {
   weightRecencyDays: 90,
   consultationRecencyDays: 180,
-  vaccinationRequired: false,
-  nutritionRequired: false,
+  vaccinationRequired: true,
+  nutritionRequired: true,
 };
 
 export interface SourceDocument {
@@ -250,21 +252,10 @@ export function buildHealthSummary(
     const expectedEnd = parseDate(r.expected_end ?? r.expectedEnd);
     const isOverdue = Boolean(expectedEnd && expectedEnd.getTime() < now.getTime());
 
-    if (isOverdue) {
-      open_alerts.push({
-        id: `alert-overdue-restriction-${r.id}`,
-        type: "restriction_reevaluation_overdue",
-        severity: "medium",
-        message: `Reavaliação de restrição vencida (${String(r.description ?? "Restrição")})`,
-        restriction_id: String(r.id),
-        expected_end: expectedEnd!.toISOString(),
-      });
-    }
-
     return {
       id: String(r.id),
       level: String(r.level ?? r.type ?? "attention").toLowerCase(),
-      category: String(r.category ?? "operational"),
+      category: String(r.category ?? "other"),
       description: String(r.description ?? r.reason ?? "Restrição ativa"),
       activities_restricted: Array.isArray(r.activities_restricted)
         ? (r.activities_restricted as string[])
@@ -278,7 +269,6 @@ export function buildHealthSummary(
   });
 
   // 2. Extract Evidence Summaries from Canonical Schemas
-  // Weight Records: weight_kg, measured_at, bcs
   const weightRecords = input.weightRecords ?? [];
   const validWeights = weightRecords
     .map((w) => ({ doc: w, date: parseDate(w.measured_at ?? w.measuredAt) }))
@@ -287,11 +277,9 @@ export function buildHealthSummary(
 
   const lastWeightDoc = validWeights.length > 0 ? validWeights[0] : null;
 
-  // Nutrition Plans: status == 'active', food_type, amount_grams_per_day / daily_amount_g
   const nutritionPlans = input.nutritionPlans ?? [];
   const activeNutrition = nutritionPlans.find((n) => String(n.status ?? "active").toLowerCase() === "active");
 
-  // VaccinationRecords: record_status == 'final', vaccine_name/vaccine_type, applied_at, next_due_at/validity_until
   const vaccinationRecords = input.vaccinationRecords ?? [];
   const validVaccinations = vaccinationRecords
     .filter((v) => String(v.record_status ?? "final").toLowerCase() !== "cancelled")
@@ -305,7 +293,6 @@ export function buildHealthSummary(
     : null;
   const has_vaccination_current = Boolean(lastVaccineDoc && (!vaccineNextDue || vaccineNextDue.getTime() >= now.getTime()));
 
-  // Clinical Cases, ClinicalEvents & ExamProcesses
   const clinicalCases = input.clinicalCases ?? [];
   const activeCases = clinicalCases.filter((c) => {
     const st = String(c.clinical_status ?? c.status ?? "open").toLowerCase();
@@ -346,7 +333,7 @@ export function buildHealthSummary(
   const lastExamDoc = validExams.length > 0 ? validExams[0] : null;
   const lastConsultationDoc = validConsultations.length > 0 ? validConsultations[0] : null;
 
-  // 3. Evaluate Data Completeness Fact Booleans with Approved Defaults (90d weight)
+  // 3. Evaluate Data Completeness Fact Booleans
   let has_recent_weight = false;
   if (lastWeightDoc) {
     if (thresholds.weightRecencyDays !== null) {
@@ -385,7 +372,7 @@ export function buildHealthSummary(
     readiness_status = "not_evaluated";
     readiness_reason = "Nenhuma avaliação registrada";
   } else {
-    // Check if configured thresholds generate attention (90d weight, 180d consultation)
+    // Check if configured thresholds generate attention (90d weight, 180d consultation, vaccine, nutrition)
     const gaps: string[] = [];
     if (thresholds.weightRecencyDays !== null && !has_recent_weight) {
       gaps.push(`Pesagem em atraso (> ${thresholds.weightRecencyDays} dias)`);
@@ -473,7 +460,6 @@ export function buildHealthSummary(
   const existingReason = existingSummary ? String(existingSummary.readiness_reason ?? "") : "";
   const existingReadinessUpdatedAt = existingSummary ? parseDate(existingSummary.readiness_updated_at) : null;
 
-  // Update readiness_updated_at ONLY if readiness_status or readiness_reason changed or if missing
   let readiness_updated_at = existingReadinessUpdatedAt ?? now;
   if (!existingSummary || existingStatus !== readiness_status || existingReason !== readiness_reason) {
     readiness_updated_at = now;

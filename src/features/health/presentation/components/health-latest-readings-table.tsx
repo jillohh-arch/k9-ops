@@ -7,7 +7,7 @@
  * NO raw technical enums or raw Firestore paths in UI.
  */
 
-import { Dog, CheckCircle2, AlertTriangle, AlertCircle, ShieldOff, HelpCircle, Database } from "lucide-react";
+import { Dog, CheckCircle2, AlertTriangle, AlertCircle, ShieldOff, HelpCircle, Database, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReadinessListItem, ReadinessStatus } from "../../domain/readiness-types";
 
@@ -73,20 +73,28 @@ export function HealthLatestReadingsTable({
 }: HealthLatestReadingsTableProps) {
   return (
     <div
-      className="flex flex-col gap-4 rounded-xl border border-border/60 bg-card p-5 shadow-sm overflow-hidden"
+      className="relative flex flex-col gap-4 overflow-hidden rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
       data-testid="health-latest-readings-table"
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-semibold tracking-tight text-foreground">
-            Última leitura por K9
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            Registro consolidado da projeção de prontidão canônica por cão.
-          </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-300">
+            <FileText className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300/90">
+              Projeção canônica
+            </p>
+            <h3 className="mt-1 text-base font-semibold tracking-tight text-foreground">
+              Última leitura por K9
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Registro consolidado da projeção de prontidão canônica por cão.
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
           <Database className="h-3 w-3 text-primary" aria-hidden="true" />
           <span>Fonte: Canônica</span>
         </div>
@@ -94,7 +102,7 @@ export function HealthLatestReadingsTable({
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
-          <thead className="border-b border-border/60 bg-muted/30 text-[11px] uppercase font-semibold text-muted-foreground">
+          <thead className="border-b border-border bg-muted/30 text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">
             <tr>
               <th className="py-2.5 px-3">Cão / Matrícula</th>
               <th className="py-2.5 px-3">Status Operacional</th>
@@ -129,8 +137,20 @@ export function HealthLatestReadingsTable({
                 return (
                   <tr key={item.dog.id} className="hover:bg-muted/20 transition-colors">
                     <td className="py-3 px-3">
-                      <div className="flex items-center gap-2">
-                        <Dog className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                      {/* First column carries K9 identity (HW-M01): photo + name + matrícula. */}
+                      <div className="flex items-center gap-2.5">
+                        {item.dog.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.dog.photoUrl}
+                            alt={item.dog.name}
+                            className="h-8 w-8 shrink-0 rounded-lg border border-cyan-200/20 object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-200/20 bg-muted/60 text-muted-foreground">
+                            <Dog className="h-4 w-4" aria-hidden="true" />
+                          </span>
+                        )}
                         <span className="font-semibold text-foreground">{item.dog.name}</span>
                         {item.dog.registrationNumber && (
                           <span className="text-[10px] text-muted-foreground font-mono">

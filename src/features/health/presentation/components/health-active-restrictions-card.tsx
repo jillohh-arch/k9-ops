@@ -7,7 +7,7 @@
  * - NO release, edit, create, or cancel buttons!
  */
 
-import { ShieldAlert, AlertCircle, CheckCircle2, Clock, HelpCircle } from "lucide-react";
+import { ShieldAlert, ShieldCheck, AlertCircle, Clock, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OperationalRestrictionReadModel } from "../../domain/readiness-types";
 
@@ -25,39 +25,67 @@ export function HealthActiveRestrictionsCard({
   const cannotAffirmAbsence = restrictions.length === 0 && !coverageComplete;
   return (
     <div
-      className="flex flex-col justify-between rounded-xl border border-border/60 bg-card p-5 shadow-sm"
+      className="relative flex flex-col overflow-hidden rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
       data-testid="health-active-restrictions-card"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="h-4 w-4 text-red-500" aria-hidden="true" />
-          <h3 className="text-sm font-semibold text-foreground">
-            Restrições operacionais ativas
-          </h3>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-500/25 bg-red-500/10 text-red-400">
+            <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300/90">
+              Restrições ativas
+            </p>
+            <h3 className="mt-1 text-sm font-semibold text-foreground">
+              Restrições operacionais ativas
+            </h3>
+          </div>
         </div>
-        <span className="text-xs font-semibold text-muted-foreground">
+        <span className="shrink-0 rounded-lg border border-border bg-muted/30 px-2 py-1 text-[11px] font-bold tabular-nums text-muted-foreground">
           {restrictions.length} {restrictions.length === 1 ? "restrição" : "restrições"}
         </span>
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
         {cannotAffirmAbsence ? (
+          /* Nested technical state: weaker border than the structural panel. */
           <div
-            className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground"
+            className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 p-3.5 text-xs text-muted-foreground"
             data-testid="health-restrictions-unavailable"
           >
-            <HelpCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-500/25 bg-slate-500/10 text-slate-300">
+              <HelpCircle className="h-4 w-4" aria-hidden="true" />
+            </span>
             <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                Cobertura parcial
+              </span>
               <span className="font-semibold text-foreground">Restrições indisponíveis</span>
-              <span>
+              <span className="leading-relaxed">
                 Não foi possível confirmar as restrições ativas com os dados disponíveis.
               </span>
             </div>
           </div>
         ) : restrictions.length === 0 ? (
-          <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-400">
-            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Nenhuma restrição operacional ativa no efetivo.</span>
+          /*
+           * Designed empty state (HW-M01): a shield anchors the panel instead of
+           * leaving a large blank region. Affirmative only because every read
+           * succeeded — see `cannotAffirmAbsence` above.
+           */
+          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-8 text-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.16)]">
+              <ShieldCheck className="h-7 w-7" aria-hidden="true" />
+            </span>
+            <div>
+              {/* Exact runtime claim — asserted by the degraded-semantics tests. */}
+              <p className="text-sm font-semibold text-foreground">
+                Nenhuma restrição operacional ativa no efetivo.
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Nenhum K9 possui bloqueio clínico ou limitação operacional.
+              </p>
+            </div>
           </div>
         ) : (
           restrictions.map((r) => {

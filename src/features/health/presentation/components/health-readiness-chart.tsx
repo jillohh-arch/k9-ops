@@ -64,19 +64,29 @@ export function HealthReadinessChart({
 
   return (
     <div
-      className="flex flex-col justify-between rounded-xl border border-border/60 bg-card p-5 shadow-sm"
+      className="relative flex flex-col overflow-hidden rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
       data-testid="health-readiness-chart"
     >
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">
-          Situação Geral da Prontidão
-        </h3>
-        <span className="text-xs text-muted-foreground">
+      <div
+        className="pointer-events-none absolute -left-16 -top-20 h-52 w-52 rounded-full bg-cyan-300/[0.07] blur-3xl"
+        aria-hidden="true"
+      />
+
+      <div className="relative flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300/90">
+            Prontidão operacional
+          </p>
+          <h3 className="mt-1 text-sm font-semibold text-foreground">
+            Situação geral da prontidão
+          </h3>
+        </div>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {totalMonitored} cães monitorados
         </span>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 items-center gap-6 sm:grid-cols-2">
+      <div className="relative mt-4 grid grid-cols-1 items-center gap-6 sm:grid-cols-2">
         {/* SVG Donut Chart */}
         <div className="relative flex items-center justify-center">
           <svg
@@ -86,6 +96,10 @@ export function HealthReadinessChart({
             role="img"
           >
             {svgArcs.length === 0 ? (
+              /*
+               * No valid projection distribution. The track is rendered as an
+               * explicitly inert ring — never a fabricated segment or percentage.
+               */
               <circle
                 cx="50"
                 cy="50"
@@ -93,7 +107,8 @@ export function HealthReadinessChart({
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="14"
-                className="text-muted/20"
+                strokeDasharray="3 6"
+                className="text-slate-500/25"
               />
             ) : (
               svgArcs.map((arc) => (
@@ -111,19 +126,32 @@ export function HealthReadinessChart({
           </svg>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <span className="text-2xl font-bold tracking-tight text-foreground">
-              {totalMonitored}
-            </span>
-            <span className="text-[11px] font-medium text-muted-foreground">
-              Monitorados
-            </span>
+            {svgArcs.length === 0 ? (
+              <>
+                <span className="text-2xl font-black leading-none text-slate-400">
+                  —
+                </span>
+                <span className="mt-1 max-w-[7rem] text-[9px] font-black uppercase leading-tight tracking-[0.18em] text-slate-400">
+                  Distribuição indisponível
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-2xl font-black tabular-nums tracking-tight text-foreground">
+                  {totalMonitored}
+                </span>
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  Monitorados
+                </span>
+              </>
+            )}
           </div>
         </div>
 
         {/* Legend */}
         <div className="flex flex-col gap-2.5">
           {donutData.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               Sem dados de prontidão disponíveis no escopo atual.
             </p>
           ) : (
@@ -141,8 +169,8 @@ export function HealthReadinessChart({
                   <span className="font-medium text-foreground">{seg.label}</span>
                 </div>
                 <div className="flex items-center gap-1.5 font-semibold">
-                  <span className="text-foreground">{seg.count}</span>
-                  <span className="text-muted-foreground text-[10px]">
+                  <span className="tabular-nums text-foreground">{seg.count}</span>
+                  <span className="text-muted-foreground text-[10px] tabular-nums">
                     ({seg.percentage}%)
                   </span>
                 </div>

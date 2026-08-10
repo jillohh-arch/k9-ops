@@ -1,7 +1,13 @@
 "use client";
 
 import { type ReactNode } from "react";
-import { Activity } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Clock,
+  Package,
+  RefreshCw,
+} from "lucide-react";
 import { HealthSecondaryNavigation } from "./health-secondary-navigation";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +27,15 @@ interface HealthModuleShellProps {
   };
   /** Whether to show secondary navigation */
   showNavigation?: boolean;
+  /**
+   * Suppresses the shell's own title/description row.
+   *
+   * Pages that render their own full identity region (e.g. the overview, whose
+   * approved composition in HW-M01 has a single header) would otherwise show
+   * two nearly identical Health titles stacked around the tabs. The technical
+   * state strip is unaffected and still renders here.
+   */
+  hideModuleHeading?: boolean;
   /** Override active nav key */
   activeNavKey?: "overview" | "readiness" | "schedule" | "clinical" | "nutrition" | "history" | "reports";
   /** Child content */
@@ -60,6 +75,7 @@ export function HealthModuleShell({
   children,
   contentClassName,
   technicalState,
+  hideModuleHeading = false,
 }: HealthModuleShellProps) {
   return (
     <div
@@ -67,35 +83,44 @@ export function HealthModuleShell({
       data-testid="health-module-shell"
     >
       {/* Module Header */}
-      <header className="border-b border-border bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Activity className="h-5 w-5 text-primary" aria-hidden="true" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-              {description && (
-                <p className="text-sm text-muted-foreground">{description}</p>
+      {(!hideModuleHeading || actions || technicalState) && (
+        <header className="border-b border-border bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          {(!hideModuleHeading || actions) && (
+            <div className="flex items-start justify-between gap-4">
+              {!hideModuleHeading && (
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                    <Activity className="h-5 w-5 text-primary" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+                    {description && (
+                      <p className="text-sm text-muted-foreground">{description}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Header Actions */}
+              {actions && (
+                <div className={cn("flex items-center gap-2", hideModuleHeading && "ml-auto")}>
+                  {actions}
+                </div>
               )}
             </div>
-          </div>
-
-          {/* Header Actions */}
-          {actions && (
-            <div className="flex items-center gap-2">{actions}</div>
           )}
-        </div>
 
-        {/* Technical State Warning */}
-        {technicalState && (
-          <TechnicalStateBanner
-            status={technicalState.status}
-            message={technicalState.message}
-            computedAt={technicalState.computedAt}
-          />
-        )}
-      </header>
+          {/* Technical State Warning */}
+          {technicalState && (
+            <TechnicalStateBanner
+              status={technicalState.status}
+              message={technicalState.message}
+              computedAt={technicalState.computedAt}
+              spaced={!hideModuleHeading || Boolean(actions)}
+            />
+          )}
+        </header>
+      )}
 
       {/* Dog Context Card */}
       {dogContext && (
@@ -132,49 +157,104 @@ function TechnicalStateBanner({
   status,
   message,
   computedAt,
+  spaced = true,
 }: {
   status: NonNullable<HealthModuleShellProps["technicalState"]>["status"];
   message: string;
   computedAt?: Date;
+  /** Adds top spacing only when something is rendered above the strip. */
+  spaced?: boolean;
 }) {
+  /**
+   * K9 Ops operational status strip.
+   *
+   * These are TECHNICAL coverage states, not clinical alarms, so the treatment
+   * stays dark navy with a low-alpha semantic tint — the same grammar the
+   * Training module uses for attention banners. `label` only names the
+   * technical category already carried by `status`; the runtime `message` is
+   * always rendered verbatim so no meaning is added or softened.
+   */
   const statusConfig = {
     stale: {
-      className: "bg-amber-50 border-amber-200 text-amber-900",
-      icon: "⏰",
+      label: "Leitura desatualizada",
+      surface: "border-amber-300/20 bg-amber-300/[0.06]",
+      tile: "border-amber-300/25 bg-amber-300/10 text-amber-300",
+      micro: "text-amber-300/85",
+      title: "text-amber-100",
+      Icon: Clock,
     },
     degraded: {
-      className: "bg-orange-50 border-orange-200 text-orange-900",
-      icon: "⚠️",
+      label: "Cobertura degradada",
+      surface: "border-amber-300/20 bg-amber-300/[0.06]",
+      tile: "border-amber-300/25 bg-amber-300/10 text-amber-300",
+      micro: "text-amber-300/85",
+      title: "text-amber-100",
+      Icon: AlertTriangle,
     },
     partial: {
-      className: "bg-yellow-50 border-yellow-200 text-yellow-900",
-      icon: "📉",
+      label: "Cobertura parcial",
+      surface: "border-amber-300/20 bg-amber-300/[0.06]",
+      tile: "border-amber-300/25 bg-amber-300/10 text-amber-300",
+      micro: "text-amber-300/85",
+      title: "text-amber-100",
+      Icon: AlertTriangle,
     },
     conflict: {
-      className: "bg-red-50 border-red-200 text-red-900",
-      icon: "🔄",
+      label: "Conflito de dados",
+      surface: "border-red-400/20 bg-red-400/[0.06]",
+      tile: "border-red-400/25 bg-red-400/10 text-red-300",
+      micro: "text-red-300/85",
+      title: "text-red-100",
+      Icon: RefreshCw,
     },
     legacy: {
-      className: "bg-blue-50 border-blue-200 text-blue-900",
-      icon: "📦",
+      label: "Origem legada",
+      surface: "border-indigo-400/20 bg-indigo-400/[0.06]",
+      tile: "border-indigo-400/25 bg-indigo-400/10 text-indigo-300",
+      micro: "text-indigo-300/85",
+      title: "text-indigo-100",
+      Icon: Package,
     },
   };
 
   const config = statusConfig[status];
+  const Icon = config.Icon;
 
   return (
     <div
       className={cn(
-        "mt-3 flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
-        config.className,
+        "flex items-start gap-3 rounded-2xl border px-4 py-3",
+        spaced && "mt-3",
+        config.surface,
       )}
       role="status"
       aria-live="polite"
     >
-      <span aria-hidden="true">{config.icon}</span>
-      <span>{message}</span>
+      <span
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
+          config.tile,
+        )}
+      >
+        <Icon className="h-4 w-4" aria-hidden="true" />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            "text-[10px] font-black uppercase tracking-[0.22em]",
+            config.micro,
+          )}
+        >
+          {config.label}
+        </p>
+        <p className={cn("mt-1 text-sm font-semibold leading-snug", config.title)}>
+          {message}
+        </p>
+      </div>
+
       {computedAt && (
-        <span className="ml-auto text-xs opacity-75">
+        <span className="shrink-0 pt-1 text-[11px] tabular-nums text-muted-foreground">
           Atualizado em {computedAt.toLocaleTimeString("pt-BR")}
         </span>
       )}

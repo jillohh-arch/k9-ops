@@ -67,6 +67,12 @@ export default function HealthOverviewPage() {
       description="Visão geral do efetivo K9"
       activeNavKey="overview"
       technicalState={technicalState}
+      /*
+       * HW-M01 composes a single overview header. HealthOverviewHeader carries
+       * the full identity region below, so the shell's own title row is
+       * suppressed here to avoid two nearly identical Health titles.
+       */
+      hideModuleHeading
     >
       <div className="flex flex-col gap-6" data-testid="health-overview-container">
         {status === "loading" && <HealthOverviewSkeleton />}

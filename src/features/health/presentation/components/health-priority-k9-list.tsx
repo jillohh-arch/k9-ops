@@ -86,17 +86,25 @@ export function HealthPriorityK9List({
 
   return (
     <div
-      className="flex flex-col gap-4 rounded-xl border border-border/60 bg-card p-5 shadow-sm"
+      className="relative flex flex-col gap-4 overflow-hidden rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
       data-testid="health-priority-k9-list"
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-semibold tracking-tight text-foreground">
-            Situação dos K9s
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            Listagem priorizada dos cães por nível de atenção clínica e operacional.
-          </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-300/25 bg-cyan-300/10 text-cyan-300">
+            <Dog className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300/90">
+              K9s que exigem atenção
+            </p>
+            <h3 className="mt-1 text-base font-semibold tracking-tight text-foreground">
+              Situação dos K9s
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Listagem priorizada dos cães por nível de atenção clínica e operacional.
+            </p>
+          </div>
         </div>
 
         <Link
@@ -135,17 +143,21 @@ export function HealthPriorityK9List({
                 className="flex flex-col gap-3 py-3.5 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
               >
                 {/* Dog Identity & Status */}
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3.5">
+                  {/*
+                   * HW-M01 composes the K9 photo as part of the row, not as table
+                   * metadata: a larger rounded-rect frame with a subtle cyan edge.
+                   */}
                   {item.dog.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={item.dog.photoUrl}
                       alt={item.dog.name}
-                      className="h-10 w-10 rounded-full object-cover shrink-0 border border-border"
+                      className="h-14 w-14 shrink-0 rounded-2xl border border-cyan-200/20 object-cover shadow-[0_8px_24px_rgba(0,0,0,0.28)]"
                     />
                   ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/60 text-muted-foreground shrink-0 border border-border">
-                      <Dog className="h-5 w-5" aria-hidden="true" />
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/20 bg-muted/60 text-muted-foreground">
+                      <Dog className="h-6 w-6" aria-hidden="true" />
                     </div>
                   )}
 
@@ -202,7 +214,7 @@ export function HealthPriorityK9List({
                   <Link
                     href={`/health/readiness/${item.dog.id}`}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors",
+                      "inline-flex items-center gap-1 rounded-xl border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm transition-colors",
                       "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     )}
                     aria-label={`Ver cockpit do K9 ${item.dog.name}`}

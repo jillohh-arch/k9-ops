@@ -81,8 +81,15 @@ export function HealthReadinessChart({
             Situação geral da prontidão
           </h3>
         </div>
+        {/*
+          `totalMonitored` is the count of K9s with a VALID canonical projection
+          (use-health-overview.ts: items.filter(i => i.summary !== null).length),
+          not the number of K9s in scope. The label must say so — the scope total
+          is what "Ver todos (n)" reports elsewhere.
+        */}
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-          {totalMonitored} cães monitorados
+          {totalMonitored}{" "}
+          {totalMonitored === 1 ? "projeção válida" : "projeções válidas"}
         </span>
       </div>
 
@@ -140,8 +147,8 @@ export function HealthReadinessChart({
                 <span className="text-2xl font-black tabular-nums tracking-tight text-foreground">
                   {totalMonitored}
                 </span>
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Monitorados
+                <span className="mt-0.5 max-w-[6rem] text-[10px] font-medium leading-tight text-muted-foreground">
+                  {totalMonitored === 1 ? "Projeção válida" : "Projeções válidas"}
                 </span>
               </>
             )}
@@ -152,7 +159,7 @@ export function HealthReadinessChart({
         <div className="flex flex-col gap-2.5">
           {donutData.length === 0 ? (
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Sem dados de prontidão disponíveis no escopo atual.
+              Sem projeções válidas para compor a distribuição do efetivo.
             </p>
           ) : (
             donutData.map((seg) => (

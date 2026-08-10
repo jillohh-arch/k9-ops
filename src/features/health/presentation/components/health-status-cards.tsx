@@ -90,7 +90,7 @@ export function HealthStatusCards({
     {
       key: "not_evaluated",
       label: "Não avaliado",
-      description: "avaliado como não determinado",
+      description: "avaliação não registrada",
       count: counts.not_evaluated,
       icon: HelpCircle,
       bgClass: "bg-slate-500/10",

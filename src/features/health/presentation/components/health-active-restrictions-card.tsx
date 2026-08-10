@@ -7,17 +7,22 @@
  * - NO release, edit, create, or cancel buttons!
  */
 
-import { ShieldAlert, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { ShieldAlert, AlertCircle, CheckCircle2, Clock, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OperationalRestrictionReadModel } from "../../domain/readiness-types";
 
 interface HealthActiveRestrictionsCardProps {
   restrictions: OperationalRestrictionReadModel[];
+  /** False when any restrictions read failed — absence must not be affirmed. */
+  coverageComplete?: boolean;
 }
 
 export function HealthActiveRestrictionsCard({
   restrictions,
+  coverageComplete = true,
 }: HealthActiveRestrictionsCardProps) {
+  // Absence of restrictions may only be affirmed when every read succeeded.
+  const cannotAffirmAbsence = restrictions.length === 0 && !coverageComplete;
   return (
     <div
       className="flex flex-col justify-between rounded-xl border border-border/60 bg-card p-5 shadow-sm"
@@ -36,7 +41,20 @@ export function HealthActiveRestrictionsCard({
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
-        {restrictions.length === 0 ? (
+        {cannotAffirmAbsence ? (
+          <div
+            className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground"
+            data-testid="health-restrictions-unavailable"
+          >
+            <HelpCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex flex-col gap-1">
+              <span className="font-semibold text-foreground">Restrições indisponíveis</span>
+              <span>
+                Não foi possível confirmar as restrições ativas com os dados disponíveis.
+              </span>
+            </div>
+          </div>
+        ) : restrictions.length === 0 ? (
           <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-400">
             <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>Nenhuma restrição operacional ativa no efetivo.</span>

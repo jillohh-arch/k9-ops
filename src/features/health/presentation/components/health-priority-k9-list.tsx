@@ -18,6 +18,19 @@ interface HealthPriorityK9ListProps {
   selectedStatus?: ReadinessStatus | null;
 }
 
+/**
+ * TECHNICAL state badge — NOT an operational readiness status.
+ * Rendered when there is no valid canonical projection for the K9, so that
+ * "Não avaliado" (a real Backend readiness status) is never faked in the UI.
+ */
+const MISSING_PROJECTION_BADGE = {
+  label: "Sem projeção válida",
+  bg: "bg-muted/40",
+  text: "text-muted-foreground",
+  border: "border-border/70",
+  icon: HelpCircle,
+} as const;
+
 const STATUS_BADGES: Record<
   ReadinessStatus,
   { label: string; bg: string; text: string; border: string; icon: typeof CheckCircle2 }
@@ -63,8 +76,12 @@ export function HealthPriorityK9List({
   items,
   selectedStatus,
 }: HealthPriorityK9ListProps) {
+  // Status filters are OPERATIONAL: only K9s with a valid projection can match a
+  // readiness status card. Keeps card counts and filtered list consistent.
   const filteredItems = selectedStatus
-    ? items.filter((item) => item.readinessStatus === selectedStatus)
+    ? items.filter(
+        (item) => item.summary !== null && item.readinessStatus === selectedStatus,
+      )
     : items;
 
   return (
@@ -98,9 +115,19 @@ export function HealthPriorityK9List({
           </div>
         ) : (
           filteredItems.map((item) => {
-            const badge = STATUS_BADGES[item.readinessStatus as ReadinessStatus] ?? STATUS_BADGES.not_evaluated;
-            const StatusIcon = badge.icon;
             const summary = item.summary;
+
+            /**
+             * CANONICAL INVARIANT: missing projection !== not_evaluated.
+             * `not_evaluated` is a VALID operational readiness status produced by Backend.
+             * A missing/invalid projection is a TECHNICAL read state and must never be
+             * rendered as an operational readiness badge.
+             */
+            const hasValidProjection = summary !== null;
+            const badge = hasValidProjection
+              ? STATUS_BADGES[item.readinessStatus as ReadinessStatus] ?? MISSING_PROJECTION_BADGE
+              : MISSING_PROJECTION_BADGE;
+            const StatusIcon = badge.icon;
 
             return (
               <div
@@ -146,9 +173,11 @@ export function HealthPriorityK9List({
                       </span>
                     </div>
 
-                    {/* Reason */}
+                    {/* Reason — technical explanation when there is no valid projection. */}
                     <p className="text-xs text-muted-foreground line-clamp-1">
-                      {item.reason || "Sem observações de prontidão."}
+                      {hasValidProjection
+                        ? item.reason || "Sem observações de prontidão."
+                        : "A prontidão operacional ainda não pôde ser determinada."}
                     </p>
 
                     {/* Quick Evidence Summaries */}

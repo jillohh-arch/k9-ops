@@ -39,7 +39,12 @@ export function HealthOverviewHeader({
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-1.5 text-xs font-medium">
-          <span className="text-muted-foreground">K9s monitorados:</span>
+          {/*
+            `totalMonitored` counts ONLY K9s with a valid canonical projection,
+            not the total in scope (that appears as "Ver todos (n)").
+            Label states that meaning explicitly.
+          */}
+          <span className="text-muted-foreground">Leituras válidas:</span>
           <span className="font-semibold text-foreground">{totalMonitored}</span>
         </div>
 

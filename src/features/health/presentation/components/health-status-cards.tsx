@@ -88,8 +88,10 @@ export function HealthStatusCards({
   ];
 
   return (
+    // Responsive contract: 2 cols (mobile) -> 3+2 (tablet, incl. 1024) -> 5 across (xl+).
+    // md:grid-cols-5 previously squeezed all five labels into one row at tablet width.
     <div
-      className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5"
+      className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
       data-testid="health-status-cards"
     >
       {cards.map((card) => {
@@ -111,7 +113,8 @@ export function HealthStatusCards({
             aria-label={`${card.label}: ${card.count} cães`}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground line-clamp-1">
+              {/* Full semantic label must stay readable — no ellipsis truncation. */}
+              <span className="text-xs font-medium leading-snug text-muted-foreground">
                 {card.label}
               </span>
               <Icon className={cn("h-4 w-4 shrink-0", card.textClass)} aria-hidden="true" />

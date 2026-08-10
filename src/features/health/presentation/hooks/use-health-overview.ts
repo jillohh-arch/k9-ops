@@ -60,6 +60,18 @@ export interface PendenciesSummary {
   consultGap: number;
   nutritionGap: number;
   totalPendencies: number;
+  /**
+   * K9s in scope whose completeness data could actually be evaluated.
+   * MANDATE: absence of pendencies may only be affirmed over evaluated K9s.
+   */
+  evaluatedCount: number;
+  /** K9s in scope with no interpretable completeness data (missing/degraded projection). */
+  unevaluatedCount: number;
+  /**
+   * True only when every K9 in scope was successfully evaluated.
+   * When false, "zero pendencies" is UNKNOWN, not proven.
+   */
+  coverageComplete: boolean;
 }
 
 export interface HealthOverviewState {
@@ -69,7 +81,10 @@ export interface HealthOverviewState {
   donutData: DonutSegment[];
   priorityK9s: ReadinessListItem[];
   activeRestrictions: OperationalRestrictionReadModel[];
+  /** False when any restrictions read failed — absence cannot be affirmed. */
+  restrictionsCoverageComplete: boolean;
   pendencies: PendenciesSummary;
+  /** K9s with a valid canonical projection (NOT the total in scope). */
   totalMonitored: number;
   attentionRequiredCount: number;
   errorMessage: string | null;
@@ -90,6 +105,11 @@ export function useHealthOverview(): HealthOverviewState {
   const [items, setItems] = useState<ReadinessListItem[]>([]);
   const [activeRestrictions, setActiveRestrictions] = useState<OperationalRestrictionReadModel[]>([]);
   const [isPartial, setIsPartial] = useState<boolean>(false);
+  /**
+   * False when at least one restrictions read failed, so "no active restrictions"
+   * cannot be affirmed for the whole scope.
+   */
+  const [restrictionsCoverageComplete, setRestrictionsCoverageComplete] = useState<boolean>(true);
   const [reloadTrigger, setReloadTrigger] = useState<number>(0);
 
   const refetch = useCallback(async () => {
@@ -134,6 +154,7 @@ export function useHealthOverview(): HealthOverviewState {
         });
 
         let encounteredPartial = false;
+        let restrictionsFullyRead = true;
         const allItems: ReadinessListItem[] = [];
         const allActiveRestrictions: OperationalRestrictionReadModel[] = [];
 
@@ -157,6 +178,7 @@ export function useHealthOverview(): HealthOverviewState {
               allActiveRestrictions.push(...normalized);
             } else if (restrictionsState.status === "error") {
               encounteredPartial = true;
+              restrictionsFullyRead = false;
             }
 
             const listItem = aggregateReadinessListItem({
@@ -175,6 +197,7 @@ export function useHealthOverview(): HealthOverviewState {
         setItems(allItems);
         setActiveRestrictions(allActiveRestrictions);
         setIsPartial(encounteredPartial);
+        setRestrictionsCoverageComplete(restrictionsFullyRead);
         setLoading(false);
       } catch (err: unknown) {
         if (!isSubscribed) return;
@@ -247,19 +270,28 @@ export function useHealthOverview(): HealthOverviewState {
     let vaccineGap = 0;
     let consultGap = 0;
     let nutritionGap = 0;
+    let evaluatedCount = 0;
 
     for (const item of items) {
-      if (item.summary && item.readinessStatus !== "not_evaluated") {
-        const comp = item.summary.dataCompleteness;
-        if (comp) {
-          if (!comp.hasRecentWeight) weightGap += 1;
-          if (!comp.hasVaccinationCurrent) vaccineGap += 1;
-          if (!comp.hasActiveNutrition) nutritionGap += 1;
-        }
+      // Completeness is only evaluable over a valid projection carrying dataCompleteness.
+      const comp = item.summary?.dataCompleteness;
+      const isEvaluable =
+        item.summary !== null && item.readinessStatus !== "not_evaluated" && Boolean(comp);
 
-        if (!item.summary.lastConsultation) {
-          consultGap += 1;
-        }
+      if (!isEvaluable) {
+        continue;
+      }
+
+      evaluatedCount += 1;
+
+      if (comp) {
+        if (!comp.hasRecentWeight) weightGap += 1;
+        if (!comp.hasVaccinationCurrent) vaccineGap += 1;
+        if (!comp.hasActiveNutrition) nutritionGap += 1;
+      }
+
+      if (!item.summary?.lastConsultation) {
+        consultGap += 1;
       }
     }
 
@@ -269,6 +301,10 @@ export function useHealthOverview(): HealthOverviewState {
       consultGap,
       nutritionGap,
       totalPendencies: weightGap + vaccineGap + consultGap + nutritionGap,
+      evaluatedCount,
+      unevaluatedCount: items.length - evaluatedCount,
+      // Absence of pendencies is only PROVEN when every K9 in scope was evaluated.
+      coverageComplete: items.length > 0 && evaluatedCount === items.length,
     };
   }, [items]);
 
@@ -295,6 +331,7 @@ export function useHealthOverview(): HealthOverviewState {
     donutData,
     priorityK9s,
     activeRestrictions,
+    restrictionsCoverageComplete,
     pendencies,
     totalMonitored,
     attentionRequiredCount,

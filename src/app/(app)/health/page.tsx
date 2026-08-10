@@ -42,6 +42,7 @@ export default function HealthOverviewPage() {
     donutData,
     priorityK9s,
     activeRestrictions,
+    restrictionsCoverageComplete,
     pendencies,
     totalMonitored,
     attentionRequiredCount,
@@ -108,7 +109,10 @@ export default function HealthOverviewPage() {
 
             {/* 5. Active Restrictions + Upcoming Schedule */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <HealthActiveRestrictionsCard restrictions={activeRestrictions} />
+              <HealthActiveRestrictionsCard
+                restrictions={activeRestrictions}
+                coverageComplete={restrictionsCoverageComplete}
+              />
               <HealthUpcomingScheduleCard isUnavailable={true} />
             </div>
 

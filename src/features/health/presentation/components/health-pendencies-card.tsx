@@ -7,7 +7,7 @@
  * Read-only summary of gaps affecting readiness.
  */
 
-import { AlertCircle, Scale, Syringe, Stethoscope, Utensils, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Scale, Syringe, Stethoscope, Utensils, CheckCircle2, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PendenciesSummary } from "../hooks/use-health-overview";
 
@@ -16,6 +16,15 @@ interface HealthPendenciesCardProps {
 }
 
 export function HealthPendenciesCard({ pendencies }: HealthPendenciesCardProps) {
+  /**
+   * MANDATE: "no pendency detected" is an affirmative claim.
+   * It may only be rendered when completeness was actually evaluated for the whole scope.
+   * Zero pendencies over incomplete coverage means UNKNOWN, not NONE.
+   */
+  const noCoverage = pendencies.totalPendencies === 0 && !pendencies.coverageComplete;
+  /** Known gaps exist, but some K9s could not be evaluated: report facts + caveat. */
+  const partialCoverage = pendencies.totalPendencies > 0 && !pendencies.coverageComplete;
+
   const items = [
     {
       label: "Pesagens em atraso (> 90 dias)",
@@ -59,16 +68,40 @@ export function HealthPendenciesCard({ pendencies }: HealthPendenciesCardProps) 
             Pendências que afetam a prontidão
           </h3>
         </div>
-        <span className="text-xs font-semibold text-amber-500">
-          {pendencies.totalPendencies} pendências
-        </span>
+        {noCoverage ? (
+          <span className="text-xs font-semibold text-muted-foreground">
+            Indisponível
+          </span>
+        ) : (
+          <span className="text-xs font-semibold text-amber-500">
+            {pendencies.totalPendencies} pendências
+          </span>
+        )}
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
-        {pendencies.totalPendencies === 0 ? (
-          <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-400">
-            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Nenhuma pendência técnica de completude detectada no efetivo.</span>
+        {noCoverage ? (
+          <div
+            className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground"
+            data-testid="health-pendencies-unavailable"
+          >
+            <HelpCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex flex-col gap-1">
+              <span className="font-semibold text-foreground">Pendências indisponíveis</span>
+              <span>
+                Não foi possível avaliar todas as pendências com os dados disponíveis.
+              </span>
+            </div>
+          </div>
+        ) : pendencies.totalPendencies === 0 ? (
+          <div
+            className="flex flex-col gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-400"
+            data-testid="health-pendencies-none"
+          >
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>Nenhuma pendência técnica de completude detectada no efetivo.</span>
+            </div>
           </div>
         ) : (
           items.map((item) => {
@@ -105,6 +138,17 @@ export function HealthPendenciesCard({ pendencies }: HealthPendenciesCardProps) 
               </div>
             );
           })
+        )}
+
+        {partialCoverage && (
+          <p
+            className="text-[11px] leading-relaxed text-muted-foreground"
+            data-testid="health-pendencies-partial-note"
+          >
+            Cobertura parcial: {pendencies.unevaluatedCount}{" "}
+            {pendencies.unevaluatedCount === 1 ? "K9 não pôde" : "K9s não puderam"} ser avaliado
+            {pendencies.unevaluatedCount === 1 ? "" : "s"} com os dados disponíveis.
+          </p>
         )}
       </div>
     </div>

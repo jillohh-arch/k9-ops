@@ -15,6 +15,18 @@ interface HealthLatestReadingsTableProps {
   items: ReadinessListItem[];
 }
 
+/**
+ * TECHNICAL state badge — NOT an operational readiness status.
+ * Used when the K9 has no valid canonical projection.
+ */
+const MISSING_PROJECTION_BADGE = {
+  label: "Sem projeção válida",
+  bg: "bg-muted/40",
+  text: "text-muted-foreground",
+  border: "border-border/70",
+  icon: HelpCircle,
+} as const;
+
 const STATUS_BADGES: Record<
   ReadinessStatus,
   { label: string; bg: string; text: string; border: string; icon: typeof CheckCircle2 }
@@ -100,7 +112,12 @@ export function HealthLatestReadingsTable({
               </tr>
             ) : (
               items.map((item) => {
-                const badge = STATUS_BADGES[item.readinessStatus as ReadinessStatus] ?? STATUS_BADGES.not_evaluated;
+                // INVARIANT: missing projection !== not_evaluated (see priority list).
+                const hasValidProjection = item.summary !== null;
+                const badge = hasValidProjection
+                  ? STATUS_BADGES[item.readinessStatus as ReadinessStatus] ??
+                    MISSING_PROJECTION_BADGE
+                  : MISSING_PROJECTION_BADGE;
                 const StatusIcon = badge.icon;
                 const dateStr = item.updatedAt
                   ? new Date(item.updatedAt).toLocaleString("pt-BR", {
@@ -138,7 +155,9 @@ export function HealthLatestReadingsTable({
                     </td>
 
                     <td className="py-3 px-3 text-muted-foreground max-w-xs truncate">
-                      {item.reason || "Nenhuma avaliação registrada"}
+                      {hasValidProjection
+                        ? item.reason || "Nenhuma avaliação registrada"
+                        : "A prontidão operacional ainda não pôde ser determinada."}
                     </td>
 
                     <td className="py-3 px-3 text-muted-foreground whitespace-nowrap font-mono text-[11px]">

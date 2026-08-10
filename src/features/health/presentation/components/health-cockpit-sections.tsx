@@ -215,10 +215,21 @@ export function CockpitRestrictions({
       tone={restrictions.length > 0 ? "red" : "cyan"}
       testId="cockpit-restrictions"
       action={
-        <span className="shrink-0 rounded-lg border border-border bg-muted/30 px-2 py-1 text-[11px] font-bold tabular-nums text-muted-foreground">
-          {restrictions.length}{" "}
-          {restrictions.length === 1 ? "restrição" : "restrições"}
-        </span>
+        /*
+         * A count is an affirmative claim. When the canonical restrictions read
+         * failed, "0 restrições" would assert an absence nobody verified, so the
+         * badge reports the technical state instead.
+         */
+        cannotAffirmAbsence ? (
+          <span className="shrink-0 rounded-lg border border-slate-500/25 bg-slate-500/10 px-2 py-1 text-[11px] font-bold text-slate-300">
+            Indisponível
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-lg border border-border bg-muted/30 px-2 py-1 text-[11px] font-bold tabular-nums text-muted-foreground">
+            {restrictions.length}{" "}
+            {restrictions.length === 1 ? "restrição" : "restrições"}
+          </span>
+        )
       }
     >
       {cannotAffirmAbsence ? (

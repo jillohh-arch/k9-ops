@@ -241,23 +241,50 @@ export function aggregateReadinessCockpit(
    * `reason` records provenance so the cockpit can state that a value came from
    * the readiness projection rather than from a detailed aggregate reader, and
    * so drill-down stays disabled until that reader/route exists.
+   *
+   * Unavailability has THREE distinct causes and they must not be conflated —
+   * saying "not integrated" about an integrated domain is itself a false claim:
+   *
+   *   NOT_INTEGRATED — no reader exists at all (today: health_timeline only)
+   *   NO_PROJECTION  — the whole summary could not be read
+   *   ABSENT_FIELD   — summary read fine, but it carries no digest for this domain
    */
-  const pendingIntegration = <T = unknown>(domain: string): EvidenceAvailability<T> => ({
+  const notIntegrated = <T = unknown>(domain: string): EvidenceAvailability<T> => ({
     available: false,
     reason: `${domain}: leitura detalhada ainda não integrada nesta versão.`,
     data: null,
   });
 
+  /** Summary itself unavailable: the digest cannot exist, so say exactly that. */
+  const noProjection = <T = unknown>(): EvidenceAvailability<T> => ({
+    available: false,
+    reason: "Sem projeção válida para disponibilizar este resumo.",
+    data: null,
+  });
+
+  /** Summary read successfully, but this domain has no projected digest. */
+  const absentInProjection = <T = unknown>(copy: string): EvidenceAvailability<T> => ({
+    available: false,
+    reason: copy,
+    data: null,
+  });
+
   const PROJECTED_REASON = "Resumo projetado da prontidão canônica.";
 
-  /** Present projected digest -> available; absent/null -> unavailable, never zero. */
+  /**
+   * Present projected digest -> available.
+   * Absent -> unavailable, never zero, with the reason distinguishing "no valid
+   * projection at all" from "projection valid but this digest is absent".
+   */
   const projected = <T>(
     value: T | null | undefined,
-    domain: string
-  ): EvidenceAvailability<T> =>
-    value == null
-      ? pendingIntegration(domain)
-      : { available: true, reason: PROJECTED_REASON, data: value };
+    absentCopy: string
+  ): EvidenceAvailability<T> => {
+    if (value != null) {
+      return { available: true, reason: PROJECTED_REASON, data: value };
+    }
+    return summary === null ? noProjection<T>() : absentInProjection<T>(absentCopy);
+  };
 
   return {
     dog: listItem.dog,
@@ -266,8 +293,14 @@ export function aggregateReadinessCockpit(
     readinessLabel: listItem.readinessLabel,
     reason: listItem.reason,
     restrictions: allRestrictions,
-    vaccinationEvidence: projected(summary?.lastVaccination ?? null, "Vacinação"),
-    weightEvidence: projected(summary?.lastWeight ?? null, "Peso"),
+    vaccinationEvidence: projected(
+      summary?.lastVaccination ?? null,
+      "Dado de vacinação não disponível nesta projeção.",
+    ),
+    weightEvidence: projected(
+      summary?.lastWeight ?? null,
+      "Dado de peso não disponível nesta projeção.",
+    ),
     scheduleSummary: summary
       ? {
           available: true,
@@ -277,8 +310,11 @@ export function aggregateReadinessCockpit(
             overdue: summary.overdueScheduleCount,
           },
         }
-      : pendingIntegration("Agenda"),
-    nutritionSummary: projected(summary?.nutritionPlan ?? null, "Nutrição"),
+      : noProjection(),
+    nutritionSummary: projected(
+      summary?.nutritionPlan ?? null,
+      "Dado nutricional não disponível nesta projeção.",
+    ),
     clinicalSummary: summary
       ? {
           available: true,
@@ -290,9 +326,9 @@ export function aggregateReadinessCockpit(
             lastConsultation: summary.lastConsultation ?? null,
           },
         }
-      : pendingIntegration("Casos clínicos"),
-    // health_timeline has no reader yet: genuinely not integrated.
-    timelineSummary: pendingIntegration("Histórico"),
+      : noProjection(),
+    // health_timeline has no reader at all: the ONLY genuinely unintegrated domain.
+    timelineSummary: notIntegrated("Histórico"),
     freshness: listItem.freshness,
     dataQuality: listItem.dataQuality,
     qualityLabel: listItem.qualityLabel,

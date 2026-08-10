@@ -107,9 +107,16 @@ const cockpitOf = (
   restrictions: CanonicalRestrictionDoc[] = [],
 ) => aggregateReadinessCockpit({ dog: dog(), summary: s, restrictions, now: NOW });
 
+/**
+ * Generic unavailable fixture for "the block states its reason" assertions.
+ *
+ * The wording is a projection-aware one, NOT "leitura detalhada ainda não
+ * integrada": weight is integrated through the projected digest, so claiming it
+ * is unimplemented would be false — the defect this suite now guards against.
+ */
 const unavailable: EvidenceAvailability = {
   available: false,
-  reason: "Peso: leitura detalhada ainda não integrada nesta versão.",
+  reason: "Dado de peso não disponível nesta projeção.",
   data: null,
 };
 
@@ -256,6 +263,19 @@ describe("HW-3D — cockpit restrictions", () => {
     ).toBeDefined();
   });
 
+  it("14b. an unavailable read renders NO '0 restrições' count (false zero)", () => {
+    render(<CockpitRestrictions restrictions={[]} coverageComplete={false} />);
+    // A count asserts an absence nobody verified.
+    expect(screen.queryByText(/0\s+restriç/)).toBeNull();
+    expect(screen.getByText("Indisponível")).toBeDefined();
+  });
+
+  it("14c. a SUCCESSFUL empty read does render the '0 restrições' count", () => {
+    render(<CockpitRestrictions restrictions={[]} coverageComplete />);
+    expect(screen.getByText(/0\s+restriç/)).toBeDefined();
+    expect(screen.queryByText("Indisponível")).toBeNull();
+  });
+
   it("15. a past expected_end does NOT mark an active restriction as ended", () => {
     const past = new Date("2020-01-01T00:00:00.000Z");
     const items = cockpitOf(summary("fit_with_restrictions"), [
@@ -371,6 +391,62 @@ describe("HW-3D — cockpit secondary evidence", () => {
     expect(screen.getByText(/Histórico: leitura detalhada ainda não integrada/)).toBeDefined();
   });
 
+  it("22b. an ABSENT projected digest must NOT claim the domain is unintegrated", () => {
+    // Summary read fine; it simply carries no weight/vaccination/nutrition digest.
+    const c = cockpitOf(summary("operational"));
+    render(
+      <CockpitPreventiveEvidence
+        weightEvidence={c.weightEvidence}
+        vaccinationEvidence={c.vaccinationEvidence}
+        nutritionSummary={c.nutritionSummary}
+      />,
+    );
+
+    expect(screen.getByText("Dado de peso não disponível nesta projeção.")).toBeDefined();
+    expect(screen.getByText("Dado de vacinação não disponível nesta projeção.")).toBeDefined();
+    expect(screen.getByText("Dado nutricional não disponível nesta projeção.")).toBeDefined();
+    // These domains ARE integrated via the projection: never call them unimplemented.
+    expect(screen.queryByText(/ainda não integrada/)).toBeNull();
+  });
+
+  it("22c. no valid summary says so explicitly, not 'not integrated'", () => {
+    const c = cockpitOf(null);
+    render(
+      <>
+        <CockpitPreventiveEvidence
+          weightEvidence={c.weightEvidence}
+          vaccinationEvidence={c.vaccinationEvidence}
+          nutritionSummary={c.nutritionSummary}
+        />
+        <CockpitClinicalContext
+          clinicalSummary={c.clinicalSummary}
+          scheduleSummary={c.scheduleSummary}
+        />
+      </>,
+    );
+
+    expect(
+      screen.getAllByText("Sem projeção válida para disponibilizar este resumo.").length,
+    ).toBe(5);
+    expect(screen.queryByText(/ainda não integrada/)).toBeNull();
+  });
+
+  it("22d. only the timeline is classified as unintegrated", () => {
+    const c = cockpitOf(summary("operational"));
+    const reasons = [
+      c.weightEvidence,
+      c.vaccinationEvidence,
+      c.nutritionSummary,
+      c.scheduleSummary,
+      c.clinicalSummary,
+    ].map((e) => e.reason);
+
+    for (const reason of reasons) {
+      expect(reason).not.toMatch(/ainda não integrada/);
+    }
+    expect(c.timelineSummary.reason).toMatch(/ainda não integrada/);
+  });
+
   it("23. completeness explains coverage without inventing a score", () => {
     render(
       <CockpitCompleteness
@@ -406,7 +482,7 @@ describe("HW-3D — cockpit secondary evidence", () => {
       />,
     );
     expect(
-      screen.getAllByText("Peso: leitura detalhada ainda não integrada nesta versão."),
+      screen.getAllByText("Dado de peso não disponível nesta projeção."),
     ).toHaveLength(3);
   });
 });

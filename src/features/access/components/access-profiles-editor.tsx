@@ -504,7 +504,23 @@ export function PermissionsEditor({
         subtitle="Permissões críticas que exigem atenção redobrada."
         title="Ações sensíveis"
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <SensitiveToggle
+            active={hasPermission(draft, "health", "read")}
+            icon={Eye}
+            label="Pode ler dados Health v1"
+            onToggle={() => onChange(togglePermission(draft, "health", "read"))}
+          />
+          <SensitiveToggle
+            active={hasPermission(draft, "health", "manage_nutrition_plan")}
+            icon={ShieldCheck}
+            label="Pode gerenciar planos alimentares"
+            onToggle={() =>
+              onChange(
+                togglePermission(draft, "health", "manage_nutrition_plan"),
+              )
+            }
+          />
           <SensitiveToggle
             active={hasPermission(draft, "k9", "archive")}
             icon={Archive}

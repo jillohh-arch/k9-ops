@@ -7,6 +7,8 @@ export type AccessAction =
   | "create"
   | "edit"
   | "export"
+  | "manage_nutrition_plan"
+  | "read"
   | "view";
 
 export type AccessModuleId =
@@ -27,8 +29,11 @@ export type AccessModuleId =
   | "training_matrix"
   | "vehicles";
 
+export type AccessModulePermissions = Partial<Record<AccessAction, boolean>> &
+  Record<string, boolean | undefined>;
+
 export type AccessPermissionMap = Partial<
-  Record<AccessModuleId, Partial<Record<AccessAction, boolean>>>
+  Record<AccessModuleId, AccessModulePermissions>
 >;
 
 type AccessActionSeed = {
@@ -170,14 +175,6 @@ export function hasAccessPermission(
   action: AccessAction = "view",
 ) {
   if (!profile || profile.status !== "active") return false;
-  if (
-    moduleId === "health" &&
-    action === "view" &&
-    (profile.permissions.health as Record<string, boolean> | undefined)?.read ===
-      true
-  ) {
-    return true;
-  }
   return profile.permissions[moduleId]?.[action] === true;
 }
 

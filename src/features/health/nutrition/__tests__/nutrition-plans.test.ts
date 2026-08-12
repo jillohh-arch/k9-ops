@@ -466,6 +466,166 @@ describe("K9 Nutrition Plan WEB-N1 Foundation", () => {
       expect(state.activePlan).toEqual(legFallback2);
     });
 
+    // WEB-01B.1R — Falha de LEITURA das fontes legadas não pode virar false empty.
+    // "não consegui ler" é diferente de "não existe plano".
+    describe("WEB-01B.1R: legacy read failure semantics", () => {
+      const PRIMARY_ERR = "Erro ao ler nutritional_prescriptions: permission-denied";
+      const FALLBACK_ERR = "Erro ao ler nutrition_prescriptions: unavailable";
+
+      // A — canonical válido prevalece sobre falha da legada primária
+      it("A: canonical valid + primary legacy read error -> canonical", () => {
+        const active = mockCanonical("can-1", "active");
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [active],
+          legacyPrimary: [],
+          legacyFallback: [],
+          canonicalError: null,
+          legacyPrimaryError: PRIMARY_ERR,
+          parsingErrors: [],
+        });
+        expect(state.status).toBe("canonical");
+        expect(state.activePlan).toEqual(active);
+      });
+
+      // B — canonical válido prevalece sobre falha da legada secundária
+      it("B: canonical valid + secondary legacy read error -> canonical", () => {
+        const active = mockCanonical("can-1", "active");
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [active],
+          legacyPrimary: [],
+          legacyFallback: [],
+          canonicalError: null,
+          legacyFallbackError: FALLBACK_ERR,
+          parsingErrors: [],
+        });
+        expect(state.status).toBe("canonical");
+        expect(state.activePlan).toEqual(active);
+      });
+
+      // C — caso principal do microgate: NÃO pode ser empty
+      it("C: canonical empty + primary read error + secondary empty -> NOT empty (fail-closed)", () => {
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [],
+          legacyPrimary: [],
+          legacyFallback: [],
+          canonicalError: null,
+          legacyPrimaryError: PRIMARY_ERR,
+          parsingErrors: [],
+        });
+        expect(state.status).not.toBe("empty");
+        expect(state.status).toBe("error");
+        expect(state.reason).toBe("firestore-read-error");
+        expect(state.activePlan).toBeNull();
+        expect(state.error).toBe(PRIMARY_ERR);
+      });
+
+      // D — falha só na secundária, com primária legível e vazia
+      it("D: canonical empty + primary empty + secondary read error -> NOT empty (fail-closed)", () => {
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [],
+          legacyPrimary: [],
+          legacyFallback: [],
+          canonicalError: null,
+          legacyFallbackError: FALLBACK_ERR,
+          parsingErrors: [],
+        });
+        expect(state.status).not.toBe("empty");
+        expect(state.status).toBe("error");
+        expect(state.reason).toBe("firestore-read-error");
+        expect(state.error).toBe(FALLBACK_ERR);
+      });
+
+      // E — ambas as legadas falham
+      it("E: canonical empty + both legacy read errors -> NOT empty (fail-closed)", () => {
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [],
+          legacyPrimary: [],
+          legacyFallback: [],
+          canonicalError: null,
+          legacyPrimaryError: PRIMARY_ERR,
+          legacyFallbackError: FALLBACK_ERR,
+          parsingErrors: [],
+        });
+        expect(state.status).not.toBe("empty");
+        expect(state.status).toBe("error");
+        // A fonte de maior prioridade é reportada primeiro
+        expect(state.error).toBe(PRIMARY_ERR);
+      });
+
+      // F — primária ilegível + secundária com plano válido.
+      // Política herdada: a primária tem prioridade e, quando ela não é
+      // enumerável, a secundária NÃO pode assumir (a primária poderia conter
+      // plano mais recente). Mesma regra do primário malformado.
+      it("F: canonical empty + primary read error + secondary valid -> error, no false legacy", () => {
+        const legFallback = mockLegacy("leg-fall-1", "nutrition_prescriptions", "2026-07-12T00:00:00Z");
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [],
+          legacyPrimary: [],
+          legacyFallback: [legFallback],
+          canonicalError: null,
+          legacyPrimaryError: PRIMARY_ERR,
+          parsingErrors: [],
+        });
+        expect(state.status).toBe("error");
+        expect(state.activePlan).toBeNull();
+        expect(state.legacyPlan).toBeNull();
+      });
+
+      // G — primária válida basta, mesmo com secundária ilegível
+      it("G: canonical empty + primary legacy valid + secondary read error -> legacy", () => {
+        const legPrimary = mockLegacy("leg-prim-1", "nutritional_prescriptions", "2026-07-11T00:00:00Z");
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [],
+          legacyPrimary: [legPrimary],
+          legacyFallback: [],
+          canonicalError: null,
+          legacyFallbackError: FALLBACK_ERR,
+          parsingErrors: [],
+        });
+        expect(state.status).toBe("legacy");
+        expect(state.activePlan).toEqual(legPrimary);
+      });
+
+      // H — canonical read error continua fail-closed e tem precedência
+      it("H: canonical read error -> error, no legacy fallback", () => {
+        const legPrimary = mockLegacy("leg-prim-1", "nutritional_prescriptions", "2026-07-11T00:00:00Z");
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [],
+          legacyPrimary: [legPrimary],
+          legacyFallback: [],
+          canonicalError: "Erro ao ler nutrition_plans: unavailable",
+          legacyPrimaryError: PRIMARY_ERR,
+          parsingErrors: [],
+        });
+        expect(state.status).toBe("error");
+        expect(state.reason).toBe("firestore-read-error");
+        expect(state.activePlan).toBeNull();
+        expect(state.error).toBe("Erro ao ler nutrition_plans: unavailable");
+      });
+
+      // Regressão: ausência real continua sendo empty
+      it("no read errors + no plans anywhere -> empty (unchanged)", () => {
+        const state = consolidateActivePlan({
+          dogId: "dog-1",
+          canonicalPlans: [],
+          legacyPrimary: [],
+          legacyFallback: [],
+          canonicalError: null,
+          parsingErrors: [],
+        });
+        expect(state.status).toBe("empty");
+        expect(state.error).toBeNull();
+      });
+    });
+
     // Teste de Fail-Closed 1: Documento canônico ativo malformado não pode ocultar erro
     it("should NOT return legacy plan if a canonical active document is malformed (fail-closed)", () => {
       const legPrimary = mockLegacy("leg-prim-1", "nutritional_prescriptions", "2026-07-10T00:00:00Z");
@@ -570,6 +730,37 @@ describe("K9 Nutrition Plan WEB-N1 Foundation", () => {
       });
       // Consolida e vira empty (sem flicker durante a transição parcial)
       expect(result.current.status).toBe("empty");
+    });
+
+    // WEB-01B.1R — prova end-to-end pelo hook real: um erro no listener legado
+    // não pode ser apresentado como "nenhum plano cadastrado".
+    it("should NOT report empty when the primary legacy listener fails (false empty guard)", () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { result } = renderHook(() => useNutritionPlans("dog-1"));
+
+      act(() => {
+        mockListenersList
+          .find((l) => l.path.endsWith("nutrition_plans"))!
+          .onNext({ docs: [] });
+      });
+      act(() => {
+        mockListenersList
+          .find((l) => l.path.endsWith("nutrition_prescriptions"))!
+          .onNext({ docs: [] });
+      });
+      act(() => {
+        mockListenersList
+          .find((l) => l.path.endsWith("nutritional_prescriptions"))!
+          .onError(new Error("permission-denied"));
+      });
+
+      expect(result.current.status).not.toBe("empty");
+      expect(result.current.status).toBe("error");
+      expect(result.current.reason).toBe("firestore-read-error");
+      expect(result.current.activePlan).toBeNull();
+      // Logging de diagnóstico preservado
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
     });
 
     it("should prevent race conditions and discard stale callbacks when dogId switches rapidly", () => {

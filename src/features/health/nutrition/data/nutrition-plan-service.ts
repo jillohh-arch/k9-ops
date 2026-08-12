@@ -408,6 +408,14 @@ interface ConsolidationInput {
   legacyPrimary: LegacyNutritionPlanView[];
   legacyFallback: LegacyNutritionPlanView[];
   canonicalError: string | null;
+  /**
+   * Falha de LEITURA (listener/query) da coleção legada primária.
+   * Distinta de documento malformado: aqui não conseguimos sequer enumerar a
+   * fonte, portanto não é possível provar ausência de plano.
+   */
+  legacyPrimaryError?: string | null;
+  /** Falha de LEITURA da coleção legada secundária. Ver legacyPrimaryError. */
+  legacyFallbackError?: string | null;
   parsingErrors: Array<{
     documentId: string;
     error: string;
@@ -426,6 +434,8 @@ export function consolidateActivePlan({
   legacyPrimary,
   legacyFallback,
   canonicalError,
+  legacyPrimaryError = null,
+  legacyFallbackError = null,
   parsingErrors,
 }: ConsolidationInput): NutritionPlanState {
 
@@ -521,6 +531,24 @@ export function consolidateActivePlan({
     });
   };
 
+  // 5a. Fail-closed: se a leitura do legado PRIMÁRIO falhou, não podemos enumerar
+  // a fonte legada de maior prioridade. Não é possível provar ausência de plano,
+  // nem promover o legado secundário — a primária poderia conter plano mais recente.
+  // Mesma política já aplicada a documento primário malformado logo abaixo.
+  if (legacyPrimaryError) {
+    return {
+      status: "error",
+      reason: "firestore-read-error",
+      dogId,
+      activePlan: null,
+      plans: canonicalPlans,
+      legacyPlan: null,
+      error: legacyPrimaryError,
+      integrityConflict: null,
+      parsingErrors,
+    };
+  }
+
   // Avaliação do Legado Primário: nutritional_prescriptions
   const hasPrimaryLegacyDocs = parsingErrors.some((err) => err.collection === "nutritional_prescriptions") || legacyPrimary.length > 0;
 
@@ -554,6 +582,22 @@ export function consolidateActivePlan({
         parsingErrors,
       };
     }
+  }
+
+  // 5b. Fail-closed: chegamos aqui com primária legível e sem plano utilizável.
+  // Se a leitura da secundária falhou, não podemos provar ausência total.
+  if (legacyFallbackError) {
+    return {
+      status: "error",
+      reason: "firestore-read-error",
+      dogId,
+      activePlan: null,
+      plans: canonicalPlans,
+      legacyPlan: null,
+      error: legacyFallbackError,
+      integrityConflict: null,
+      parsingErrors,
+    };
   }
 
   // Avaliação do Legado Fallback/Secundário: nutrition_prescriptions

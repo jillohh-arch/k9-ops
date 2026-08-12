@@ -83,6 +83,8 @@ export function useNutritionPlans(dogId: string): NutritionPlanState {
     let legacyFallback: LegacyNutritionPlanView[] = [];
 
     let canonicalError: string | null = null;
+    let legacyPrimaryError: string | null = null;
+    let legacyFallbackError: string | null = null;
     let canonicalParsingErrors: Array<{
       documentId: string;
       error: string;
@@ -145,6 +147,8 @@ export function useNutritionPlans(dogId: string): NutritionPlanState {
           legacyPrimary,
           legacyFallback,
           canonicalError: null,
+          legacyPrimaryError,
+          legacyFallbackError,
           parsingErrors: allParsingErrors,
         });
 
@@ -195,6 +199,7 @@ export function useNutritionPlans(dogId: string): NutritionPlanState {
       (snapshot) => {
         legacyPrimary = [];
         primaryLegacyParsingErrors = [];
+        legacyPrimaryError = null;
 
         snapshot.docs.forEach((d) => {
           try {
@@ -219,8 +224,12 @@ export function useNutritionPlans(dogId: string): NutritionPlanState {
         handleUpdate();
       },
       (err) => {
-        // Log legacy load failures but don't crash canonical priority
+        // Log legacy load failures but don't crash canonical priority.
+        // O erro também é registrado no read model: sem conseguir ler esta fonte
+        // não é possível provar ausência de plano (evita false empty).
         console.error(`Erro ao ler nutritional_prescriptions: ${err.message}`);
+        legacyPrimaryError = `Erro ao ler nutritional_prescriptions: ${err.message}`;
+        legacyPrimary = [];
         primaryLegacyLoaded = true;
         handleUpdate();
       }
@@ -232,6 +241,7 @@ export function useNutritionPlans(dogId: string): NutritionPlanState {
       (snapshot) => {
         legacyFallback = [];
         fallbackLegacyParsingErrors = [];
+        legacyFallbackError = null;
 
         snapshot.docs.forEach((d) => {
           try {
@@ -257,6 +267,8 @@ export function useNutritionPlans(dogId: string): NutritionPlanState {
       },
       (err) => {
         console.error(`Erro ao ler nutrition_prescriptions: ${err.message}`);
+        legacyFallbackError = `Erro ao ler nutrition_prescriptions: ${err.message}`;
+        legacyFallback = [];
         fallbackLegacyLoaded = true;
         handleUpdate();
       }

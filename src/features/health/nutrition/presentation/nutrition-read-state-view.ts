@@ -69,6 +69,33 @@ export function canOfferNutritionCreate(
   return decision.kind === "empty";
 }
 
+/**
+ * WEB-01B.5 — administrative UPDATE eligibility.
+ *
+ * EDIT exists only against a canonical active plan, and only with an explicit
+ * management grant. Every other state refuses:
+ *
+ * - empty      → nothing to edit; that state offers CREATE instead.
+ * - legacy     → a legacy prescription is read-only; it has no canonical
+ *                revision to send as expectedRevision.
+ * - degraded   → the plan we hold may be partially parsed, so its revision is
+ *                not a trustworthy expectation.
+ * - conflict   → integrity is unresolved; editing would pick a winner silently.
+ * - error      → the state is unknown.
+ * - loading    → nothing is proven yet.
+ *
+ * Note this is deliberately the complement of `canOfferNutritionCreate`: CREATE
+ * needs proven absence, EDIT needs a proven active plan, and no state satisfies
+ * both.
+ */
+export function canOfferNutritionEdit(
+  decision: NutritionViewDecision,
+  canManage: boolean,
+): boolean {
+  if (!canManage) return false;
+  return decision.kind === "canonical";
+}
+
 export function resolveNutritionView(state: NutritionPlanState): NutritionViewDecision {
   // 1. Error has absolute priority, including the inherited `empty` + error case.
   if (state.status === "error" || state.error !== null) {

@@ -32,7 +32,12 @@ import { useNutritionPlans } from "../hooks/use-nutrition-plans";
 import { NutritionPlanCanonicalCard } from "./nutrition-plan-canonical-card";
 import { NutritionPlanCreateDialog } from "./nutrition-plan-create-dialog";
 import { NutritionPlanLegacyCard } from "./nutrition-plan-legacy-card";
-import { canOfferNutritionCreate, resolveNutritionView } from "./nutrition-read-state-view";
+import { NutritionPlanEditDialog } from "./nutrition-plan-edit-dialog";
+import {
+  canOfferNutritionCreate,
+  canOfferNutritionEdit,
+  resolveNutritionView,
+} from "./nutrition-read-state-view";
 import type { LegacyNutritionPlanView, NutritionPlan } from "../types";
 
 export function NutritionPlanPanel({
@@ -92,6 +97,47 @@ export function NutritionPlanPanel({
   const offerCreate =
     canOfferNutritionCreate(decision, canManage) && !pendingReconciliation;
 
+  /*
+   * WEB-01B.5 — administrative UPDATE, with its own temporal seam.
+   *
+   * The CREATE seam was "the reader still says empty". The UPDATE seam is
+   * different: two revisions coexist for a moment — the one the backend just
+   * confirmed, and the older one the realtime reader is still showing. Reopening
+   * EDIT in that window would freeze `expectedRevision` at the superseded value,
+   * so the next submit would be refused as revision-conflict. Not data
+   * corruption, but a guaranteed dead end offered to the operator.
+   *
+   * The latch is keyed on the exact snapshot it was created against
+   * (planId + the revision the reader was showing), so it releases as soon as
+   * the reader reports anything else. Same discipline as B.4: no fabricated
+   * plan, no cache write, reader remains the authority.
+   */
+  const [editOpen, setEditOpen] = useState(false);
+  const [pendingUpdate, setPendingUpdate] = useState<{
+    planId: string;
+    staleRevision: number;
+  } | null>(null);
+
+  if (dogId !== latchedDogId) {
+    setPendingUpdate(null);
+  }
+
+  const activeCanonical =
+    decision.kind === "canonical" ? (state.activePlan as NutritionPlan) : null;
+
+  // Release once the reader stops showing the superseded snapshot — whether it
+  // advanced the revision, swapped the plan, or left canonical entirely.
+  if (
+    pendingUpdate !== null &&
+    (activeCanonical === null ||
+      activeCanonical.id !== pendingUpdate.planId ||
+      activeCanonical.revision !== pendingUpdate.staleRevision)
+  ) {
+    setPendingUpdate(null);
+  }
+
+  const offerEdit = canOfferNutritionEdit(decision, canManage) && pendingUpdate === null;
+
   switch (decision.kind) {
     case "loading":
       return <LoadingState message="Carregando plano alimentar..." />;
@@ -120,8 +166,48 @@ export function NutritionPlanPanel({
         </PartialState>
       );
 
-    case "canonical":
-      return <NutritionPlanCanonicalCard plan={state.activePlan as NutritionPlan} />;
+    /*
+     * WEB-01B.5 — the only state where administrative UPDATE is offered. No
+     * REPLACE and no CANCEL affordance here: those are B.6 and B.7.
+     */
+    case "canonical": {
+      const plan = state.activePlan as NutritionPlan;
+      return (
+        <>
+          <NutritionPlanCanonicalCard
+            plan={plan}
+            action={
+              offerEdit ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => setEditOpen(true)}
+                  data-testid="nutrition-edit-plan-action"
+                >
+                  Editar
+                </Button>
+              ) : undefined
+            }
+          />
+          {/*
+            Gated on `canManage`, not on the full `offerEdit`: engaging the
+            revision latch flips `offerEdit` to false, and an open dialog must
+            not be torn down underneath a mutation in flight or reporting its
+            result. A revoked capability does withdraw it.
+          */}
+          {editOpen && canManage && (
+            <NutritionPlanEditDialog
+              dogId={dogId}
+              plan={plan}
+              open={editOpen}
+              onUpdated={() =>
+                setPendingUpdate({ planId: plan.id, staleRevision: plan.revision })
+              }
+              onClose={() => setEditOpen(false)}
+            />
+          )}
+        </>
+      );
+    }
 
     case "legacy":
       return (

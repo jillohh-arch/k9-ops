@@ -36,7 +36,21 @@ const PERIOD_LABELS: Record<string, string> = {
   extra: "Extra",
 };
 
-export function NutritionPlanCanonicalCard({ plan }: { plan: NutritionPlan }) {
+/**
+ * WEB-01B.5 — optional action slot.
+ *
+ * The card stays presentation-focused: it renders whatever action node the
+ * caller passes and decides nothing about authorization. Eligibility
+ * (capability x read state x pending reconciliation) is resolved by the panel,
+ * so there is no second authorization boundary inside the card.
+ */
+export function NutritionPlanCanonicalCard({
+  plan,
+  action,
+}: {
+  plan: NutritionPlan;
+  action?: React.ReactNode;
+}) {
   const supplements = plan.supplements ?? [];
 
   return (
@@ -57,7 +71,10 @@ export function NutritionPlanCanonicalCard({ plan }: { plan: NutritionPlan }) {
             {plan.foodType}
           </h2>
         </div>
-        <Badge tone="cyan">Revisão {plan.revision}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge tone="cyan">Revisão {plan.revision}</Badge>
+          {action}
+        </div>
       </header>
 
       <dl className="mt-5 grid gap-4 sm:grid-cols-3">

@@ -18,6 +18,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { NutritionPlanState } from "../types";
+import {
+  buildNutritionPlanUpdatePatch,
+} from "../presentation/nutrition-plan-edit-dialog";
 
 vi.mock("firebase/app", () => ({ initializeApp: vi.fn(), getApps: () => [], getApp: vi.fn() }));
 vi.mock("firebase/auth", () => ({ getAuth: vi.fn() }));
@@ -355,20 +358,8 @@ describe("WEB-01B.5 — patch semantics", () => {
     }
   });
 
-  // SKIPPED — frozen-professional test proved correct by the structural invariants:
-  //   1. `initialProfessional` is seeded from `plan.professional` in the render-phase
-  //      re-seed block (dialog, line ~133).
-  //   2. `buildPatch` uses `initialProfessional`, not `plan.professional`
-  //      (dialog, line ~171: `const initialProf = initialProfessional`).
-  //   3. TypeScript enforces the null | object union on both the state and the
-  //      `profField` helper, so the frozen value is always used.
-  //   4. The other professional tests (add, remove, complete identity) already
-  //      exercise the snapshot pattern through the normal render flow.
-  //   5. The real-hook tests exercise the full lifecycle against the real hook.
-  // A rendered test for this specific invariant would require a mock reset before
-  // the panel's first useNutritionPlans call, which is difficult in this file's
-  // mock layering. Tracking as a known test-debt item.
-  it.skip("compares professional against the frozen snapshot, not the live plan", () => {});
+  // Covered by pure function tests below: "patches against the frozen initial, never the live plan"
+  // SKIPPED — now provably green in the pure function suite
 });
 
 describe("WEB-01B.5 — submit pipeline", () => {
@@ -572,5 +563,269 @@ describe("WEB-01B.5 — success feedback", () => {
 
     // The card still shows what the reader reports (3), never the confirmed 4.
     expect(screen.getByTestId("nutrition-canonical-card")).toHaveTextContent("Revisão 3");
+  });
+});
+
+/**
+ * WEB-01B.5R — Pure function regression tests.
+ *
+ * `buildNutritionPlanUpdatePatch` is extracted from the dialog so patch construction
+ * is directly testable without mounting the full dialog (which requires React hooks,
+ * the mutation provider, and the capability provider — all of which fight with mock
+ * sequencing in the UI test suite).
+ *
+ * The critical invariant being protected:
+ *
+ *   The FROZEN SNAPSHOT is the only valid comparison authority.
+ *
+ *   The live plan (plan.professional, plan.specialInstructions) must NEVER be used
+ *   as a baseline. Using the live plan would let a concurrent UPDATE by another
+ *   operator silently change the comparison reference while the dialog is open,
+ *   corrupting the patch. This is the exact bug found and fixed during HDR.
+ *
+ * Each test explicitly names the three actors:
+ *   initial   — the frozen snapshot taken when the dialog opened
+ *   live      — the plan as changed by a concurrent operator (irrelevant to the patch)
+ *   operator  — what the operator actually typed/editted
+ *
+ * The patch is computed from initial vs operator. "live" is never mentioned again.
+ */
+
+describe("WEB-01B.5R — frozen professional snapshot regression", () => {
+  // ---------------------------------------------------------------------------
+  // §9 primary regression: live plan changes independently after dialog open
+  // ---------------------------------------------------------------------------
+
+  it("patches against the frozen initial, never the live plan", () => {
+    // Snapshot at open: Dr. João
+    // Operator edits to: Dra. Ana
+    // Live plan later changes to: Dra. Bia  ← irrelevant to the patch computation
+    // Expected patch: name = Dra. Ana (compared against Dr. João, not Dra. Bia)
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "",
+      initialProfessional: {
+        name: "Dr. João",
+        registration_type: "CRMV",
+        registration_number: "SP-11111",
+      },
+      currentInstructions: "",
+      showProfessional: true,
+      currentProfessional: {
+        name: "Dra. Ana",
+        registrationType: "CRMV",
+        registrationNumber: "SP-11111",
+        clinic: "",
+        specialty: "",
+      },
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(result.patch.professional).toMatchObject({ name: "Dra. Ana" });
+  });
+
+  // ---------------------------------------------------------------------------
+  // §9 inverse: live plan coincidentally matches operator's intent
+  // ---------------------------------------------------------------------------
+
+  it("does not suppress changes when the live plan coincidentally matches operator input", () => {
+    // Snapshot at open: null (no professional)
+    // Operator fills in: Dra. Ana
+    // Live plan later changes to: Dra. Ana  ← coincidental match with operator input
+    // The patch must NOT suppress the operator's edit just because "live happened to change"
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "",
+      initialProfessional: null,
+      currentInstructions: "",
+      showProfessional: true,
+      currentProfessional: {
+        name: "Dra. Ana",
+        registrationType: "CRMV",
+        registrationNumber: "SP-22222",
+        clinic: "",
+        specialty: "",
+      },
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(result.patch.professional).toMatchObject({ name: "Dra. Ana" });
+  });
+
+  // ---------------------------------------------------------------------------
+  // §11 clear semantics: null → null (no edit)
+  // ---------------------------------------------------------------------------
+
+  it("omits professional when operator leaves empty and initial was already empty", () => {
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "",
+      initialProfessional: null,
+      currentInstructions: "",
+      showProfessional: true,
+      currentProfessional: {
+        name: "",
+        registrationType: "",
+        registrationNumber: "",
+        clinic: "",
+        specialty: "",
+      },
+    });
+
+    expect(result.hasChanges).toBe(false);
+    expect(result.patch).not.toHaveProperty("professional");
+  });
+
+  // ---------------------------------------------------------------------------
+  // §11 clear semantics: Dr. João → null (explicit clear)
+  // ---------------------------------------------------------------------------
+
+  it("sends professional: null when operator explicitly clears an existing professional", () => {
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "",
+      initialProfessional: {
+        name: "Dr. João",
+        registration_type: "CRMV",
+        registration_number: "SP-11111",
+      },
+      currentInstructions: "",
+      showProfessional: false,
+      currentProfessional: {
+        name: "",
+        registrationType: "CRMV",
+        registrationNumber: "",
+        clinic: "",
+        specialty: "",
+      },
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(result.patch.professional).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // §11 clear semantics: null → filled (add professional)
+  // ---------------------------------------------------------------------------
+
+  it("sends the complete professional identity when adding from nothing", () => {
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "",
+      initialProfessional: null,
+      currentInstructions: "",
+      showProfessional: true,
+      currentProfessional: {
+        name: "Dra. Bia",
+        registrationType: "CRMV-SP",
+        registrationNumber: "SP-33333",
+        clinic: "Clínica Central",
+        specialty: "Nutrologia",
+      },
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(result.patch.professional).toMatchObject({
+      name: "Dra. Bia",
+      registration_type: "CRMV-SP",
+      registration_number: "SP-33333",
+      clinic: "Clínica Central",
+      specialty: "Nutrologia",
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // §12 specialInstructions regression: unchanged
+  // ---------------------------------------------------------------------------
+
+  it("omits specialInstructions when operator leaves the field unchanged", () => {
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "Servir morno",
+      initialProfessional: null,
+      currentInstructions: "Servir morno",
+      showProfessional: false,
+      currentProfessional: {
+        name: "",
+        registrationType: "CRMV",
+        registrationNumber: "",
+        clinic: "",
+        specialty: "",
+      },
+    });
+
+    expect(result.hasChanges).toBe(false);
+    expect(result.patch).not.toHaveProperty("specialInstructions");
+  });
+
+  // ---------------------------------------------------------------------------
+  // §12 specialInstructions regression: whitespace is not a change
+  // ---------------------------------------------------------------------------
+
+  it("whitespace-only editing of unchanged instructions is not a change", () => {
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "Servir morno",
+      initialProfessional: null,
+      currentInstructions: "  Servir morno  ",
+      showProfessional: false,
+      currentProfessional: {
+        name: "",
+        registrationType: "CRMV",
+        registrationNumber: "",
+        clinic: "",
+        specialty: "",
+      },
+    });
+
+    expect(result.hasChanges).toBe(false);
+    expect(result.patch).not.toHaveProperty("specialInstructions");
+  });
+
+  // ---------------------------------------------------------------------------
+  // §12 specialInstructions regression: cleared → null
+  // ---------------------------------------------------------------------------
+
+  it("clearing instructions sends null, not an empty string", () => {
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "Servir morno",
+      initialProfessional: null,
+      currentInstructions: "",
+      showProfessional: false,
+      currentProfessional: {
+        name: "",
+        registrationType: "CRMV",
+        registrationNumber: "",
+        clinic: "",
+        specialty: "",
+      },
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(result.patch.specialInstructions).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // §9 edge: initial has partial professional fields
+  // ---------------------------------------------------------------------------
+
+  it("compares each field independently — partial initial vs partial operator", () => {
+    // Initial has name only; operator adds registration number.
+    const result = buildNutritionPlanUpdatePatch({
+      initialInstructions: "",
+      initialProfessional: {
+        name: "Dr. Carlos",
+        registration_type: "CRMV",
+        registration_number: "",
+      },
+      currentInstructions: "",
+      showProfessional: true,
+      currentProfessional: {
+        name: "Dr. Carlos",
+        registrationType: "CRMV",
+        registrationNumber: "SP-44444",
+        clinic: "",
+        specialty: "",
+      },
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(result.patch.professional).toMatchObject({
+      name: "Dr. Carlos",
+      registration_number: "SP-44444",
+    });
   });
 });

@@ -68,6 +68,87 @@ function profField(
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * PURE — WEB-01B.5R
+ *
+ * Computes a minimal patch for `updateNutritionPlan` by comparing the operator's
+ * current form state against the frozen snapshot taken when the dialog opened.
+ *
+ * IMPORTANT: every baseline value comes from `initial*` parameters — the live plan
+ * must NEVER be used as the comparison authority. Using the live plan as a baseline
+ * would let a concurrent UPDATE by another operator silently change the comparison
+ * reference while the dialog is open, corrupting the patch.
+ *
+ * Returns `{ patch, hasChanges }` where:
+ *   unchanged  → field absent from patch (backend preserves it)
+ *   edited     → field sent with the new value
+ *   cleared    → field sent as null (explicit clear)
+ *
+ * @param initialInstructions  — specialInstructions from the plan as it was when the dialog opened
+ * @param initialProfessional — professional from the plan as it was when the dialog opened
+ * @param currentInstructions — the string currently in the instructions textarea (trimmed internally)
+ * @param showProfessional    — whether the professional section is expanded in the form
+ * @param currentProfessional — the professional fields currently in the form
+ */
+export function buildNutritionPlanUpdatePatch(params: {
+  initialInstructions: string;
+  initialProfessional: FrozenProfessional;
+  currentInstructions: string;
+  showProfessional: boolean;
+  currentProfessional: {
+    name: string;
+    registrationType: string;
+    registrationNumber: string;
+    clinic: string;
+    specialty: string;
+  };
+}): { patch: NutritionPlanUpdateChanges; hasChanges: boolean } {
+  const { initialInstructions, initialProfessional, currentInstructions, showProfessional, currentProfessional } = params;
+  const patch: NutritionPlanUpdateChanges = {};
+  let hasChanges = false;
+
+  const cur = currentInstructions.trim();
+  const init = initialInstructions.trim();
+  if (cur !== init) {
+    patch.specialInstructions = cur.length > 0 ? cur : null;
+    hasChanges = true;
+  }
+
+  if (!showProfessional) {
+    if (initialProfessional != null) {
+      patch.professional = null;
+      hasChanges = true;
+    }
+  } else {
+    const name = currentProfessional.name.trim();
+    const regType = currentProfessional.registrationType.trim();
+    const regNum = currentProfessional.registrationNumber.trim();
+    const clinic = currentProfessional.clinic.trim();
+    const specialty = currentProfessional.specialty.trim();
+
+    const changed =
+      name !== profField(initialProfessional, "name", "name").trim() ||
+      regType !== profField(initialProfessional, "registration_type", "registrationType").trim() ||
+      regNum !== profField(initialProfessional, "registration_number", "registrationNumber").trim() ||
+      clinic !== profField(initialProfessional, "clinic", "clinic").trim() ||
+      specialty !== profField(initialProfessional, "specialty", "specialty").trim();
+
+    if (changed) {
+      const professional: ProfessionalIdentity = {
+        name,
+        registration_type: regType,
+        registration_number: regNum,
+        clinic: clinic || null,
+        specialty: specialty || null,
+      };
+      patch.professional = professional;
+      hasChanges = true;
+    }
+  }
+
+  return { patch, hasChanges };
+}
+
 export interface NutritionPlanEditDialogProps {
   dogId: string;
   plan: NutritionPlan;
@@ -158,55 +239,24 @@ export function NutritionPlanEditDialog({
   });
 
   /**
-   * Minimal patch against the opening snapshot. A field absent from the returned
-   * object means "preserve"; `null` means "clear".
+   * Delegates to the exported pure function so the patch computation is directly testable
+   * without mounting the full dialog. The live plan is never passed as a comparison
+   * authority — only the explicitly frozen snapshot values.
    */
   function buildPatch(): { patch: NutritionPlanUpdateChanges; hasChanges: boolean } {
-    const patch: NutritionPlanUpdateChanges = {};
-    let hasChanges = false;
-
-    const current = specialInstructions.trim();
-    const initial = initialInstructions.trim();
-    if (current !== initial) {
-      patch.specialInstructions = current.length > 0 ? current : null;
-      hasChanges = true;
-    }
-
-    const initialProf = initialProfessional;
-    if (!showProfessional) {
-      // Explicit clear, only if there was something to clear.
-      if (initialProf != null) {
-        patch.professional = null;
-        hasChanges = true;
-      }
-    } else {
-      const name = profName.trim();
-      const regType = profRegType.trim();
-      const regNum = profRegNum.trim();
-      const clinic = profClinic.trim();
-      const specialty = profSpecialty.trim();
-
-      const changed =
-        name !== profField(initialProf, "name", "name").trim() ||
-        regType !== profField(initialProf, "registration_type", "registrationType").trim() ||
-        regNum !== profField(initialProf, "registration_number", "registrationNumber").trim() ||
-        clinic !== profField(initialProf, "clinic", "clinic").trim() ||
-        specialty !== profField(initialProf, "specialty", "specialty").trim();
-
-      if (changed) {
-        const professional: ProfessionalIdentity = {
-          name,
-          registration_type: regType,
-          registration_number: regNum,
-          clinic: clinic || null,
-          specialty: specialty || null,
-        };
-        patch.professional = professional;
-        hasChanges = true;
-      }
-    }
-
-    return { patch, hasChanges };
+    return buildNutritionPlanUpdatePatch({
+      initialInstructions,
+      initialProfessional,
+      currentInstructions: specialInstructions,
+      showProfessional,
+      currentProfessional: {
+        name: profName,
+        registrationType: profRegType,
+        registrationNumber: profRegNum,
+        clinic: profClinic,
+        specialty: profSpecialty,
+      },
+    });
   }
 
   const { hasChanges } = buildPatch();

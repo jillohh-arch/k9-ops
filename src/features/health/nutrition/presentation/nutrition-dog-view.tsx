@@ -90,7 +90,7 @@ export function NutritionDogView({ dogId }: { dogId: string }) {
         photo: dog.photoUrl ?? undefined,
       }}
     >
-      <NutritionPlanPanel dogId={dog.id} />
+      <NutritionPlanPanel dogId={dog.id} dogName={dog.name} />
     </HealthModuleShell>
   );
 }

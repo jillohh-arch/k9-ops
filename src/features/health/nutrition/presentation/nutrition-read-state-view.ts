@@ -41,6 +41,34 @@ export interface NutritionViewDecision {
 const READ_FAILURE_MESSAGE =
   "Não foi possível concluir a leitura do plano alimentar. Nenhum estado foi presumido.";
 
+/**
+ * WEB-01B.4 — CREATE eligibility.
+ *
+ * `health.manage_nutrition_plan` is necessary but NOT sufficient: the read state
+ * must also prove the K9 is safely writable. Kept as a pure function so the
+ * capability x state matrix is directly unit-testable, outside the render tree.
+ *
+ * CREATE is offered ONLY on proven absence (`empty`, which the resolver already
+ * guarantees means error === null). Every other state is refused:
+ *
+ * - canonical  → a structural change to an active plan is REPLACE (B.6), never a
+ *                second CREATE. A manager must not get "create another plan".
+ * - legacy     → the legacy/canonical coexistence contract is not proven from
+ *                this repo, so offering it could race active-plan-conflict.
+ *                Deferred as an architectural decision.
+ * - degraded   → creating a plan is not a remedy for an integrity problem.
+ * - conflict   → same, fail closed.
+ * - error      → the state is unknown; never write against an unknown state.
+ * - loading    → nothing is proven yet.
+ */
+export function canOfferNutritionCreate(
+  decision: NutritionViewDecision,
+  canManage: boolean,
+): boolean {
+  if (!canManage) return false;
+  return decision.kind === "empty";
+}
+
 export function resolveNutritionView(state: NutritionPlanState): NutritionViewDecision {
   // 1. Error has absolute priority, including the inherited `empty` + error case.
   if (state.status === "error" || state.error !== null) {

@@ -16,6 +16,10 @@
  * no parallel boundary is introduced here.
  */
 
+import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import {
   ConflictState,
   EmptyState,
@@ -26,13 +30,67 @@ import {
 } from "../../presentation/components/health-technical-states";
 import { useNutritionPlans } from "../hooks/use-nutrition-plans";
 import { NutritionPlanCanonicalCard } from "./nutrition-plan-canonical-card";
+import { NutritionPlanCreateDialog } from "./nutrition-plan-create-dialog";
 import { NutritionPlanLegacyCard } from "./nutrition-plan-legacy-card";
-import { resolveNutritionView } from "./nutrition-read-state-view";
+import { canOfferNutritionCreate, resolveNutritionView } from "./nutrition-read-state-view";
 import type { LegacyNutritionPlanView, NutritionPlan } from "../types";
 
-export function NutritionPlanPanel({ dogId }: { dogId: string }) {
+export function NutritionPlanPanel({
+  dogId,
+  dogName,
+}: {
+  dogId: string;
+  dogName?: string | null;
+}) {
   const state = useNutritionPlans(dogId);
   const decision = resolveNutritionView(state);
+
+  /*
+   * WEB-01B.4 — write authorization.
+   *
+   * `manage_nutrition_plan` must be granted explicitly on an active profile:
+   * `hasAccessPermission` requires `permissions.health.manage_nutrition_plan
+   * === true`, so the legacy `health.view -> health.read` adapter can never
+   * satisfy it. Read access alone never yields a write affordance.
+   */
+  const { can } = useAccessControl();
+  const canManage = can("health", "manage_nutrition_plan");
+  const [createOpen, setCreateOpen] = useState(false);
+
+  /*
+   * WEB-01B.4 — post-success reconciliation latch.
+   *
+   * A successful CREATE returns before the realtime reader emits the new plan,
+   * so for a few milliseconds the read model still says `empty`. Without this
+   * latch the affordance would come straight back and a second CREATE — with a
+   * NEW operationId, so not a replay — would be reachable against a K9 that
+   * already has a plan. The backend would refuse it as active-plan-conflict,
+   * but the operator should never be offered the action in the first place.
+   *
+   * Deliberately NOT a fabricated plan and NOT a cache write: the reader stays
+   * the only authority. This only withholds the affordance until the reader
+   * leaves the pre-mutation `empty` snapshot, in any direction (canonical,
+   * legacy, conflict, degraded or error).
+   */
+  const [pendingReconciliation, setPendingReconciliation] = useState(false);
+  const [latchedDogId, setLatchedDogId] = useState(dogId);
+
+  // Re-baseline during render when the route dog changes, so a latch from the
+  // previous K9 never suppresses the affordance for the new one.
+  if (dogId !== latchedDogId) {
+    setLatchedDogId(dogId);
+    setPendingReconciliation(false);
+  }
+
+  // The reader has moved on: the latch has served its purpose.
+  if (pendingReconciliation && decision.kind !== "empty") {
+    setPendingReconciliation(false);
+  }
+
+  // Capability AND a provably writable read state AND no mutation awaiting
+  // reconciliation (see canOfferNutritionCreate).
+  const offerCreate =
+    canOfferNutritionCreate(decision, canManage) && !pendingReconciliation;
 
   switch (decision.kind) {
     case "loading":
@@ -73,15 +131,46 @@ export function NutritionPlanPanel({ dogId }: { dogId: string }) {
       );
 
     /*
-     * Proven absence only: `empty` with error === null. No "Criar plano"
-     * affordance in this phase, not even for a manager.
+     * Proven absence only: `empty` here already guarantees error === null, so
+     * this is the single state where CREATE is offered (WEB-01B.4). The action
+     * is composed through EmptyState's existing `action` prop — the shared
+     * Foundation primitive is not modified for Nutrition.
      */
     case "empty":
       return (
-        <EmptyState
-          title="Nenhum plano alimentar ativo"
-          description="Este K9 não possui plano alimentar vigente registrado."
-        />
+        <>
+          <EmptyState
+            title="Nenhum plano alimentar ativo"
+            description="Este K9 não possui plano alimentar vigente registrado."
+            action={
+              offerCreate ? (
+                <Button
+                  onClick={() => setCreateOpen(true)}
+                  data-testid="nutrition-create-plan-action"
+                >
+                  Novo plano alimentar
+                </Button>
+              ) : undefined
+            }
+          />
+          {/*
+            Gated on `canManage`, NOT on the full `offerCreate`: engaging the
+            reconciliation latch flips `offerCreate` to false, and an open dialog
+            must not be torn down underneath a mutation that is in flight or
+            reporting its result. Capability is different — if the write grant is
+            revoked while the dialog is open, the surface goes away. The backend
+            remains the final authority either way.
+          */}
+          {createOpen && canManage && (
+            <NutritionPlanCreateDialog
+              dogId={dogId}
+              dogName={dogName}
+              open={createOpen}
+              onCreated={() => setPendingReconciliation(true)}
+              onClose={() => setCreateOpen(false)}
+            />
+          )}
+        </>
       );
   }
 }

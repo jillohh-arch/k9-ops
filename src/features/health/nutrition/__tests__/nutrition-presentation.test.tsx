@@ -23,7 +23,20 @@ vi.mock("firebase/firestore", () => ({
   getDoc: vi.fn(),
 }));
 vi.mock("firebase/storage", () => ({ getStorage: vi.fn() }));
-vi.mock("@/lib/firebase/client", () => ({ db: {}, auth: {}, storage: {} }));
+// `functions` is required since WEB-01B.4: the panel reaches the mutation hook
+// to decide the CREATE affordance. No callable is ever invoked here.
+vi.mock("@/lib/firebase/client", () => ({
+  db: {},
+  auth: {},
+  storage: {},
+  functions: {},
+}));
+
+// Default for the pre-existing WEB-01B.2 read-only assertions: no management
+// capability, so no write affordance can appear in any of them.
+vi.mock("@/features/access/providers/access-control-provider", () => ({
+  useAccessControl: () => ({ can: () => false }),
+}));
 
 const mockUseNutritionPlans = vi.fn();
 vi.mock("../hooks/use-nutrition-plans", () => ({

@@ -209,7 +209,18 @@ describe("WEB-01B.5 — prepare -> execute against the real hook", () => {
     expect(serviceMocks.generateOperationId).toHaveBeenCalledTimes(1);
   });
 
-  it("does not auto-retry a revision-conflict", async () => {
+  /*
+   * WEB-01B.7R updated this test's premise, not its guarantees.
+   *
+   * It previously expected a `revision-conflict` on the ordinary error surface. But
+   * a revision-conflict is the backend stating that the revision on screen is not
+   * current (`assertExpectedRevision`, engine 1533-1539), so it is a class-B
+   * refusal: the mutation was rejected AND the reader snapshot is proven stale.
+   *
+   * The original no-retry invariants are all preserved below; the reconciliation
+   * assertions are added on top of them, not in place of them.
+   */
+  it("does not auto-retry a revision-conflict and requires reader reconciliation", async () => {
     serviceMocks.executeUpdate.mockRejectedValue({
       firebaseCode: "failed-precondition",
       domainCode: "revision-conflict",
@@ -222,12 +233,35 @@ describe("WEB-01B.5 — prepare -> execute against the real hook", () => {
     editInstructions("Nova instrução");
     fireEvent.click(screen.getByTestId("edit-plan-submit"));
 
-    await waitFor(() => expect(screen.getByTestId("edit-plan-error")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("edit-plan-reader-reconciliation")).toBeInTheDocument(),
+    );
 
+    // ── Original invariants, unchanged ──────────────────────────────────────
     // One attempt only, no retry affordance, no second operationId.
     expect(serviceMocks.executeUpdate).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("edit-plan-retry")).not.toBeInTheDocument();
     expect(serviceMocks.generateOperationId).toHaveBeenCalledTimes(1);
+
+    // ── New authority assertions ────────────────────────────────────────────
+    // Rejected, so neither the ordinary error surface nor the uncertain one: the
+    // backend refused explicitly, and nothing may have been written.
+    expect(screen.queryByTestId("edit-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-outcome-uncertain")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-success")).not.toBeInTheDocument();
+
+    // No second mutation reachable against the contradicted revision.
+    const submit = screen.getByTestId("edit-plan-submit");
+    expect(submit).toBeDisabled();
+    fireEvent.submit(submit.closest("form")!);
+    expect(serviceMocks.executeUpdate).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.generateOperationId).toHaveBeenCalledTimes(1);
+
+    // A/revision-3 is no longer offered as actionable authority.
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-cancel-plan-action")).not.toBeInTheDocument();
   });
 });
 

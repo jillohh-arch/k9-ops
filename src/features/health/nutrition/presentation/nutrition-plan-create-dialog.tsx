@@ -27,6 +27,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isPotentiallyCommittedOutcome } from "../data/nutrition-plan-mutation-service";
+import { requiresNutritionReaderReconciliation } from "../errors/nutrition-mutation-errors";
 import { useNutritionPlanMutations } from "../hooks/use-nutrition-plan-mutations";
 import type { CreateNutritionPlanCommand, ProfessionalIdentity } from "../mutation-types";
 import type { MealPeriod } from "../types";
@@ -90,6 +91,16 @@ export interface NutritionPlanCreateDialogProps {
    * any claim that the mutation landed.
    */
   onCreateOutcomeUncertain?: () => void;
+  /**
+   * Fired when the backend REFUSED this creation with `active-plan-conflict` — it
+   * holds an active plan where the reader reported none.
+   *
+   * A third distinct family: nothing was written (unlike a confirmed create) and
+   * nothing MAY have been written (unlike an uncertain outcome) — but the `empty`
+   * snapshot that authorized this CREATE has been contradicted, so it must stop
+   * authorizing another one until the reader catches up.
+   */
+  onCreateReaderReconciliationRequired?: () => void;
 }
 
 export function NutritionPlanCreateDialog({
@@ -99,6 +110,7 @@ export function NutritionPlanCreateDialog({
   onClose,
   onCreated,
   onCreateOutcomeUncertain,
+  onCreateReaderReconciliationRequired,
 }: NutritionPlanCreateDialogProps) {
   const { createState, prepareCreate, executeCreate, retryCreate, resetCreate } =
     useNutritionPlanMutations();
@@ -126,12 +138,37 @@ export function NutritionPlanCreateDialog({
    */
   const [outcomeUncertain, setOutcomeUncertain] = useState(false);
 
+  /*
+   * The backend REFUSED this creation with `active-plan-conflict` — it sees an
+   * active plan where the reader reported none (engine 1595).
+   *
+   * Nothing was written, so this is NOT the uncertain-outcome case and must not
+   * borrow its wording. But the `empty` snapshot that authorized this CREATE has
+   * just been contradicted, so another attempt against it can only be refused.
+   */
+  const [readerReconciliationRequired, setReaderReconciliationRequired] =
+    useState(false);
+
   const isBusy =
     createState.status === "preparing" || createState.status === "executing";
   const isSuccess = createState.status === "success";
-  // An uncertain outcome is NOT an ordinary error: claiming "failed" would invite
-  // the retry we must not allow. It gets its own surface below.
-  const isError = createState.status === "error" && !outcomeUncertain;
+  // Neither an uncertain outcome nor a stale-authority refusal is an ordinary
+  // error: each gets its own surface below, with its own wording.
+  const isError =
+    createState.status === "error" && !outcomeUncertain && !readerReconciliationRequired;
+
+  /*
+   * WEB-01B.7R retry-intent ownership: a retryable failure leaves exactly ONE
+   * unresolved intent, owned by this open dialog. Retry replays it; the normal
+   * submit would mint a second operationId beside it. Closing abandons it, which
+   * is safe because the backend refuses any duplicate.
+   */
+  const hasRetryableIntent =
+    createState.status === "error" &&
+    !outcomeUncertain &&
+    !readerReconciliationRequired &&
+    !("kind" in createState.error) &&
+    createState.error.retryable;
 
   const totalGrams = useMemo(
     () =>
@@ -165,9 +202,12 @@ export function NutritionPlanCreateDialog({
     // Closing mid-flight would leave a sent mutation without a surface to report
     // on, and the hook's stale-completion guard would discard the result.
     if (isBusy) return;
-    // Only the dialog's local lock is cleared. The panel latch is the caller's
+    // Only the dialog's local locks are cleared. The panel latch is the caller's
     // state and stays engaged, so closing this cannot buy back the CREATE action.
+    // A retryable intent is deliberately abandoned here (Web v1 policy): the
+    // backend's no-active-plan precondition refuses any duplicate.
     setOutcomeUncertain(false);
+    setReaderReconciliationRequired(false);
     resetCreate();
     onClose();
   }, [isBusy, onClose, resetCreate]);
@@ -183,16 +223,31 @@ export function NutritionPlanCreateDialog({
     if (isPotentiallyCommittedOutcome(error)) {
       setOutcomeUncertain(true);
       onCreateOutcomeUncertain?.();
+      return;
+    }
+    // Refused, but the refusal contradicted the `empty` snapshot. Same latch as a
+    // confirmed create, different reason and different words.
+    if (requiresNutritionReaderReconciliation(error)) {
+      setReaderReconciliationRequired(true);
+      onCreateReaderReconciliationRequired?.();
     }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isBusy) return;
-    // Belt and braces: the button is disabled, but a form submit can also arrive
-    // from Enter or programmatically, and this is the guard that must not be
-    // bypassed — past here we would mint a new operationId.
+    /*
+     * Belt and braces: the button is disabled or withdrawn, but a form submit can
+     * also arrive from Enter or programmatically, and past here we would mint a new
+     * operationId.
+     *
+     * Three separate reasons to refuse: the outcome is unknown; the `empty`
+     * snapshot was contradicted; or an unresolved retryable intent already exists
+     * and Retry owns it.
+     */
     if (outcomeUncertain) return;
+    if (readerReconciliationRequired) return;
+    if (hasRetryableIntent) return;
 
     setLocalError(null);
 
@@ -298,6 +353,9 @@ export function NutritionPlanCreateDialog({
     // Once the outcome is uncertain, no further attempt is safe — not even a
     // same-operationId replay, which would return the same unverifiable payload.
     if (outcomeUncertain) return;
+    // Nor once the `empty` snapshot was contradicted: replaying it can only be
+    // refused again.
+    if (readerReconciliationRequired) return;
     try {
       // Same prepared intent, same operationId — the backend treats it as a
       // replay instead of a second plan.
@@ -310,11 +368,19 @@ export function NutritionPlanCreateDialog({
     }
   };
 
-  const retryable =
-    createState.status === "error" &&
-    !outcomeUncertain &&
-    !("kind" in createState.error) &&
-    createState.error.retryable;
+  // Same condition as `hasRetryableIntent`, kept as the render-side name.
+  const retryable = hasRetryableIntent;
+
+  /*
+   * One shared lock for every form input.
+   *
+   * While Retry owns an unresolved intent the form must not be editable: Retry
+   * replays the values frozen at prepare time, so an edited field would display
+   * one payload while sending another. The two terminal states lock it for the
+   * same reason — nothing typed here can reach the backend any more.
+   */
+  const formLocked =
+    isBusy || outcomeUncertain || readerReconciliationRequired || hasRetryableIntent;
 
   return (
     <Dialog
@@ -369,6 +435,23 @@ export function NutritionPlanCreateDialog({
           </p>
         )}
 
+        {/*
+          A THIRD wording, not a variant of the other two.
+          The backend refused this creation, so "o plano pode ter sido criado" would
+          be false — but it refused because an active plan already exists where this
+          screen showed none. No failure blame, no success implication.
+        */}
+        {readerReconciliationRequired && (
+          <p
+            data-testid="create-plan-reader-reconciliation"
+            role="alert"
+            className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100"
+          >
+            O estado dos planos mudou e esta operação não foi realizada. Aguarde a
+            atualização das informações antes de tentar novamente.
+          </p>
+        )}
+
         {isError && (
           <div
             data-testid="create-plan-error"
@@ -381,15 +464,29 @@ export function NutritionPlanCreateDialog({
              */}
             <p>{createState.error.message}</p>
             {retryable && (
-              <Button
-                type="button"
-                variant="secondary"
-                className="mt-3"
-                onClick={handleRetry}
-                data-testid="create-plan-retry"
-              >
-                Tentar novamente
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-3"
+                  onClick={handleRetry}
+                  data-testid="create-plan-retry"
+                >
+                  Tentar novamente
+                </Button>
+                {/*
+                  States the ownership rule plainly, because the operator cannot
+                  see it: Retry replays the frozen intent (same operationId, same
+                  values), and closing gives that attempt up.
+                */}
+                <p
+                  data-testid="create-plan-retry-ownership"
+                  className="mt-2 text-[11px] leading-relaxed text-red-200/80"
+                >
+                  Tentar novamente repetirá exatamente esta tentativa, com os mesmos
+                  dados. Se fechar esta janela, a tentativa atual será encerrada.
+                </p>
+              </>
             )}
           </div>
         )}
@@ -406,7 +503,7 @@ export function NutritionPlanCreateDialog({
               id="nutrition-food-type"
               value={foodType}
               onChange={(event) => setFoodType(event.target.value)}
-              disabled={isBusy}
+              disabled={formLocked}
             />
           </div>
           <div>
@@ -417,7 +514,7 @@ export function NutritionPlanCreateDialog({
               min={0}
               value={hydrationMl}
               onChange={(event) => setHydrationMl(event.target.value)}
-              disabled={isBusy}
+              disabled={formLocked}
             />
           </div>
         </div>
@@ -435,7 +532,7 @@ export function NutritionPlanCreateDialog({
                   <select
                     id={`${slot.id}-period`}
                     value={slot.period}
-                    disabled={isBusy}
+                    disabled={formLocked}
                     onChange={(event) =>
                       updateSlot(slot.id, { period: event.target.value as MealPeriod })
                     }
@@ -454,7 +551,7 @@ export function NutritionPlanCreateDialog({
                     id={`${slot.id}-time`}
                     type="time"
                     value={slot.scheduledTime}
-                    disabled={isBusy}
+                    disabled={formLocked}
                     onChange={(event) =>
                       updateSlot(slot.id, { scheduledTime: event.target.value })
                     }
@@ -467,7 +564,7 @@ export function NutritionPlanCreateDialog({
                     type="number"
                     min={1}
                     value={slot.targetGrams}
-                    disabled={isBusy}
+                    disabled={formLocked}
                     onChange={(event) =>
                       updateSlot(slot.id, { targetGrams: event.target.value })
                     }
@@ -478,7 +575,7 @@ export function NutritionPlanCreateDialog({
                     type="button"
                     variant="ghost"
                     aria-label="Remover refeição"
-                    disabled={isBusy || slots.length <= 1}
+                    disabled={formLocked || slots.length <= 1}
                     onClick={() => removeSlot(slot.id)}
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -489,7 +586,7 @@ export function NutritionPlanCreateDialog({
           </ul>
 
           <div className="mt-3 flex items-center justify-between">
-            <Button type="button" variant="secondary" onClick={addSlot} disabled={isBusy}>
+            <Button type="button" variant="secondary" onClick={addSlot} disabled={formLocked}>
               <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Adicionar refeição
             </Button>
@@ -509,7 +606,7 @@ export function NutritionPlanCreateDialog({
               <Input
                 id="nutrition-prof-name"
                 value={profName}
-                disabled={isBusy}
+                disabled={formLocked}
                 onChange={(event) => setProfName(event.target.value)}
               />
             </div>
@@ -518,7 +615,7 @@ export function NutritionPlanCreateDialog({
               <Input
                 id="nutrition-prof-reg-type"
                 value={profRegType}
-                disabled={isBusy}
+                disabled={formLocked}
                 onChange={(event) => setProfRegType(event.target.value)}
               />
             </div>
@@ -527,7 +624,7 @@ export function NutritionPlanCreateDialog({
               <Input
                 id="nutrition-prof-reg-num"
                 value={profRegNum}
-                disabled={isBusy}
+                disabled={formLocked}
                 onChange={(event) => setProfRegNum(event.target.value)}
               />
             </div>
@@ -539,7 +636,7 @@ export function NutritionPlanCreateDialog({
           <textarea
             id="nutrition-instructions"
             value={specialInstructions}
-            disabled={isBusy}
+            disabled={formLocked}
             onChange={(event) => setSpecialInstructions(event.target.value)}
             rows={3}
             className="mt-1 w-full rounded-xl border border-border/60 bg-background/40 px-3 py-2 text-sm"
@@ -560,10 +657,15 @@ export function NutritionPlanCreateDialog({
           >
             Fechar
           </Button>
-          {!isSuccess && (
+          {/*
+            Withdrawn entirely while Retry owns an unresolved intent: two live
+            paths would let the operator create a second operationId beside a
+            first one whose fate is still unknown.
+          */}
+          {!isSuccess && !hasRetryableIntent && (
             <Button
               type="submit"
-              disabled={isBusy || outcomeUncertain}
+              disabled={isBusy || outcomeUncertain || readerReconciliationRequired}
               data-testid="create-plan-submit"
             >
               {isBusy ? "Registrando..." : "Registrar plano"}

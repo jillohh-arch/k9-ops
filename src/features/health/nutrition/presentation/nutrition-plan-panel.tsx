@@ -30,11 +30,13 @@ import {
 } from "../../presentation/components/health-technical-states";
 import { useNutritionPlans } from "../hooks/use-nutrition-plans";
 import { NutritionPlanCanonicalCard } from "./nutrition-plan-canonical-card";
+import { NutritionPlanCancelDialog } from "./nutrition-plan-cancel-dialog";
 import { NutritionPlanCreateDialog } from "./nutrition-plan-create-dialog";
 import { NutritionPlanLegacyCard } from "./nutrition-plan-legacy-card";
 import { NutritionPlanEditDialog } from "./nutrition-plan-edit-dialog";
 import { NutritionPlanReplaceDialog } from "./nutrition-plan-replace-dialog";
 import {
+  canOfferNutritionCancel,
   canOfferNutritionCreate,
   canOfferNutritionEdit,
   canOfferNutritionReplace,
@@ -197,19 +199,59 @@ export function NutritionPlanPanel({
   }
 
   /*
-   * Both latches gate both actions.
+   * WEB-01B.7 — lifecycle CANCEL, and the same temporal seam once more.
+   *
+   * The backend has moved plan A to `cancelled` at revision N+1, but the reader
+   * may still be showing A as active at revision N. In that window the interface
+   * is asserting something false, and all three actions would freeze an
+   * expectation against a plan that is already ended.
+   *
+   * Keyed on the snapshot that was cancelled, so it releases as soon as the reader
+   * stops showing it. Deliberately NOT a fabricated `cancelled` status and NOT a
+   * revision bump: the reader remains the only authority on what the plan is now.
+   */
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [pendingCancel, setPendingCancel] = useState<{
+    planId: string;
+    staleRevision: number;
+  } | null>(null);
+
+  if (dogId !== latchedDogId) {
+    setPendingCancel(null);
+  }
+
+  if (
+    pendingCancel !== null &&
+    (activeCanonical === null ||
+      activeCanonical.id !== pendingCancel.planId ||
+      activeCanonical.revision !== pendingCancel.staleRevision)
+  ) {
+    setPendingCancel(null);
+  }
+
+  /*
+   * All three latches gate all three actions.
    *
    * A pending REPLACE withholds EDIT because the plan on screen is dead — there
    * is nothing valid to patch. A pending UPDATE withholds REPLACE because the
    * revision on screen is already superseded, so it cannot serve as
-   * `expectedActiveRevision`. Either way the operator is not offered an action
-   * the backend is certain to refuse.
+   * `expectedActiveRevision`. A pending CANCEL withholds both for the strongest
+   * reason of the three: the plan may no longer be active at all, so there is
+   * nothing to patch, nothing to supersede, and nothing left to cancel.
+   *
+   * Symmetrically, CANCEL is withheld while an UPDATE or REPLACE is unreconciled,
+   * because the revision it would send as `expectedRevision` is already stale.
+   * Either way the operator is not offered an action the backend is certain to
+   * refuse.
    */
-  const awaitingReconciliation = pendingUpdate !== null || pendingReplace !== null;
+  const awaitingReconciliation =
+    pendingUpdate !== null || pendingReplace !== null || pendingCancel !== null;
 
   const offerEdit = canOfferNutritionEdit(decision, canManage) && !awaitingReconciliation;
   const offerReplace =
     canOfferNutritionReplace(decision, canManage) && !awaitingReconciliation;
+  const offerCancel =
+    canOfferNutritionCancel(decision, canManage) && !awaitingReconciliation;
 
   switch (decision.kind) {
     case "loading":
@@ -240,8 +282,10 @@ export function NutritionPlanPanel({
       );
 
     /*
-     * WEB-01B.5 / WEB-01B.6 — the only state offering administrative UPDATE and
-     * structural REPLACE. No CANCEL affordance here: that is B.7.
+     * WEB-01B.5 / B.6 / B.7 — the only state offering administrative UPDATE,
+     * structural REPLACE and lifecycle CANCEL. All three need a canonical active
+     * plan whose id + revision can travel as the backend expectation, and none of
+     * them is reachable from any other read state.
      */
     case "canonical": {
       const plan = state.activePlan as NutritionPlan;
@@ -250,7 +294,7 @@ export function NutritionPlanPanel({
           <NutritionPlanCanonicalCard
             plan={plan}
             action={
-              offerEdit || offerReplace ? (
+              offerEdit || offerReplace || offerCancel ? (
                 <>
                   {offerEdit && (
                     <Button
@@ -268,6 +312,17 @@ export function NutritionPlanPanel({
                       data-testid="nutrition-replace-plan-action"
                     >
                       Substituir plano
+                    </Button>
+                  )}
+                  {offerCancel && (
+                    // `danger` is the design system's existing destructive variant;
+                    // no new visual language is introduced for this phase.
+                    <Button
+                      variant="danger"
+                      onClick={() => setCancelOpen(true)}
+                      data-testid="nutrition-cancel-plan-action"
+                    >
+                      Cancelar plano
                     </Button>
                   )}
                 </>
@@ -295,6 +350,13 @@ export function NutritionPlanPanel({
                 snapshot it froze, so no resulting revision is invented.
               */
               onUpdateOutcomeUncertain={(stale) => setPendingUpdate(stale)}
+              /*
+                Third premise, same latch (WEB-01B.7R). Here the backend REFUSED
+                the update and proved the revision on screen is not current. The
+                latch withholds the same actions for the same reason — the snapshot
+                cannot serve as an expectation — but nothing was written.
+              */
+              onUpdateReaderReconciliationRequired={(stale) => setPendingUpdate(stale)}
               onClose={() => setEditOpen(false)}
             />
           )}
@@ -317,7 +379,38 @@ export function NutritionPlanPanel({
                   supersededRevision: stale.staleRevision,
                 })
               }
+              /*
+                Third premise, same latch (WEB-01B.7R). The backend REFUSED the
+                replacement and proved the expectation pair is obsolete — the plan
+                we named is no longer the active authority.
+              */
+              onReplaceReaderReconciliationRequired={(stale) =>
+                setPendingReplace({
+                  supersededPlanId: stale.planId,
+                  supersededRevision: stale.staleRevision,
+                })
+              }
               onClose={() => setReplaceOpen(false)}
+            />
+          )}
+          {cancelOpen && canManage && (
+            <NutritionPlanCancelDialog
+              dogId={dogId}
+              plan={plan}
+              open={cancelOpen}
+              // Both callbacks carry the frozen snapshot and engage the same latch.
+              // The difference is epistemic: onCancelled knows the plan was ended,
+              // the uncertain one only knows it may have been. Neither fabricates
+              // a cancelled status or a bumped revision.
+              onCancelled={(stale) => setPendingCancel(stale)}
+              onCancelOutcomeUncertain={(stale) => setPendingCancel(stale)}
+              /*
+                Third premise, same latch (WEB-01B.7R). The backend REFUSED the
+                cancellation and proved the plan on screen is not active any more —
+                `already-cancelled` says so outright. Nothing was written by us.
+              */
+              onCancelReaderReconciliationRequired={(stale) => setPendingCancel(stale)}
+              onClose={() => setCancelOpen(false)}
             />
           )}
         </>
@@ -374,6 +467,13 @@ export function NutritionPlanPanel({
                 second CREATE, which is all this latch withholds.
               */
               onCreateOutcomeUncertain={() => setPendingReconciliation(true)}
+              /*
+                Third premise, same latch (WEB-01B.7R). The backend REFUSED the
+                creation with `active-plan-conflict`: it holds an active plan where
+                this `empty` snapshot said there was none. Nothing was written, but
+                `empty` has stopped being grounds for another CREATE.
+              */
+              onCreateReaderReconciliationRequired={() => setPendingReconciliation(true)}
               onClose={() => setCreateOpen(false)}
             />
           )}

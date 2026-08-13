@@ -187,6 +187,76 @@ export function normalizeNutritionMutationError(
   };
 }
 
+/**
+ * Domain codes whose rejection PROVES the snapshot the client used is obsolete.
+ *
+ * Derived from the backend transaction guards (canil-gcm @
+ * feature/health-v1-foundation), not from severity or retryability:
+ *
+ * - `revision-conflict`   — `assertExpectedRevision` found `current !== expected`
+ *                           (engine 1533-1539), so the revision on screen is
+ *                           provably not the current one.
+ * - `already-cancelled`   — the target is `status: "cancelled"` (engine 1524)
+ *                           while the reader is still showing it as active.
+ * - `invalid-lifecycle`   — the target is not `active` (engine 1521), same
+ *                           contradiction by a different route.
+ * - `plan-not-found`      — the document the reader named does not exist
+ *                           (engine 1522).
+ * - `active-plan-conflict`— CREATE found an active plan where the reader reported
+ *                           none, or REPLACE found the expected plan is no longer
+ *                           the active one (engine 1595, 1602, 1610-1619).
+ *
+ * Every one of these is the backend contradicting the screen. The mutation was
+ * refused, so nothing was written — but continuing to act on that snapshot only
+ * produces the same refusal again.
+ */
+const STALE_READER_AUTHORITY: ReadonlySet<NutritionMutationDomainCode> = new Set([
+  "revision-conflict",
+  "already-cancelled",
+  "invalid-lifecycle",
+  "plan-not-found",
+  "active-plan-conflict",
+]);
+
+/**
+ * True when a REJECTED mutation also proved the reader's snapshot is stale.
+ *
+ * This is a statement about READER AUTHORITY, not about mutation outcome. It sits
+ * alongside two other conditions that must not be conflated:
+ *
+ *   confirmed success        — the write happened
+ *   potentially committed    — `invalid-mutation-response`; the write MAY have
+ *                              happened and we cannot tell
+ *   stale reader authority   — the write definitely did NOT happen, but the state
+ *                              the operator is looking at is already obsolete
+ *
+ * The last two converge on the same remedy (withhold actions until the realtime
+ * reader reconciles) and must never share the same wording: telling an operator a
+ * cancellation "may have completed" after the backend explicitly refused it would
+ * be false.
+ *
+ * Deliberately narrow. It is NOT "every non-retryable error":
+ *
+ * - `permission-denied` / `unauthenticated` reject a possibly perfectly current
+ *   snapshot; the auth gate never reads plan state (callables 290, 106-113).
+ * - `idempotency-conflict` describes an operationId reused with a different
+ *   payload (engine 1125). It says nothing about plan authority.
+ * - `internal-integrity-error` describes a stored revision below 1 (engine 1515)
+ *   — a backend integrity problem, with no successor snapshot implied.
+ * - `validation` / `invalid_timezone` are refused before any state comparison.
+ * - `invalid-mutation-response` belongs to the potentially-committed family and
+ *   must not also be treated as a rejection; see `isPotentiallyCommittedOutcome`.
+ *
+ * Widening this set would freeze the UI after operations that left the screen
+ * perfectly valid.
+ */
+export function requiresNutritionReaderReconciliation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const domainCode = (error as { domainCode?: unknown }).domainCode;
+  if (typeof domainCode !== "string") return false;
+  return STALE_READER_AUTHORITY.has(domainCode as NutritionMutationDomainCode);
+}
+
 export function isNutritionPlanConflictError(
   error: NutritionMutationError,
 ): boolean {

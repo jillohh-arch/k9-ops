@@ -35,6 +35,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isPotentiallyCommittedOutcome } from "../data/nutrition-plan-mutation-service";
+import { requiresNutritionReaderReconciliation } from "../errors/nutrition-mutation-errors";
 import { useNutritionPlanMutations } from "../hooks/use-nutrition-plan-mutations";
 import type { CreateNutritionPlanCommand } from "../mutation-types";
 import type { MealPeriod, NutritionPlan } from "../types";
@@ -386,6 +387,19 @@ export interface NutritionPlanReplaceDialogProps {
     planId: string;
     staleRevision: number;
   }) => void;
+  /**
+   * Fired when the backend REFUSED this replacement with an error that proves the
+   * expectation pair is obsolete (`active-plan-conflict`, `revision-conflict`,
+   * `invalid-lifecycle`, `plan-not-found`).
+   *
+   * A third distinct family: nothing was written (unlike a confirmed replacement)
+   * and nothing MAY have been written (unlike an uncertain outcome) — but the plan
+   * this dialog froze as the authority to supersede is no longer that authority.
+   */
+  onReplaceReaderReconciliationRequired?: (staleSnapshot: {
+    planId: string;
+    staleRevision: number;
+  }) => void;
 }
 
 export function NutritionPlanReplaceDialog({
@@ -395,6 +409,7 @@ export function NutritionPlanReplaceDialog({
   onClose,
   onReplaced,
   onReplaceOutcomeUncertain,
+  onReplaceReaderReconciliationRequired,
 }: NutritionPlanReplaceDialogProps) {
   const { createState, prepareCreate, executeCreate, retryCreate, resetCreate } =
     useNutritionPlanMutations();
@@ -461,6 +476,17 @@ export function NutritionPlanReplaceDialog({
    * Local to the dialog: cleared on close, while the panel latch survives.
    */
   const [outcomeUncertain, setOutcomeUncertain] = useState(false);
+  /*
+   * The backend REFUSED this replacement and, in doing so, proved the expectation
+   * pair is obsolete — `active-plan-conflict` (the plan we named is no longer the
+   * active one), `revision-conflict`, `invalid-lifecycle` or `plan-not-found`.
+   *
+   * Nothing was written, so this is NOT the uncertain-outcome case and must not
+   * borrow its wording. But the frozen pair has been contradicted, so another
+   * attempt against it can only be refused again.
+   */
+  const [readerReconciliationRequired, setReaderReconciliationRequired] =
+    useState(false);
   const [prevOpen, setPrevOpen] = useState(open);
 
   // Re-seed during render on the closed -> open edge, so a reopen never carries
@@ -486,15 +512,31 @@ export function NutritionPlanReplaceDialog({
       setSlots(seedReplaceSlots(plan));
       setLocalError(null);
       setCorrelation(null);
+      setOutcomeUncertain(false);
+      setReaderReconciliationRequired(false);
     }
   }
 
   const isBusy =
     createState.status === "preparing" || createState.status === "executing";
   const isSuccess = createState.status === "success";
-  // An uncertain outcome is NOT an ordinary error: claiming "failed" would invite
-  // the retry we must not allow. It gets its own surface below.
-  const isError = createState.status === "error" && !outcomeUncertain;
+  // Neither an uncertain outcome nor a stale-authority refusal is an ordinary
+  // error: each gets its own surface below, with its own wording.
+  const isError =
+    createState.status === "error" && !outcomeUncertain && !readerReconciliationRequired;
+
+  /*
+   * WEB-01B.7R retry-intent ownership: a retryable failure leaves exactly ONE
+   * unresolved intent, owned by this open dialog. Retry replays it; the normal
+   * submit would mint a second operationId beside it. Closing abandons it, which
+   * is safe because the expectation pair refuses any duplicate.
+   */
+  const hasRetryableIntent =
+    createState.status === "error" &&
+    !outcomeUncertain &&
+    !readerReconciliationRequired &&
+    !("kind" in createState.error) &&
+    createState.error.retryable;
 
   const isStale = shouldShowNutritionReplaceStale({
     mutationStatus: createState.status,
@@ -611,16 +653,34 @@ export function NutritionPlanReplaceDialog({
         planId: expectedActivePlanId,
         staleRevision: expectedActiveRevision,
       });
+      return;
+    }
+    // Refused, but the refusal contradicted the expectation pair. Same latch as a
+    // confirmed replacement, different reason and different words.
+    if (requiresNutritionReaderReconciliation(error)) {
+      setReaderReconciliationRequired(true);
+      onReplaceReaderReconciliationRequired?.({
+        planId: expectedActivePlanId,
+        staleRevision: expectedActiveRevision,
+      });
     }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isBusy) return;
-    // Belt and braces: the button is disabled, but a form submit can also arrive
-    // from Enter or programmatically, and past here we would mint a new
-    // operationId for a second structural replacement.
+    /*
+     * Belt and braces: the button is disabled or withdrawn, but a form submit can
+     * also arrive from Enter or programmatically, and past here we would mint a new
+     * operationId for a second structural replacement.
+     *
+     * Three separate reasons to refuse: the outcome is unknown; the expectation
+     * pair was contradicted; or an unresolved retryable intent already exists and
+     * Retry owns it.
+     */
     if (outcomeUncertain) return;
+    if (readerReconciliationRequired) return;
+    if (hasRetryableIntent) return;
 
     setLocalError(null);
 
@@ -654,6 +714,9 @@ export function NutritionPlanReplaceDialog({
     // Once the outcome is uncertain, no further attempt is safe — not even a
     // same-operationId replay, which would return the same unverifiable payload.
     if (outcomeUncertain) return;
+    // Nor once the expectation pair was contradicted: replaying it can only be
+    // refused again.
+    if (readerReconciliationRequired) return;
     try {
       // Same prepared intent: same operationId, same planData, same expectation
       // pair. The backend treats it as a replay, never as a second replacement.
@@ -666,11 +729,23 @@ export function NutritionPlanReplaceDialog({
     }
   };
 
-  const retryable =
-    createState.status === "error" &&
-    !outcomeUncertain &&
-    !("kind" in createState.error) &&
-    createState.error.retryable;
+  // Same condition as `hasRetryableIntent`, kept as the render-side name.
+  const retryable = hasRetryableIntent;
+
+  /*
+   * One shared lock for every form input.
+   *
+   * While Retry owns an unresolved intent the form must not be editable: Retry
+   * replays the structural payload frozen at prepare time, so an edited field
+   * would display one plan while sending another. The terminal states lock it for
+   * the same reason.
+   */
+  const formLocked =
+    isBusy ||
+    isSuccess ||
+    outcomeUncertain ||
+    readerReconciliationRequired ||
+    hasRetryableIntent;
 
   return (
     <Dialog
@@ -776,6 +851,23 @@ export function NutritionPlanReplaceDialog({
           </p>
         )}
 
+        {/*
+          A THIRD wording, not a variant of the other two.
+          The backend refused this replacement, so "a substituição pode ter sido
+          concluída" would be false — but it refused because the plan we named is no
+          longer the active authority. No failure blame, no success implication.
+        */}
+        {readerReconciliationRequired && (
+          <p
+            data-testid="replace-plan-reader-reconciliation"
+            role="alert"
+            className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100"
+          >
+            O estado deste plano mudou e esta operação não foi realizada. Aguarde a
+            atualização das informações antes de tentar novamente.
+          </p>
+        )}
+
         {isError && (
           <div
             data-testid="replace-plan-error"
@@ -789,15 +881,30 @@ export function NutritionPlanReplaceDialog({
             */}
             <p>{createState.error.message}</p>
             {retryable && (
-              <Button
-                type="button"
-                variant="secondary"
-                className="mt-3"
-                onClick={handleRetry}
-                data-testid="replace-plan-retry"
-              >
-                Tentar novamente
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-3"
+                  onClick={handleRetry}
+                  data-testid="replace-plan-retry"
+                >
+                  Tentar novamente
+                </Button>
+                {/*
+                  States the ownership rule plainly, because the operator cannot
+                  see it: Retry replays the frozen intent (same operationId, same
+                  structural payload, same expectation pair), and closing gives
+                  that attempt up.
+                */}
+                <p
+                  data-testid="replace-plan-retry-ownership"
+                  className="mt-2 text-[11px] leading-relaxed text-red-200/80"
+                >
+                  Tentar novamente repetirá exatamente esta tentativa, com os mesmos
+                  dados. Se fechar esta janela, a tentativa atual será encerrada.
+                </p>
+              </>
             )}
           </div>
         )}
@@ -823,7 +930,7 @@ export function NutritionPlanReplaceDialog({
               id="replace-food-type"
               value={foodType}
               onChange={(event) => setFoodType(event.target.value)}
-              disabled={isBusy || isSuccess}
+              disabled={formLocked}
             />
           </div>
           <div>
@@ -834,7 +941,7 @@ export function NutritionPlanReplaceDialog({
               min={0}
               value={hydrationMl}
               onChange={(event) => setHydrationMl(event.target.value)}
-              disabled={isBusy || isSuccess}
+              disabled={formLocked}
             />
           </div>
         </div>
@@ -852,7 +959,7 @@ export function NutritionPlanReplaceDialog({
                   <select
                     id={`${slot.id}-replace-period`}
                     value={slot.period}
-                    disabled={isBusy || isSuccess}
+                    disabled={formLocked}
                     onChange={(event) =>
                       updateSlot(slot.id, { period: event.target.value as MealPeriod })
                     }
@@ -871,7 +978,7 @@ export function NutritionPlanReplaceDialog({
                     id={`${slot.id}-replace-time`}
                     type="time"
                     value={slot.scheduledTime}
-                    disabled={isBusy || isSuccess}
+                    disabled={formLocked}
                     onChange={(event) =>
                       updateSlot(slot.id, { scheduledTime: event.target.value })
                     }
@@ -884,7 +991,7 @@ export function NutritionPlanReplaceDialog({
                     type="number"
                     min={1}
                     value={slot.targetGrams}
-                    disabled={isBusy || isSuccess}
+                    disabled={formLocked}
                     onChange={(event) =>
                       updateSlot(slot.id, { targetGrams: event.target.value })
                     }
@@ -895,7 +1002,7 @@ export function NutritionPlanReplaceDialog({
                     type="button"
                     variant="ghost"
                     aria-label="Remover refeição"
-                    disabled={isBusy || isSuccess || slots.length <= 1}
+                    disabled={formLocked || slots.length <= 1}
                     onClick={() => removeSlot(slot.id)}
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -910,7 +1017,7 @@ export function NutritionPlanReplaceDialog({
               type="button"
               variant="secondary"
               onClick={addSlot}
-              disabled={isBusy || isSuccess}
+              disabled={formLocked}
             >
               <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Adicionar refeição
@@ -927,7 +1034,7 @@ export function NutritionPlanReplaceDialog({
             <Input
               id="replace-timezone"
               value={timezone}
-              disabled={isBusy || isSuccess}
+              disabled={formLocked}
               onChange={(event) => setTimezone(event.target.value)}
             />
           </div>
@@ -942,7 +1049,7 @@ export function NutritionPlanReplaceDialog({
               id="replace-valid-until"
               type="date"
               value={validUntil}
-              disabled={isBusy || isSuccess}
+              disabled={formLocked}
               onChange={(event) => setValidUntil(event.target.value)}
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -1009,10 +1116,17 @@ export function NutritionPlanReplaceDialog({
           >
             Fechar
           </Button>
-          {!isSuccess && (
+          {/*
+            Withdrawn entirely while Retry owns an unresolved intent: two live
+            paths would let the operator create a second operationId beside a
+            first one whose fate is still unknown.
+          */}
+          {!isSuccess && !hasRetryableIntent && (
             <Button
               type="submit"
-              disabled={isBusy || isStale || outcomeUncertain}
+              disabled={
+                isBusy || isStale || outcomeUncertain || readerReconciliationRequired
+              }
               data-testid="replace-plan-submit"
             >
               {isBusy ? "Substituindo..." : "Substituir plano"}

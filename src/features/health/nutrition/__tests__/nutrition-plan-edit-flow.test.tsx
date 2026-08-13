@@ -224,13 +224,19 @@ describe("WEB-01B.5 — administrative-only surface", () => {
     );
   });
 
-  // WEB-01B.6 delivered REPLACE, so "Substituir" now appears alongside EDIT and is
-  // asserted in the B.6 suites. CANCEL remains deferred to B.7.
-  it("offers no CANCEL affordance in this phase", () => {
-    const { container } = render(<NutritionPlanPanel dogId="dog-1" />);
+  /*
+   * WEB-01B.7 inverted this. The old assertion ("no CANCEL in this phase") was a
+   * phase boundary, not a contract, and expired when CANCEL shipped. The durable
+   * statement for the EDIT surface is the one below: editing administrative data
+   * is not a lifecycle action, so the edit form itself offers no cancellation.
+   */
+  it("keeps the EDIT form administrative — no lifecycle action inside it", () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
     openEdit();
 
-    expect(container.textContent ?? "").not.toMatch(/Cancelar plano/i);
+    // CANCEL lives on the card, never inside the edit dialog.
+    expect(screen.queryByTestId("cancel-plan-submit")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("cancel-plan-reason")).not.toBeInTheDocument();
   });
 });
 
@@ -1018,13 +1024,21 @@ describe("WEB-01B.6R — UPDATE potentially-committed outcome", () => {
     expect(screen.queryByTestId("edit-plan-outcome-uncertain")).not.toBeInTheDocument();
   });
 
-  it("a revision-conflict does NOT engage the latch", async () => {
-    // The backend refused, so revision 3 is still the live truth and the operator
-    // keeps both actions.
+  /*
+   * WEB-01B.7R corrected this test's premise.
+   *
+   * It previously asserted that a `revision-conflict` leaves both actions live,
+   * using a class-B code as a class-A fixture. But a revision-conflict IS the
+   * backend saying revision 3 is not current — the strongest possible reason to
+   * withhold actions keyed on it. The class-A case is `permission-denied`, covered
+   * immediately below; the class-B behaviour now lives in its own suite.
+   */
+  it("a validation rejection does NOT engage the latch", async () => {
+    // Refused before any state comparison, so revision 3 is still the live truth.
     mutationMocks.executeUpdate.mockRejectedValue({
-      firebaseCode: "failed-precondition",
-      domainCode: "revision-conflict",
-      message: "Revision desatualizada.",
+      firebaseCode: "invalid-argument",
+      domainCode: "validation",
+      message: "Dados administrativos inválidos.",
       retryable: false,
     });
 
@@ -1057,5 +1071,220 @@ describe("WEB-01B.6R — UPDATE potentially-committed outcome", () => {
     fireEvent.click(screen.getByTestId("edit-plan-close"));
 
     expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+  });
+});
+
+/**
+ * WEB-01B.7R — a refusal that proves revision 3 is not current.
+ *
+ * Nothing was written, so this is neither a confirmed update nor a potentially
+ * committed one. But the frozen `expectedRevision` has been contradicted, so it
+ * cannot serve as the expectation for another mutation.
+ */
+describe("WEB-01B.7R — UPDATE stale reader authority", () => {
+  const CLASS_B_CASES: Array<[string, string, string]> = [
+    ["revision-conflict", "failed-precondition", "Revision desatualizada."],
+    ["invalid-lifecycle", "failed-precondition", "O plano não está ativo."],
+    ["plan-not-found", "not-found", "O plano não foi encontrado."],
+  ];
+
+  beforeEach(() => {
+    mockCan.mockReturnValue(true);
+    mockUseNutritionPlans.mockReturnValue(canonicalState(3));
+  });
+
+  it.each(CLASS_B_CASES)(
+    "%s withholds EDIT, REPLACE and CANCEL until the reader reconciles",
+    async (domainCode, firebaseCode, message) => {
+      mutationMocks.executeUpdate.mockRejectedValue({
+        firebaseCode,
+        domainCode,
+        message,
+        retryable: false,
+      });
+
+      render(<NutritionPlanPanel dogId="dog-1" />);
+      openEdit();
+      editInstructions("Servir em temperatura ambiente");
+      fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+      await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByTestId("edit-plan-close"));
+
+      expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("nutrition-cancel-plan-action")).not.toBeInTheDocument();
+    },
+  );
+
+  it("says the state changed, never that the change may have been applied", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "revision-conflict",
+      message: "Revision desatualizada.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+
+    const notice = screen.getByTestId("edit-plan-reader-reconciliation");
+    expect(notice.textContent).toMatch(/o estado deste plano mudou/i);
+    expect(screen.queryByTestId("edit-plan-outcome-uncertain")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-retry")).not.toBeInTheDocument();
+  });
+
+  it("locks its own submit against the contradicted revision", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "revision-conflict",
+      message: "Revision desatualizada.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+
+    const submit = screen.getByTestId("edit-plan-submit");
+    expect(submit).toBeDisabled();
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(mutationMocks.prepareUpdate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases once the reader reports the revision the backend already had", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "revision-conflict",
+      message: "Revision desatualizada.",
+      retryable: false,
+    });
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+
+    mockUseNutritionPlans.mockReturnValue(canonicalState(4));
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-replace-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-cancel-plan-action")).toBeInTheDocument();
+  });
+});
+
+/**
+ * WEB-01B.7R — retry-intent ownership inside the open EDIT dialog.
+ */
+describe("WEB-01B.7R — UPDATE retry intent ownership", () => {
+  beforeEach(() => {
+    mockCan.mockReturnValue(true);
+    mockUseNutritionPlans.mockReturnValue(canonicalState(3));
+    mutationMocks.updateState = {
+      status: "error",
+      intent: { operationId: "op-A" },
+      error: {
+        firebaseCode: "deadline-exceeded",
+        message: "Tempo de resposta excedido.",
+        retryable: true,
+      },
+    };
+  });
+
+  it("withdraws the normal submit while Retry owns the intent", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+
+    expect(screen.getByTestId("edit-plan-retry")).toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-submit")).not.toBeInTheDocument();
+  });
+
+  it("freezes the administrative form so Retry cannot appear to send new values", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+
+    expect(screen.getByLabelText("Instruções especiais")).toBeDisabled();
+  });
+
+  it("cannot mint a second operationId through a programmatic submit", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+
+    fireEvent.submit(screen.getByTestId("edit-plan-retry").closest("form")!);
+
+    expect(mutationMocks.prepareUpdate).not.toHaveBeenCalled();
+    expect(mutationMocks.executeUpdate).not.toHaveBeenCalled();
+  });
+
+  it("states that Retry repeats the previous attempt and closing ends it", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+
+    const notice = screen.getByTestId("edit-plan-retry-ownership");
+    expect(notice.textContent).toMatch(/repetirá exatamente esta tentativa/i);
+    expect(notice.textContent).toMatch(/será encerrada/i);
+  });
+
+  it("a retry landing in class-B engages the latch and allows no third attempt", async () => {
+    mutationMocks.retryUpdate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "revision-conflict",
+      message: "Revision desatualizada.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    fireEvent.click(screen.getByTestId("edit-plan-retry"));
+
+    await waitFor(() => expect(mutationMocks.retryUpdate).toHaveBeenCalledTimes(1));
+
+    // Stale-state wording, not uncertain wording: the backend explicitly refused.
+    expect(screen.getByTestId("edit-plan-reader-reconciliation")).toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-outcome-uncertain")).not.toBeInTheDocument();
+    // No third attempt from either path. Retry is withdrawn (its intent is over);
+    // submit returns but disabled, because class-B locks rather than withdraws.
+    expect(screen.queryByTestId("edit-plan-retry")).not.toBeInTheDocument();
+    expect(screen.getByTestId("edit-plan-submit")).toBeDisabled();
+    fireEvent.submit(screen.getByTestId("edit-plan-submit").closest("form")!);
+    expect(mutationMocks.prepareUpdate).not.toHaveBeenCalled();
+    expect(mutationMocks.retryUpdate).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+  });
+
+  it("a retry that succeeds reports confirmed success only", async () => {
+    mutationMocks.retryUpdate.mockResolvedValue({
+      success: true,
+      planId: "plan-1",
+      status: "active",
+      revision: 4,
+      wasNoOp: true,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    fireEvent.click(screen.getByTestId("edit-plan-retry"));
+
+    await waitFor(() => expect(mutationMocks.retryUpdate).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByTestId("edit-plan-reader-reconciliation")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-outcome-uncertain")).not.toBeInTheDocument();
+    expect(mutationMocks.prepareUpdate).not.toHaveBeenCalled();
   });
 });

@@ -179,10 +179,17 @@ describe("WEB-01B.6 — REPLACE affordance gating", () => {
     expect(screen.getByTestId("nutrition-replace-plan-action")).toBeInTheDocument();
   });
 
-  it("offers no CANCEL affordance — that is B.7", () => {
+  /*
+   * WEB-01B.7 inverted this. It previously asserted CANCEL did not exist, which
+   * was a phase boundary rather than a contract — the premise expired the moment
+   * CANCEL shipped. What is worth asserting on the REPLACE path is that a
+   * canonical active plan now offers all three actions together.
+   */
+  it("offers CANCEL alongside EDIT and REPLACE on a canonical active plan", () => {
     render(<NutritionPlanPanel dogId="dog-1" />);
-    expect(screen.queryByTestId("nutrition-cancel-plan-action")).not.toBeInTheDocument();
-    expect(screen.queryByText("Cancelar plano")).not.toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-cancel-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-replace-plan-action")).toBeInTheDocument();
   });
 
   it("withholds REPLACE on a legacy plan", () => {
@@ -809,12 +816,21 @@ describe("WEB-01B.6R — REPLACE potentially-committed outcome", () => {
     expect(screen.queryByTestId("replace-plan-outcome-uncertain")).not.toBeInTheDocument();
   });
 
-  it("an active-plan-conflict does NOT engage the latch", async () => {
-    // The backend refused the replacement, so A is still the live authority.
+  /*
+   * WEB-01B.7R corrected this test's premise.
+   *
+   * `active-plan-conflict` on the REPLACE path means the plan we named is no longer
+   * the active one — the backend contradicting the expectation pair. That is the
+   * strongest reason to withhold actions keyed on it, not a reason to leave them
+   * live. The genuine class-A case is `permission-denied`; class-B behaviour now
+   * lives in its own suite below.
+   */
+  it("a permission-denied does NOT engage the latch", async () => {
+    // The auth gate never reads plan state, so A is still the live authority.
     mutationMocks.executeCreate.mockRejectedValue({
-      firebaseCode: "failed-precondition",
-      domainCode: "active-plan-conflict",
-      message: "O plano ativo não corresponde ao esperado.",
+      firebaseCode: "permission-denied",
+      domainCode: "permission-denied",
+      message: "Sem permissão para gerenciar planos alimentares.",
       retryable: false,
     });
 
@@ -1290,5 +1306,162 @@ describe("WEB-01B.6 — seedReplaceSlots", () => {
       }) as unknown as NutritionPlan,
     );
     expect(slots[0].id).toBe("slot-1");
+  });
+});
+
+/**
+ * WEB-01B.7R — a refusal that proves the expectation pair is obsolete.
+ *
+ * Nothing was written, so this is neither a confirmed replacement nor a
+ * potentially committed one. But the plan this dialog froze as the authority to
+ * supersede is no longer that authority.
+ */
+describe("WEB-01B.7R — REPLACE stale reader authority", () => {
+  const CLASS_B_CASES: Array<[string, string, string]> = [
+    ["active-plan-conflict", "failed-precondition", "O plano ativo não corresponde."],
+    ["revision-conflict", "failed-precondition", "Revision desatualizada."],
+    ["invalid-lifecycle", "failed-precondition", "O plano não está ativo."],
+    ["plan-not-found", "not-found", "O plano não foi encontrado."],
+  ];
+
+  it.each(CLASS_B_CASES)(
+    "%s withholds EDIT, REPLACE and CANCEL until the reader reconciles",
+    async (domainCode, firebaseCode, message) => {
+      mutationMocks.executeCreate.mockRejectedValue({
+        firebaseCode,
+        domainCode,
+        message,
+        retryable: false,
+      });
+
+      render(<NutritionPlanPanel dogId="dog-1" />);
+      openReplace();
+      fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+      await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByTestId("replace-plan-close"));
+
+      expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("nutrition-cancel-plan-action")).not.toBeInTheDocument();
+      expect(screen.getByTestId("nutrition-canonical-card")).toBeInTheDocument();
+    },
+  );
+
+  it("says the state changed, never that the replacement may have completed", async () => {
+    mutationMocks.executeCreate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "active-plan-conflict",
+      message: "O plano ativo não corresponde.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    const notice = screen.getByTestId("replace-plan-reader-reconciliation");
+    expect(notice.textContent).toMatch(/o estado deste plano mudou/i);
+    expect(screen.queryByTestId("replace-plan-outcome-uncertain")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-success")).not.toBeInTheDocument();
+  });
+
+  it("locks its own submit against the contradicted expectation pair", async () => {
+    mutationMocks.executeCreate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "active-plan-conflict",
+      message: "O plano ativo não corresponde.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    const submit = screen.getByTestId("replace-plan-submit");
+    expect(submit).toBeDisabled();
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(mutationMocks.prepareCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases once the reader reports the successor", async () => {
+    mutationMocks.executeCreate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "active-plan-conflict",
+      message: "O plano ativo não corresponde.",
+      retryable: false,
+    });
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+    expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+
+    mockUseNutritionPlans.mockReturnValue(canonicalState(1, { id: "plan-2" }));
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    expect(screen.getByTestId("nutrition-replace-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-cancel-plan-action")).toBeInTheDocument();
+  });
+});
+
+/**
+ * WEB-01B.7R — retry-intent ownership inside the open REPLACE dialog.
+ */
+describe("WEB-01B.7R — REPLACE retry intent ownership", () => {
+  beforeEach(() => {
+    mutationMocks.createState = {
+      status: "error",
+      intent: { operationId: "op-A" },
+      error: {
+        firebaseCode: "unavailable",
+        message: "Serviço temporariamente indisponível.",
+        retryable: true,
+      },
+    };
+  });
+
+  it("withdraws the normal submit while Retry owns the intent", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+
+    expect(screen.getByTestId("replace-plan-retry")).toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-submit")).not.toBeInTheDocument();
+  });
+
+  it("freezes the structural form so Retry cannot appear to send a different plan", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+
+    expect(screen.getByLabelText("Tipo de alimento")).toBeDisabled();
+  });
+
+  it("cannot mint a second operationId through a programmatic submit", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+
+    fireEvent.submit(screen.getByTestId("replace-plan-retry").closest("form")!);
+
+    expect(mutationMocks.prepareCreate).not.toHaveBeenCalled();
+    expect(mutationMocks.executeCreate).not.toHaveBeenCalled();
+  });
+
+  it("states that Retry repeats the previous attempt and closing ends it", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+
+    const notice = screen.getByTestId("replace-plan-retry-ownership");
+    expect(notice.textContent).toMatch(/repetirá exatamente esta tentativa/i);
+    expect(notice.textContent).toMatch(/será encerrada/i);
   });
 });

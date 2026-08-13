@@ -228,11 +228,14 @@ describe("WEB-01B.4 — states that must never offer CREATE", () => {
     });
   }
 
-  // WEB-01B.6 delivered REPLACE, so "Substituir" is now expected on a canonical
-  // active plan and is asserted in the B.6 suites. What this test still guards is
-  // the part that matters to B.4: CREATE must not be reachable from a canonical
-  // plan, and CANCEL remains deferred to B.7.
-  it("canonical active offers no CREATE and no CANCEL (CREATE needs proven absence)", () => {
+  /*
+   * WEB-01B.6 delivered REPLACE and WEB-01B.7 delivered CANCEL, so both are now
+   * expected on a canonical active plan and asserted in their own suites. The
+   * durable B.4 invariant survives unchanged and is what this test guards: CREATE
+   * needs PROVEN ABSENCE, so it must never be reachable from a canonical plan —
+   * CREATE and the lifecycle actions can never coexist.
+   */
+  it("canonical active offers no CREATE (CREATE needs proven absence)", () => {
     mockCan.mockReturnValue(true);
     mockUseNutritionPlans.mockReturnValue(
       stateFor({
@@ -257,8 +260,10 @@ describe("WEB-01B.4 — states that must never offer CREATE", () => {
 
     const { container } = render(<NutritionPlanPanel dogId="dog-1" />);
     const text = container.textContent ?? "";
-    expect(text).not.toMatch(/Cancelar plano/i);
     expect(text).not.toMatch(/Novo plano/i);
+    expect(screen.queryByTestId("nutrition-create-plan-action")).not.toBeInTheDocument();
+    // The lifecycle actions own this state instead.
+    expect(screen.getByTestId("nutrition-cancel-plan-action")).toBeInTheDocument();
   });
 });
 
@@ -822,11 +827,13 @@ describe("WEB-01B.6R — CREATE potentially-committed outcome", () => {
     expect(screen.getByTestId("nutrition-create-plan-action")).toBeInTheDocument();
   });
 
-  it("a revision-conflict does NOT engage the latch either", async () => {
+  it("an unauthenticated rejection does NOT engage the latch either", async () => {
+    // Another class-A case: the auth gate never reads plan state, so `empty` is
+    // still a trustworthy basis for offering CREATE.
     mutationMocks.executeCreate.mockRejectedValue({
-      firebaseCode: "failed-precondition",
-      domainCode: "active-plan-conflict",
-      message: "Já existe um plano ativo.",
+      firebaseCode: "unauthenticated",
+      domainCode: "unauthenticated",
+      message: "Autenticação obrigatória.",
       retryable: false,
     });
 
@@ -838,5 +845,192 @@ describe("WEB-01B.6R — CREATE potentially-committed outcome", () => {
     fireEvent.click(screen.getByTestId("create-plan-close"));
 
     expect(screen.getByTestId("nutrition-create-plan-action")).toBeInTheDocument();
+  });
+});
+
+/**
+ * WEB-01B.7R — `active-plan-conflict` contradicts the `empty` snapshot.
+ *
+ * The backend refused this CREATE because it holds an active plan where the reader
+ * reported none. Nothing was written, but `empty` has stopped being grounds for
+ * offering CREATE again.
+ *
+ * This test previously asserted the opposite, under the name "a revision-conflict
+ * does NOT engage the latch either" — it used a class-B code as a class-A fixture
+ * and so encoded the gap as intended behaviour.
+ */
+describe("WEB-01B.7R — CREATE stale reader authority", () => {
+  const activePlanConflict = {
+    firebaseCode: "failed-precondition",
+    domainCode: "active-plan-conflict",
+    message: "Já existe um plano ativo.",
+    retryable: false,
+  };
+
+  beforeEach(() => {
+    mockCan.mockReturnValue(true);
+  });
+
+  it("withholds CREATE while the reader still reports empty", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(activePlanConflict);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("create-plan-close"));
+
+    // The reader has not moved, but the backend already contradicted it.
+    expect(screen.getByText(/Nenhum plano alimentar ativo/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-create-plan-action")).not.toBeInTheDocument();
+  });
+
+  it("says the state changed, never that the plan may have been created", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(activePlanConflict);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    const notice = screen.getByTestId("create-plan-reader-reconciliation");
+    expect(notice.textContent).toMatch(/o estado dos planos mudou/i);
+    expect(notice.textContent).toMatch(/não foi realizada/i);
+    expect(screen.queryByTestId("create-plan-outcome-uncertain")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("create-plan-success")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("create-plan-error")).not.toBeInTheDocument();
+  });
+
+  it("locks its own submit — no second attempt against the contradicted snapshot", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(activePlanConflict);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    const submit = screen.getByTestId("create-plan-submit");
+    expect(submit).toBeDisabled();
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(mutationMocks.prepareCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.retryCreate).not.toHaveBeenCalled();
+  });
+
+  it("releases once the reader reports the plan the backend already had", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(activePlanConflict);
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("create-plan-close"));
+
+    mockUseNutritionPlans.mockReturnValue(
+      stateFor({
+        status: "canonical",
+        activePlan: {
+          id: "plan-existing",
+          dogId: "dog-1",
+          foodType: "Ração",
+          amountGramsPerDay: 500,
+          mealsPerDay: 2,
+          mealSchedule: [],
+          validFrom: new Date(),
+          timezone: "America/Sao_Paulo",
+          recordedBy: { uid: "u1", name: "Vet", internalRole: "Vet" },
+          status: "active",
+          schemaVersion: 1,
+          revision: 1,
+          supplements: [],
+        } as never,
+      }),
+    );
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    expect(screen.queryByText(/Nenhum plano alimentar ativo/i)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * WEB-01B.7R — retry-intent ownership inside the open dialog.
+ *
+ * A retryable failure leaves ONE unresolved intent. Retry replays it with the same
+ * operationId; the normal submit would mint a second one beside it. Closing
+ * abandons the intent, which is the accepted Web v1 trade-off.
+ */
+describe("WEB-01B.7R — CREATE retry intent ownership", () => {
+  const transportFailure = {
+    firebaseCode: "unavailable",
+    message: "Serviço temporariamente indisponível.",
+    retryable: true,
+  };
+
+  beforeEach(() => {
+    mockCan.mockReturnValue(true);
+    mutationMocks.createState = {
+      status: "error",
+      intent: { operationId: "op-A" },
+      error: transportFailure,
+    };
+  });
+
+  it("withdraws the normal submit while Retry owns the intent", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fireEvent.click(screen.getByTestId("nutrition-create-plan-action"));
+
+    expect(screen.getByTestId("create-plan-retry")).toBeInTheDocument();
+    expect(screen.queryByTestId("create-plan-submit")).not.toBeInTheDocument();
+  });
+
+  it("cannot mint a second operationId through a programmatic submit", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fireEvent.click(screen.getByTestId("nutrition-create-plan-action"));
+
+    const form = screen.getByTestId("create-plan-retry").closest("form")!;
+    fireEvent.submit(form);
+
+    expect(mutationMocks.prepareCreate).not.toHaveBeenCalled();
+    expect(mutationMocks.executeCreate).not.toHaveBeenCalled();
+  });
+
+  it("freezes the form so it cannot show values Retry will not send", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fireEvent.click(screen.getByTestId("nutrition-create-plan-action"));
+
+    expect(screen.getByLabelText("Tipo de alimento")).toBeDisabled();
+    expect(screen.getByLabelText("Quantidade (g)")).toBeDisabled();
+  });
+
+  it("states that Retry repeats the previous attempt and closing ends it", async () => {
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fireEvent.click(screen.getByTestId("nutrition-create-plan-action"));
+
+    const notice = screen.getByTestId("create-plan-retry-ownership");
+    expect(notice.textContent).toMatch(/repetirá exatamente esta tentativa/i);
+    expect(notice.textContent).toMatch(/será encerrada/i);
+  });
+
+  it("Retry calls retryCreate, never prepareCreate", async () => {
+    mutationMocks.retryCreate.mockResolvedValue({
+      success: true,
+      planId: "plan-1",
+      status: "active",
+      revision: 1,
+      supersededPlanId: null,
+      wasNoOp: true,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fireEvent.click(screen.getByTestId("nutrition-create-plan-action"));
+    fireEvent.click(screen.getByTestId("create-plan-retry"));
+
+    await waitFor(() => expect(mutationMocks.retryCreate).toHaveBeenCalledTimes(1));
+    expect(mutationMocks.prepareCreate).not.toHaveBeenCalled();
   });
 });

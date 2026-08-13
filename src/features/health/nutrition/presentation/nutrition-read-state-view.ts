@@ -129,6 +129,40 @@ export function canOfferNutritionReplace(
   return decision.kind === "canonical";
 }
 
+/**
+ * WEB-01B.7 — lifecycle CANCEL eligibility.
+ *
+ * CANCEL ends the active plan: the same document stays in history with
+ * `status: "cancelled"` and `revision + 1`. It is NOT a delete, and it does not
+ * create a successor — after reconciliation the read model decides what the
+ * screen shows.
+ *
+ * Like EDIT and REPLACE it needs a canonical active plan, because the plan's
+ * `id` + `revision` are what travel as `planId` + `expectedRevision`. Every other
+ * state refuses:
+ *
+ * - empty      → nothing active to cancel; that state offers CREATE instead.
+ * - legacy     → a legacy prescription has no canonical revision to expect, so
+ *                the callable could not be addressed at all.
+ * - degraded   → the plan we hold may be partially parsed, so its revision is not
+ *                a trustworthy expectation.
+ * - conflict   → multiple active plans; cancelling would silently pick one.
+ * - error      → the state is unknown; never write against an unknown state.
+ * - loading    → nothing is proven yet.
+ *
+ * Identical to EDIT/REPLACE today and kept separate for the same reason: the
+ * three answer different questions (patch a revision / supersede a plan / end a
+ * plan) and are free to diverge. Capability x read state only — whether a
+ * mutation is awaiting reconciliation is the panel's temporal concern.
+ */
+export function canOfferNutritionCancel(
+  decision: NutritionViewDecision,
+  canManage: boolean,
+): boolean {
+  if (!canManage) return false;
+  return decision.kind === "canonical";
+}
+
 export function resolveNutritionView(state: NutritionPlanState): NutritionViewDecision {
   // 1. Error has absolute priority, including the inherited `empty` + error case.
   if (state.status === "error" || state.error !== null) {

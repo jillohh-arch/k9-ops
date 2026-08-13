@@ -263,7 +263,19 @@ describe("WEB-01B.6 — retry replays the same operation", () => {
     );
   });
 
-  it("does not auto-retry an active-plan-conflict", async () => {
+  /*
+   * WEB-01B.7R updated the premise of the two tests below, not their guarantees.
+   *
+   * Both codes are class-B on the REPLACE path: `active-plan-conflict` means the
+   * plan we named is no longer the active one (engine 1602, 1610-1619) and
+   * `revision-conflict` means the expected revision is not current (engine 1533).
+   * Either way the mutation was rejected AND the expectation pair is proven stale,
+   * so the reconciliation surface is correct and the ordinary error surface is not.
+   *
+   * Every original no-retry invariant is preserved; the authority assertions are
+   * added on top.
+   */
+  it("does not auto-retry an active-plan-conflict and requires reader reconciliation", async () => {
     serviceMocks.executeCreate.mockRejectedValue({
       firebaseCode: "failed-precondition",
       domainCode: "active-plan-conflict",
@@ -276,16 +288,37 @@ describe("WEB-01B.6 — retry replays the same operation", () => {
     editFoodType("Ração Hipoalergênica");
     fireEvent.click(screen.getByTestId("replace-plan-submit"));
 
-    await waitFor(() => expect(screen.getByTestId("replace-plan-error")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("replace-plan-reader-reconciliation")).toBeInTheDocument(),
+    );
 
+    // ── Original invariants, unchanged ──────────────────────────────────────
     // One attempt, no retry affordance, no second operationId, no fallback to a
     // plain CREATE (§22).
     expect(serviceMocks.executeCreate).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("replace-plan-retry")).not.toBeInTheDocument();
     expect(serviceMocks.generateOperationId).toHaveBeenCalledTimes(1);
+
+    // ── New authority assertions ────────────────────────────────────────────
+    expect(screen.queryByTestId("replace-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-outcome-uncertain")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-success")).not.toBeInTheDocument();
+
+    // No second replacement reachable against the contradicted expectation pair.
+    const submit = screen.getByTestId("replace-plan-submit");
+    expect(submit).toBeDisabled();
+    fireEvent.submit(submit.closest("form")!);
+    expect(serviceMocks.executeCreate).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.generateOperationId).toHaveBeenCalledTimes(1);
+
+    // The old active snapshot is no longer actionable.
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+    expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-cancel-plan-action")).not.toBeInTheDocument();
   });
 
-  it("does not auto-retry a revision-conflict", async () => {
+  it("does not auto-retry a revision-conflict and requires reader reconciliation", async () => {
     serviceMocks.executeCreate.mockRejectedValue({
       firebaseCode: "failed-precondition",
       domainCode: "revision-conflict",
@@ -298,10 +331,22 @@ describe("WEB-01B.6 — retry replays the same operation", () => {
     editFoodType("Ração Hipoalergênica");
     fireEvent.click(screen.getByTestId("replace-plan-submit"));
 
-    await waitFor(() => expect(screen.getByTestId("replace-plan-error")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("replace-plan-reader-reconciliation")).toBeInTheDocument(),
+    );
 
+    // ── Original invariants, unchanged ──────────────────────────────────────
     expect(serviceMocks.executeCreate).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("replace-plan-retry")).not.toBeInTheDocument();
+
+    // ── New authority assertions ────────────────────────────────────────────
+    expect(screen.queryByTestId("replace-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-outcome-uncertain")).not.toBeInTheDocument();
+    expect(serviceMocks.generateOperationId).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+    expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
   });
 });
 

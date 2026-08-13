@@ -35,6 +35,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isPotentiallyCommittedOutcome } from "../data/nutrition-plan-mutation-service";
+import { requiresNutritionReaderReconciliation } from "../errors/nutrition-mutation-errors";
 import { useNutritionPlanMutations } from "../hooks/use-nutrition-plan-mutations";
 import type { NutritionPlanUpdateChanges, ProfessionalIdentity } from "../mutation-types";
 import type { NutritionPlan } from "../types";
@@ -180,6 +181,20 @@ export interface NutritionPlanEditDialogProps {
     planId: string;
     staleRevision: number;
   }) => void;
+  /**
+   * Fired when the backend REFUSED this update with an error that proves the
+   * revision on screen is obsolete (`revision-conflict`, `invalid-lifecycle`,
+   * `plan-not-found`).
+   *
+   * A third distinct family: nothing was written (unlike a confirmed update) and
+   * nothing MAY have been written (unlike an uncertain outcome) — but the frozen
+   * `expectedRevision` has been contradicted, so it must stop serving as the
+   * expectation for another mutation until the reader catches up.
+   */
+  onUpdateReaderReconciliationRequired?: (staleSnapshot: {
+    planId: string;
+    staleRevision: number;
+  }) => void;
 }
 
 export function NutritionPlanEditDialog({
@@ -189,6 +204,7 @@ export function NutritionPlanEditDialog({
   onClose,
   onUpdated,
   onUpdateOutcomeUncertain,
+  onUpdateReaderReconciliationRequired,
 }: NutritionPlanEditDialogProps) {
   const { updateState, prepareUpdate, executeUpdate, retryUpdate, resetUpdate } =
     useNutritionPlanMutations();
@@ -233,6 +249,16 @@ export function NutritionPlanEditDialog({
    * Local to the dialog: cleared on close, while the panel latch survives.
    */
   const [outcomeUncertain, setOutcomeUncertain] = useState(false);
+  /*
+   * The backend REFUSED this update and, in doing so, proved the revision on screen
+   * is not the current one — `revision-conflict`, or the plan is gone/not active.
+   *
+   * Nothing was written, so this is NOT the uncertain-outcome case and must not
+   * borrow its wording. But the frozen `expectedRevision` has been contradicted,
+   * so another attempt against it can only be refused again.
+   */
+  const [readerReconciliationRequired, setReaderReconciliationRequired] =
+    useState(false);
   const [prevOpen, setPrevOpen] = useState(open);
 
   // Re-seed during render when the dialog opens, so a reopen never shows values
@@ -254,14 +280,30 @@ export function NutritionPlanEditDialog({
       setProfClinic(profField(plan.professional, "clinic", "clinic"));
       setProfSpecialty(profField(plan.professional, "specialty", "specialty"));
       setLocalError(null);
+      setOutcomeUncertain(false);
+      setReaderReconciliationRequired(false);
     }
   }
 
   const isBusy = updateState.status === "preparing" || updateState.status === "executing";
   const isSuccess = updateState.status === "success";
-  // An uncertain outcome is NOT an ordinary error: claiming "failed" would invite
-  // the retry we must not allow. It gets its own surface below.
-  const isError = updateState.status === "error" && !outcomeUncertain;
+  // Neither an uncertain outcome nor a stale-authority refusal is an ordinary
+  // error: each gets its own surface below, with its own wording.
+  const isError =
+    updateState.status === "error" && !outcomeUncertain && !readerReconciliationRequired;
+
+  /*
+   * WEB-01B.7R retry-intent ownership: a retryable failure leaves exactly ONE
+   * unresolved intent, owned by this open dialog. Retry replays it; the normal
+   * submit would mint a second operationId beside it. Closing abandons it, which
+   * is safe because `assertExpectedRevision` refuses any duplicate.
+   */
+  const hasRetryableIntent =
+    updateState.status === "error" &&
+    !outcomeUncertain &&
+    !readerReconciliationRequired &&
+    !("kind" in updateState.error) &&
+    updateState.error.retryable;
 
   const isStale = shouldShowNutritionUpdateStale({
     mutationStatus: updateState.status,
@@ -296,9 +338,12 @@ export function NutritionPlanEditDialog({
 
   const handleClose = () => {
     if (isBusy) return;
-    // Only the dialog's local lock is cleared. The panel latch is the caller's
+    // Only the dialog's local locks are cleared. The panel latch is the caller's
     // state and stays engaged, so closing this cannot buy back the EDIT action.
+    // A retryable intent is deliberately abandoned here (Web v1 policy): the
+    // backend's revision precondition refuses any duplicate.
     setOutcomeUncertain(false);
+    setReaderReconciliationRequired(false);
     resetUpdate();
     setLocalError(null);
     onClose();
@@ -318,16 +363,34 @@ export function NutritionPlanEditDialog({
         planId: initialPlanId,
         staleRevision: initialRevision,
       });
+      return;
+    }
+    // Refused, but the refusal contradicted the revision on screen. Same latch as
+    // a confirmed update, different reason and different words.
+    if (requiresNutritionReaderReconciliation(error)) {
+      setReaderReconciliationRequired(true);
+      onUpdateReaderReconciliationRequired?.({
+        planId: initialPlanId,
+        staleRevision: initialRevision,
+      });
     }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isBusy) return;
-    // Belt and braces: the button is disabled, but a form submit can also arrive
-    // from Enter or programmatically, and past here we would mint a new
-    // operationId against an outcome we cannot see.
+    /*
+     * Belt and braces: the button is disabled or withdrawn, but a form submit can
+     * also arrive from Enter or programmatically, and past here we would mint a new
+     * operationId.
+     *
+     * Three separate reasons to refuse: the outcome is unknown; the revision on
+     * screen was contradicted; or an unresolved retryable intent already exists and
+     * Retry owns it.
+     */
     if (outcomeUncertain) return;
+    if (readerReconciliationRequired) return;
+    if (hasRetryableIntent) return;
 
     setLocalError(null);
 
@@ -381,6 +444,9 @@ export function NutritionPlanEditDialog({
     // Once the outcome is uncertain, no further attempt is safe — not even a
     // same-operationId replay, which would return the same unverifiable payload.
     if (outcomeUncertain) return;
+    // Nor once the revision on screen was contradicted: replaying the same stale
+    // expectation can only be refused again.
+    if (readerReconciliationRequired) return;
     try {
       // Same operationId, same expectedRevision — a replay, not a new operation.
       const result = await retryUpdate();
@@ -392,11 +458,19 @@ export function NutritionPlanEditDialog({
     }
   };
 
-  const retryable =
-    updateState.status === "error" &&
-    !outcomeUncertain &&
-    !("kind" in updateState.error) &&
-    updateState.error.retryable;
+  // Same condition as `hasRetryableIntent`, kept as the render-side name.
+  const retryable = hasRetryableIntent;
+
+  /*
+   * One shared lock for every form input.
+   *
+   * While Retry owns an unresolved intent the form must not be editable: Retry
+   * replays the patch computed at prepare time, so an edited field would display
+   * one payload while sending another. The terminal states lock it for the same
+   * reason — nothing typed here can reach the backend any more.
+   */
+  const formLocked =
+    isBusy || outcomeUncertain || readerReconciliationRequired || hasRetryableIntent;
 
   return (
     <Dialog
@@ -462,6 +536,23 @@ export function NutritionPlanEditDialog({
           </p>
         )}
 
+        {/*
+          A THIRD wording, not a variant of the other two.
+          The backend refused this update, so "a alteração pode ter sido aplicada"
+          would be false — but it refused because the revision on screen is no
+          longer current. No failure blame, no success implication.
+        */}
+        {readerReconciliationRequired && (
+          <p
+            data-testid="edit-plan-reader-reconciliation"
+            role="alert"
+            className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100"
+          >
+            O estado deste plano mudou e esta operação não foi realizada. Aguarde a
+            atualização das informações antes de tentar novamente.
+          </p>
+        )}
+
         {isError && (
           <div
             data-testid="edit-plan-error"
@@ -471,15 +562,29 @@ export function NutritionPlanEditDialog({
             {/* Safe copy only; R1 already sanitized internal-integrity details. */}
             <p>{updateState.error.message}</p>
             {retryable && (
-              <Button
-                type="button"
-                variant="secondary"
-                className="mt-3"
-                onClick={handleRetry}
-                data-testid="edit-plan-retry"
-              >
-                Tentar novamente
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-3"
+                  onClick={handleRetry}
+                  data-testid="edit-plan-retry"
+                >
+                  Tentar novamente
+                </Button>
+                {/*
+                  States the ownership rule plainly, because the operator cannot
+                  see it: Retry replays the frozen patch (same operationId, same
+                  values), and closing gives that attempt up.
+                */}
+                <p
+                  data-testid="edit-plan-retry-ownership"
+                  className="mt-2 text-[11px] leading-relaxed text-red-200/80"
+                >
+                  Tentar novamente repetirá exatamente esta tentativa, com os mesmos
+                  dados. Se fechar esta janela, a tentativa atual será encerrada.
+                </p>
+              </>
             )}
           </div>
         )}
@@ -489,7 +594,7 @@ export function NutritionPlanEditDialog({
           <textarea
             id="edit-special-instructions"
             value={specialInstructions}
-            disabled={isBusy}
+            disabled={formLocked}
             onChange={(event) => setSpecialInstructions(event.target.value)}
             rows={3}
             className="mt-1 w-full rounded-xl border border-border/60 bg-background/40 px-3 py-2 text-sm"
@@ -508,7 +613,7 @@ export function NutritionPlanEditDialog({
             <input
               type="checkbox"
               checked={showProfessional}
-              disabled={isBusy}
+              disabled={formLocked}
               onChange={(event) => setShowProfessional(event.target.checked)}
               data-testid="edit-plan-professional-toggle"
             />
@@ -522,7 +627,7 @@ export function NutritionPlanEditDialog({
                 <Input
                   id="edit-prof-name"
                   value={profName}
-                  disabled={isBusy}
+                  disabled={formLocked}
                   onChange={(event) => setProfName(event.target.value)}
                 />
               </div>
@@ -531,7 +636,7 @@ export function NutritionPlanEditDialog({
                 <Input
                   id="edit-prof-reg-type"
                   value={profRegType}
-                  disabled={isBusy}
+                  disabled={formLocked}
                   onChange={(event) => setProfRegType(event.target.value)}
                 />
               </div>
@@ -540,7 +645,7 @@ export function NutritionPlanEditDialog({
                 <Input
                   id="edit-prof-reg-num"
                   value={profRegNum}
-                  disabled={isBusy}
+                  disabled={formLocked}
                   onChange={(event) => setProfRegNum(event.target.value)}
                 />
               </div>
@@ -549,7 +654,7 @@ export function NutritionPlanEditDialog({
                 <Input
                   id="edit-prof-clinic"
                   value={profClinic}
-                  disabled={isBusy}
+                  disabled={formLocked}
                   onChange={(event) => setProfClinic(event.target.value)}
                 />
               </div>
@@ -558,7 +663,7 @@ export function NutritionPlanEditDialog({
                 <Input
                   id="edit-prof-specialty"
                   value={profSpecialty}
-                  disabled={isBusy}
+                  disabled={formLocked}
                   onChange={(event) => setProfSpecialty(event.target.value)}
                 />
               </div>
@@ -581,10 +686,21 @@ export function NutritionPlanEditDialog({
           >
             Fechar
           </Button>
-          {!isSuccess && (
+          {/*
+            Withdrawn entirely while Retry owns an unresolved intent: two live
+            paths would let the operator create a second operationId beside a
+            first one whose fate is still unknown.
+          */}
+          {!isSuccess && !hasRetryableIntent && (
             <Button
               type="submit"
-              disabled={isBusy || isStale || !hasChanges || outcomeUncertain}
+              disabled={
+                isBusy ||
+                isStale ||
+                !hasChanges ||
+                outcomeUncertain ||
+                readerReconciliationRequired
+              }
               data-testid="edit-plan-submit"
             >
               {isBusy ? "Salvando..." : "Salvar alterações"}

@@ -11,6 +11,8 @@ import {
   executeCreateNutritionPlan,
   executeUpdateNutritionPlan,
   executeCancelNutritionPlan,
+  // Uncertain-outcome predicate (WEB-01B.6R)
+  isPotentiallyCommittedOutcome,
   // Normalize only (error classifiers are in the errors barrel)
   normalizeNutritionMutationError,
 } from "../data/nutrition-plan-mutation-service";
@@ -746,6 +748,11 @@ describe("Execute Update", () => {
     expect(result.wasNoOp).toBe(false);
   });
 
+  // The backend stores the ORIGINAL result in the receipt and returns it
+  // verbatim on replay (engine 1157 / 1106), so a replayed UPDATE reports the
+  // revision the first attempt wrote: expectedRevision + 1. A replay that
+  // echoed expectedRevision unchanged would be uncorrelatable — it would
+  // describe a write that never advanced the document.
   it("should handle replay response with wasNoOp true", async () => {
     const functions = createMockFunctions();
     const mockCallable = vi.fn().mockResolvedValue(
@@ -753,7 +760,7 @@ describe("Execute Update", () => {
         success: true,
         planId: "plan-123",
         status: "active",
-        revision: 3,
+        revision: 4,
         wasNoOp: true,
       })
     );
@@ -908,6 +915,9 @@ describe("Execute Cancel", () => {
     );
   });
 
+  // Same receipt-replay reasoning as UPDATE: the stored result carries the
+  // revision the original CANCEL wrote (expectedRevision + 1), not the
+  // pre-cancel revision.
   it("should handle replay response with wasNoOp true", async () => {
     const functions = createMockFunctions();
     const mockCallable = vi.fn().mockResolvedValue(
@@ -915,7 +925,7 @@ describe("Execute Cancel", () => {
         success: true,
         planId: "plan-123",
         status: "cancelled",
-        revision: 5,
+        revision: 6,
         wasNoOp: true,
       })
     );
@@ -1383,7 +1393,17 @@ describe("Invalid success payloads fail closed", () => {
     ).rejects.toMatchObject({ details: { code: "invalid-mutation-response" } });
   });
 
-  it("accepts revision 0 as a legitimate value", async () => {
+  /**
+   * WEB-01B.6R replaces the former "accepts revision 0 as a legitimate value".
+   *
+   * The generic shape gate still treats 0 as a well-typed integer — that part is
+   * unchanged. What changed is that CREATE now also has to correlate: a plan is
+   * BORN at revision 1 (engine 1654) and `planRevision` rejects anything below 1
+   * (engine 1515), so revision 0 cannot describe a plan the backend just created.
+   * The old test asserted the absence of a check rather than a contract, so it is
+   * inverted here instead of loosening the service to keep it green.
+   */
+  it("CREATE rejects revision 0 — a new plan is born at revision 1", async () => {
     mockHttpsCallable.mockReturnValue(
       vi.fn().mockResolvedValue({
         data: { success: true, planId: "plan-1", status: "active", revision: 0, wasNoOp: false },
@@ -1391,21 +1411,27 @@ describe("Invalid success payloads fail closed", () => {
     );
     const request = buildCreateNutritionPlanRequest(createCommand, "op-rev-zero");
 
-    const result = await executeCreateNutritionPlan(createMockFunctions(), request);
-    expect(result.revision).toBe(0);
+    await expect(
+      executeCreateNutritionPlan(createMockFunctions(), request)
+    ).rejects.toMatchObject({
+      firebaseCode: "internal",
+      retryable: false,
+      details: { code: "invalid-mutation-response" },
+    });
   });
 
   it("still accepts a valid payload that omits only wasNoOp/supersededPlanId", async () => {
     mockHttpsCallable.mockReturnValue(
       vi.fn().mockResolvedValue({
-        data: { success: true, planId: "plan-1", status: "active", revision: 4 },
+        // revision 1: the only revision a freshly created plan can carry.
+        data: { success: true, planId: "plan-1", status: "active", revision: 1 },
       })
     );
     const request = buildCreateNutritionPlanRequest(createCommand, "op-optional");
 
     const result = await executeCreateNutritionPlan(createMockFunctions(), request);
     expect(result.planId).toBe("plan-1");
-    expect(result.revision).toBe(4);
+    expect(result.revision).toBe(1);
     expect(result.wasNoOp).toBe(false);
     expect(result.supersededPlanId).toBeNull();
   });
@@ -1426,6 +1452,694 @@ describe("Invalid success payloads fail closed", () => {
     ).rejects.toMatchObject({
       firebaseCode: "failed-precondition",
       domainCode: "revision-conflict",
+    });
+  });
+});
+
+// =============================================================================
+// TESTS: RESPONSE CORRELATION (WEB-01B.6R)
+// =============================================================================
+
+/**
+ * Shape validity is not correlation. Every payload below is well-typed and
+ * carries `success: true` — what separates the accepted cases from the rejected
+ * ones is whether the response describes the operation this request asked for.
+ *
+ * Backend contract audited at canil-gcm @ feature/health-v1-foundation:
+ * - CREATE/REPLACE write status "active" and revision 1 (engine 1654/1661/1662)
+ * - REPLACE reports the plan it superseded, which the transaction already forced
+ *   to equal expectedActivePlanId (engine 1612, 1641/1664)
+ * - UPDATE/CANCEL write exactly currentRevision + 1, and current is forced to
+ *   equal expectedRevision (engine 1533, 1722, 1758-1760)
+ * - CANCEL writes the terminal status "cancelled" (engine 1760)
+ *
+ * A `wasNoOp: true` receipt replay is held to the SAME checks on purpose: the
+ * receipt stores the original result verbatim (engine 1157) and replay only
+ * returns it after re-asserting intent + expectation pair (engine 1096-1102), so
+ * a legitimate replay is indistinguishable from the first success here.
+ */
+describe("Response correlation (WEB-01B.6R)", () => {
+  const correlationCreateCommand: CreateNutritionPlanCommand = {
+    dogId: "dog-100",
+    planData: {
+      foodType: "Ração Natural",
+      amountGramsPerDay: 400,
+      mealsPerDay: 2,
+      timezone: "America/Sao_Paulo",
+      validFrom: "2026-08-01T00:00:00.000Z",
+      mealSchedule: [],
+    },
+  };
+
+  const correlationReplaceCommand: CreateNutritionPlanCommand = {
+    ...correlationCreateCommand,
+    expectedActivePlanId: "plan-old",
+    expectedActiveRevision: 3,
+  };
+
+  const correlationUpdateCommand: UpdateNutritionPlanCommand = {
+    dogId: "dog-100",
+    planId: "plan-active",
+    expectedRevision: 5,
+    changes: { specialInstructions: "Servir morno" },
+  };
+
+  const correlationCancelCommand: CancelNutritionPlanCommand = {
+    dogId: "dog-100",
+    planId: "plan-active",
+    expectedRevision: 5,
+    reason: "Dieta substituída por prescrição veterinária",
+  };
+
+  function respondWith(data: Record<string, unknown>) {
+    mockHttpsCallable.mockReturnValue(vi.fn().mockResolvedValue(mockCallableSuccess(data)));
+  }
+
+  const INVALID_RESPONSE = {
+    firebaseCode: "internal",
+    retryable: false,
+    details: { code: "invalid-mutation-response" },
+  };
+
+  describe("CREATE", () => {
+    it("accepts the only response a CREATE can legitimately produce", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: null,
+        wasNoOp: false,
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationCreateCommand, "op-corr-c-ok");
+      const result = await executeCreateNutritionPlan(createMockFunctions(), request);
+
+      expect(result).toEqual({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: null,
+        wasNoOp: false,
+      });
+    });
+
+    it("accepts a legitimate wasNoOp receipt replay", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: null,
+        wasNoOp: true,
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationCreateCommand, "op-corr-c-replay");
+      const result = await executeCreateNutritionPlan(createMockFunctions(), request);
+
+      expect(result.wasNoOp).toBe(true);
+      expect(result.planId).toBe("plan-new");
+      expect(result.revision).toBe(1);
+    });
+
+    it("rejects a status other than active", async () => {
+      respondWith({ success: true, planId: "plan-new", status: "cancelled", revision: 1 });
+
+      const request = buildCreateNutritionPlanRequest(correlationCreateCommand, "op-corr-c-status");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a revision other than 1", async () => {
+      respondWith({ success: true, planId: "plan-new", status: "active", revision: 2 });
+
+      const request = buildCreateNutritionPlanRequest(correlationCreateCommand, "op-corr-c-rev");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a non-null supersededPlanId — a plain CREATE supersedes nothing", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: "plan-nobody-asked-about",
+      });
+
+      const request = buildCreateNutritionPlanRequest(
+        correlationCreateCommand,
+        "op-corr-c-superseded"
+      );
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+  });
+
+  describe("REPLACE", () => {
+    it("accepts a response that supersedes exactly the named plan", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: "plan-old",
+        wasNoOp: false,
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationReplaceCommand, "op-corr-r-ok");
+      const result = await executeCreateNutritionPlan(createMockFunctions(), request);
+
+      expect(result).toEqual({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: "plan-old",
+        wasNoOp: false,
+      });
+    });
+
+    it("accepts a legitimate wasNoOp receipt replay", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: "plan-old",
+        wasNoOp: true,
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationReplaceCommand, "op-corr-r-replay");
+      const result = await executeCreateNutritionPlan(createMockFunctions(), request);
+
+      expect(result.wasNoOp).toBe(true);
+      expect(result.supersededPlanId).toBe("plan-old");
+    });
+
+    it("rejects a missing supersededPlanId", async () => {
+      respondWith({ success: true, planId: "plan-new", status: "active", revision: 1 });
+
+      const request = buildCreateNutritionPlanRequest(
+        correlationReplaceCommand,
+        "op-corr-r-missing"
+      );
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a null supersededPlanId", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: null,
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationReplaceCommand, "op-corr-r-null");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a supersededPlanId that is not the plan the client named", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: "plan-someone-else",
+      });
+
+      const request = buildCreateNutritionPlanRequest(
+        correlationReplaceCommand,
+        "op-corr-r-mismatch"
+      );
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects the superseded id being returned as the new planId", async () => {
+      // REPLACE mints a NEW document; the new plan can never be the old one.
+      respondWith({
+        success: true,
+        planId: "plan-old",
+        status: "active",
+        revision: 1,
+        supersededPlanId: "plan-old",
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationReplaceCommand, "op-corr-r-same");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a revision other than 1 — the new plan is still newborn", async () => {
+      // The motivating case: shape-valid, but semantically impossible.
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 27,
+        supersededPlanId: "plan-old",
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationReplaceCommand, "op-corr-r-rev");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+  });
+
+  describe("UPDATE", () => {
+    it("accepts a response landing exactly one revision ahead", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-active",
+        status: "active",
+        revision: 6,
+        wasNoOp: false,
+      });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-corr-u-ok");
+      const result = await executeUpdateNutritionPlan(createMockFunctions(), request);
+
+      expect(result).toEqual({
+        success: true,
+        planId: "plan-active",
+        status: "active",
+        revision: 6,
+        wasNoOp: false,
+      });
+    });
+
+    it("accepts a legitimate wasNoOp receipt replay", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-active",
+        status: "active",
+        revision: 6,
+        wasNoOp: true,
+      });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-corr-u-replay");
+      const result = await executeUpdateNutritionPlan(createMockFunctions(), request);
+
+      expect(result.wasNoOp).toBe(true);
+      expect(result.revision).toBe(6);
+    });
+
+    it("rejects a planId other than the one requested", async () => {
+      respondWith({ success: true, planId: "plan-other", status: "active", revision: 6 });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-corr-u-planid");
+
+      await expect(
+        executeUpdateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a status other than active — UPDATE does not end a plan", async () => {
+      respondWith({ success: true, planId: "plan-active", status: "cancelled", revision: 6 });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-corr-u-status");
+
+      await expect(
+        executeUpdateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a revision that did not advance", async () => {
+      respondWith({ success: true, planId: "plan-active", status: "active", revision: 5 });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-corr-u-stale");
+
+      await expect(
+        executeUpdateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a revision that advanced by more than one", async () => {
+      // Monotonic is not enough: the backend writes expectedRevision + 1 exactly,
+      // so a jump means the response describes some other write.
+      respondWith({ success: true, planId: "plan-active", status: "active", revision: 9 });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-corr-u-jump");
+
+      await expect(
+        executeUpdateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+  });
+
+  describe("CANCEL", () => {
+    it("accepts a terminal response landing exactly one revision ahead", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-active",
+        status: "cancelled",
+        revision: 6,
+        wasNoOp: false,
+      });
+
+      const request = buildCancelNutritionPlanRequest(correlationCancelCommand, "op-corr-x-ok");
+      const result = await executeCancelNutritionPlan(createMockFunctions(), request);
+
+      expect(result).toEqual({
+        success: true,
+        planId: "plan-active",
+        status: "cancelled",
+        revision: 6,
+        wasNoOp: false,
+      });
+    });
+
+    it("accepts a legitimate wasNoOp receipt replay", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-active",
+        status: "cancelled",
+        revision: 6,
+        wasNoOp: true,
+      });
+
+      const request = buildCancelNutritionPlanRequest(correlationCancelCommand, "op-corr-x-replay");
+      const result = await executeCancelNutritionPlan(createMockFunctions(), request);
+
+      expect(result.wasNoOp).toBe(true);
+      expect(result.status).toBe("cancelled");
+    });
+
+    it("rejects a planId other than the one requested", async () => {
+      respondWith({ success: true, planId: "plan-other", status: "cancelled", revision: 6 });
+
+      const request = buildCancelNutritionPlanRequest(correlationCancelCommand, "op-corr-x-planid");
+
+      await expect(
+        executeCancelNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a still-active status — a cancellation that did not happen", async () => {
+      respondWith({ success: true, planId: "plan-active", status: "active", revision: 6 });
+
+      const request = buildCancelNutritionPlanRequest(correlationCancelCommand, "op-corr-x-status");
+
+      await expect(
+        executeCancelNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a revision that did not advance", async () => {
+      respondWith({ success: true, planId: "plan-active", status: "cancelled", revision: 5 });
+
+      const request = buildCancelNutritionPlanRequest(correlationCancelCommand, "op-corr-x-stale");
+
+      await expect(
+        executeCancelNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a revision that advanced by more than one", async () => {
+      respondWith({ success: true, planId: "plan-active", status: "cancelled", revision: 9 });
+
+      const request = buildCancelNutritionPlanRequest(correlationCancelCommand, "op-corr-x-jump");
+
+      await expect(
+        executeCancelNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+  });
+
+  describe("error surface", () => {
+    it("never leaks the raw response into the operator-facing message", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-secret-id",
+        status: "active",
+        revision: 27,
+        supersededPlanId: "plan-old",
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationReplaceCommand, "op-corr-leak");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject({
+        message: "Falha ao criar plano nutricional",
+        retryable: false,
+      });
+    });
+
+    it("is not retryable — the mutation may already be persisted", async () => {
+      respondWith({ success: true, planId: "plan-active", status: "active", revision: 99 });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-corr-noretry");
+
+      await expect(
+        executeUpdateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject({ retryable: false });
+    });
+  });
+
+  /**
+   * `planResponse` transmits `supersededPlanId` on EVERY plan callable, filling it
+   * with `?? null` (callables 281). On the UPDATE and CANCEL paths the engine
+   * result carries no such field at all (engine 1732, 1768), so the value is
+   * contractually null.
+   *
+   * A non-null value there is not a harmless extra: it claims the operation ended
+   * some other plan's life. Ignoring a semantically impossible field is how a
+   * backend regression reaches the operator as a normal success.
+   */
+  describe("UPDATE/CANCEL reject a non-null supersededPlanId", () => {
+    it("accepts UPDATE with supersededPlanId explicitly null", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-active",
+        status: "active",
+        revision: 6,
+        supersededPlanId: null,
+      });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-sup-u-ok");
+      const result = await executeUpdateNutritionPlan(createMockFunctions(), request);
+
+      expect(result.revision).toBe(6);
+      expect(result.planId).toBe("plan-active");
+    });
+
+    it("rejects UPDATE reporting a superseded plan", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-active",
+        status: "active",
+        revision: 6,
+        supersededPlanId: "plan-somebody-else",
+      });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-sup-u-bad");
+
+      await expect(
+        executeUpdateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("accepts CANCEL with supersededPlanId explicitly null", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-active",
+        status: "cancelled",
+        revision: 6,
+        supersededPlanId: null,
+      });
+
+      const request = buildCancelNutritionPlanRequest(correlationCancelCommand, "op-sup-x-ok");
+      const result = await executeCancelNutritionPlan(createMockFunctions(), request);
+
+      expect(result.status).toBe("cancelled");
+      expect(result.revision).toBe(6);
+    });
+
+    it("rejects CANCEL reporting a superseded plan", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-active",
+        status: "cancelled",
+        revision: 6,
+        supersededPlanId: "plan-somebody-else",
+      });
+
+      const request = buildCancelNutritionPlanRequest(correlationCancelCommand, "op-sup-x-bad");
+
+      await expect(
+        executeCancelNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+  });
+
+  /**
+   * `wasNoOp` and `supersededPlanId` stay optional — the backend omits them where
+   * they do not apply. Optional is not untyped, though: a truthy string `wasNoOp`
+   * would read as a replay, and a non-string `supersededPlanId` would slip past
+   * the REPLACE comparison. Neither is coerced.
+   */
+  describe("optional field shape", () => {
+    it("rejects a non-boolean wasNoOp", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: null,
+        wasNoOp: "true",
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationCreateCommand, "op-shape-noop");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects an empty-string supersededPlanId", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: "   ",
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationReplaceCommand, "op-shape-blank");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+
+    it("rejects a non-string supersededPlanId instead of coercing it", async () => {
+      respondWith({
+        success: true,
+        planId: "plan-new",
+        status: "active",
+        revision: 1,
+        supersededPlanId: 42,
+      });
+
+      const request = buildCreateNutritionPlanRequest(correlationReplaceCommand, "op-shape-number");
+
+      await expect(
+        executeCreateNutritionPlan(createMockFunctions(), request)
+      ).rejects.toMatchObject(INVALID_RESPONSE);
+    });
+  });
+
+  /**
+   * The predicate the presentation layer keys its reconciliation latches on.
+   *
+   * Its whole value is being NARROW: `invalid-mutation-response` is the only
+   * failure raised past the `success: true` gate, so it is the only one where
+   * "failed" does not imply "did not happen". Widening it to `internal` or
+   * `internal-integrity-error` would freeze the UI after operations the backend
+   * demonstrably refused.
+   */
+  describe("isPotentiallyCommittedOutcome", () => {
+    it("recognizes a correlation failure raised after success:true", async () => {
+      respondWith({ success: true, planId: "plan-active", status: "active", revision: 42 });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-pred-corr");
+
+      const error = await executeUpdateNutritionPlan(createMockFunctions(), request).catch(
+        (err: unknown) => err
+      );
+
+      expect(isPotentiallyCommittedOutcome(error)).toBe(true);
+    });
+
+    it("recognizes a shape failure raised after success:true", async () => {
+      // The backend already committed to success; we just cannot read the result.
+      respondWith({ success: true, planId: "plan-active", status: "active" });
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-pred-shape");
+
+      const error = await executeUpdateNutritionPlan(createMockFunctions(), request).catch(
+        (err: unknown) => err
+      );
+
+      expect(isPotentiallyCommittedOutcome(error)).toBe(true);
+    });
+
+    it("does not recognize a backend rejection — the mutation never landed", async () => {
+      mockHttpsCallable.mockReturnValue(
+        vi
+          .fn()
+          .mockRejectedValue(
+            mockCallableError("failed-precondition", "Revision desatualizada.", {
+              code: "revision-conflict",
+            })
+          )
+      );
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-pred-conflict");
+
+      const error = await executeUpdateNutritionPlan(createMockFunctions(), request).catch(
+        (err: unknown) => err
+      );
+
+      expect(isPotentiallyCommittedOutcome(error)).toBe(false);
+    });
+
+    it("does not recognize permission-denied", async () => {
+      mockHttpsCallable.mockReturnValue(
+        vi.fn().mockRejectedValue(mockCallableError("permission-denied", "Sem permissão."))
+      );
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-pred-perm");
+
+      const error = await executeUpdateNutritionPlan(createMockFunctions(), request).catch(
+        (err: unknown) => err
+      );
+
+      expect(isPotentiallyCommittedOutcome(error)).toBe(false);
+    });
+
+    it("does not recognize a bare internal error with no details", async () => {
+      mockHttpsCallable.mockReturnValue(
+        vi.fn().mockRejectedValue(mockCallableError("internal", "Erro interno."))
+      );
+
+      const request = buildUpdateNutritionPlanRequest(correlationUpdateCommand, "op-pred-internal");
+
+      const error = await executeUpdateNutritionPlan(createMockFunctions(), request).catch(
+        (err: unknown) => err
+      );
+
+      expect(isPotentiallyCommittedOutcome(error)).toBe(false);
+    });
+
+    it("does not recognize non-error values", () => {
+      expect(isPotentiallyCommittedOutcome(null)).toBe(false);
+      expect(isPotentiallyCommittedOutcome(undefined)).toBe(false);
+      expect(isPotentiallyCommittedOutcome("invalid-mutation-response")).toBe(false);
+      expect(isPotentiallyCommittedOutcome({ details: null })).toBe(false);
+      expect(isPotentiallyCommittedOutcome({ details: {} })).toBe(false);
     });
   });
 });

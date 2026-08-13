@@ -638,6 +638,220 @@ describe("WEB-01B.6 — post-success reconciliation latch", () => {
   });
 });
 
+/**
+ * WEB-01B.6R — REPLACE after an unverifiable `success: true`. The sharpest case.
+ *
+ * The backend may have already superseded plan A and activated plan B while the
+ * reader still shows A as active. In that window the screen is asserting
+ * something false, and both EDIT and REPLACE would freeze an expectation pair
+ * against a plan that is already dead.
+ *
+ * Note what the latch does NOT get here: `newPlanId`. The response is exactly
+ * what we refused to trust, so its `planId` carries no authority. The reader
+ * decides what replaced A.
+ */
+describe("WEB-01B.6R — REPLACE potentially-committed outcome", () => {
+  const invalidMutationResponse = {
+    firebaseCode: "internal",
+    message: "Falha ao criar plano nutricional",
+    retryable: false,
+    details: { code: "invalid-mutation-response" },
+  };
+
+  it("withholds EDIT and REPLACE while the reader still shows the possibly-dead plan", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+
+    expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+    // Still readable: the operator sees the plan, just not actions against it.
+    expect(screen.getByTestId("nutrition-canonical-card")).toBeInTheDocument();
+  });
+
+  it("does not start a second logical REPLACE", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    expect(mutationMocks.prepareCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.retryCreate).not.toHaveBeenCalled();
+  });
+
+  it("releases once the reader reports the successor plan", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+    expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+
+    // The reader — not the rejected response — reports what actually replaced A.
+    mockUseNutritionPlans.mockReturnValue(canonicalState(1, { id: "plan-2" }));
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    expect(screen.getByTestId("nutrition-replace-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+  });
+
+  it("never fabricates the successor before the reader confirms it", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+
+    // plan-2 came back only in the payload we rejected. It must appear nowhere.
+    expect(screen.queryByText(/plan-2/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-canonical-card")).toBeInTheDocument();
+  });
+
+  it("engages the latch from a retry too", async () => {
+    mutationMocks.createState = {
+      status: "error",
+      intent: { operationId: "op-A" },
+      error: {
+        firebaseCode: "unavailable",
+        message: "Serviço temporariamente indisponível.",
+        retryable: true,
+      },
+    };
+    mutationMocks.retryCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-retry"));
+
+    await waitFor(() => expect(mutationMocks.retryCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+
+    expect(mutationMocks.prepareCreate).not.toHaveBeenCalled();
+    expect(mutationMocks.retryCreate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+  });
+
+  /*
+   * The highest-risk resubmit of the three. Plan A may already be superseded and
+   * plan B already active; a second submit here would mint a fresh operationId and
+   * attempt a SECOND structural replacement against an expectation pair that is
+   * very likely already dead. The panel latch cannot help — the card is behind
+   * this dialog.
+   */
+  it("locks its own submit — a second click cannot start another REPLACE", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const submit = screen.getByTestId("replace-plan-submit");
+    expect(submit).toBeDisabled();
+
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(mutationMocks.prepareCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.retryCreate).not.toHaveBeenCalled();
+  });
+
+  it("tells the operator the result is unconfirmed, not that it failed", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    const notice = screen.getByTestId("replace-plan-outcome-uncertain");
+    expect(notice.textContent).toMatch(/não foi possível confirmar/i);
+    // "Falha ao substituir" would imply A is still active — the most dangerous
+    // thing to tell the operator here.
+    expect(screen.queryByTestId("replace-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-success")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-retry")).not.toBeInTheDocument();
+  });
+
+  it("does not leak the uncertain lock into a later legitimate REPLACE", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+
+    // Reader reports the successor; a fresh REPLACE must be fully usable.
+    mockUseNutritionPlans.mockReturnValue(canonicalState(1, { id: "plan-2" }));
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    openReplace();
+
+    expect(screen.getByTestId("replace-plan-submit")).not.toBeDisabled();
+    expect(screen.queryByTestId("replace-plan-outcome-uncertain")).not.toBeInTheDocument();
+  });
+
+  it("an active-plan-conflict does NOT engage the latch", async () => {
+    // The backend refused the replacement, so A is still the live authority.
+    mutationMocks.executeCreate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "active-plan-conflict",
+      message: "O plano ativo não corresponde ao esperado.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("replace-plan-close"));
+
+    expect(screen.getByTestId("nutrition-replace-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+  });
+
+  it("does not report a supersede correlation for a response it rejected", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+    mutationMocks.createState = {
+      status: "error",
+      intent: { operationId: "op-A" },
+      error: invalidMutationResponse,
+    };
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openReplace();
+    fireEvent.click(screen.getByTestId("replace-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    // Correlation state describes an ACCEPTED response; this one was refused.
+    expect(screen.queryByTestId("replace-plan-supersede-mismatch")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-success")).not.toBeInTheDocument();
+    // The uncertain surface replaces the ordinary error surface.
+    expect(screen.getByTestId("replace-plan-outcome-uncertain")).toBeInTheDocument();
+    expect(screen.queryByTestId("replace-plan-error")).not.toBeInTheDocument();
+  });
+});
+
 // =============================================================================
 // PURE HELPERS — no rendering, no mock sequencing (WEB-01B.5R discipline)
 // =============================================================================

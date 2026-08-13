@@ -829,3 +829,233 @@ describe("WEB-01B.5R — frozen professional snapshot regression", () => {
     });
   });
 });
+
+/**
+ * WEB-01B.6R — UPDATE after an unverifiable `success: true`.
+ *
+ * The reader still shows revision 3 while the backend may already hold revision
+ * 4. Reopening EDIT there would freeze `expectedRevision: 3` and guarantee a
+ * revision-conflict on the next submit; REPLACE would freeze the same dead
+ * expectation pair. Both are withheld until the reader moves.
+ */
+describe("WEB-01B.6R — UPDATE potentially-committed outcome", () => {
+  const invalidMutationResponse = {
+    firebaseCode: "internal",
+    message: "Falha ao atualizar plano nutricional",
+    retryable: false,
+    details: { code: "invalid-mutation-response" },
+  };
+
+  beforeEach(() => {
+    mockCan.mockReturnValue(true);
+    mockUseNutritionPlans.mockReturnValue(canonicalState(3));
+  });
+
+  it("withholds EDIT and REPLACE while the reader still shows the stale revision", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-replace-plan-action")).not.toBeInTheDocument();
+  });
+
+  it("does not start a second logical UPDATE", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+
+    expect(mutationMocks.prepareUpdate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.retryUpdate).not.toHaveBeenCalled();
+  });
+
+  it("latches against the FROZEN revision, not a synthesized next one", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue(invalidMutationResponse);
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+
+    // The expectation the request carried was revision 3. Had the latch keyed on
+    // a guessed revision 4, seeing 4 arrive would have left it stuck.
+    mockUseNutritionPlans.mockReturnValue(canonicalState(4));
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-replace-plan-action")).toBeInTheDocument();
+  });
+
+  it("releases if the reader leaves canonical entirely", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue(invalidMutationResponse);
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+
+    mockUseNutritionPlans.mockReturnValue({
+      ...canonicalState(3),
+      status: "degraded",
+      activePlan: null,
+    } as unknown as NutritionPlanState);
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    // Nothing to act on, and nothing left latched either.
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+  });
+
+  it("engages the latch from a retry too", async () => {
+    mutationMocks.updateState = {
+      status: "error",
+      intent: { operationId: "op-A" },
+      error: {
+        firebaseCode: "unavailable",
+        message: "Serviço temporariamente indisponível.",
+        retryable: true,
+      },
+    };
+    mutationMocks.retryUpdate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    fireEvent.click(screen.getByTestId("edit-plan-retry"));
+
+    await waitFor(() => expect(mutationMocks.retryUpdate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+
+    expect(mutationMocks.prepareUpdate).not.toHaveBeenCalled();
+    expect(mutationMocks.retryUpdate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("nutrition-edit-plan-action")).not.toBeInTheDocument();
+  });
+
+  /*
+   * The panel latch governs the card behind the dialog. This asserts the lock
+   * INSIDE the already-open dialog: without it the submit button is simply live
+   * again and one more click mints a fresh operationId against the same frozen
+   * expectedRevision.
+   */
+  it("locks its own submit — a second click cannot start another UPDATE", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const submit = screen.getByTestId("edit-plan-submit");
+    expect(submit).toBeDisabled();
+
+    // Attempt it anyway, including a direct form submit.
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest("form")!);
+    // And a further field edit must not re-arm it.
+    editInstructions("Outra instrução qualquer");
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(mutationMocks.prepareUpdate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.retryUpdate).not.toHaveBeenCalled();
+  });
+
+  it("tells the operator the result is unconfirmed, not that it failed", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+
+    const notice = screen.getByTestId("edit-plan-outcome-uncertain");
+    expect(notice.textContent).toMatch(/não foi possível confirmar/i);
+    expect(screen.queryByTestId("edit-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-success")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-plan-retry")).not.toBeInTheDocument();
+  });
+
+  it("does not leak the uncertain lock into a later legitimate EDIT", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue(invalidMutationResponse);
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+
+    // Reader reconciles; a fresh EDIT must be fully usable again.
+    mockUseNutritionPlans.mockReturnValue(canonicalState(4));
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    openEdit();
+    editInstructions("Instrução nova depois da reconciliação");
+
+    expect(screen.getByTestId("edit-plan-submit")).not.toBeDisabled();
+    expect(screen.queryByTestId("edit-plan-outcome-uncertain")).not.toBeInTheDocument();
+  });
+
+  it("a revision-conflict does NOT engage the latch", async () => {
+    // The backend refused, so revision 3 is still the live truth and the operator
+    // keeps both actions.
+    mutationMocks.executeUpdate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "revision-conflict",
+      message: "Revision desatualizada.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+
+    expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+    expect(screen.getByTestId("nutrition-replace-plan-action")).toBeInTheDocument();
+  });
+
+  it("a permission-denied does NOT engage the latch", async () => {
+    mutationMocks.executeUpdate.mockRejectedValue({
+      firebaseCode: "permission-denied",
+      domainCode: "permission-denied",
+      message: "Sem permissão.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    openEdit();
+    editInstructions("Servir em temperatura ambiente");
+    fireEvent.click(screen.getByTestId("edit-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeUpdate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("edit-plan-close"));
+
+    expect(screen.getByTestId("nutrition-edit-plan-action")).toBeInTheDocument();
+  });
+});

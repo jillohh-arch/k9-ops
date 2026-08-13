@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isPotentiallyCommittedOutcome } from "../data/nutrition-plan-mutation-service";
 import { useNutritionPlanMutations } from "../hooks/use-nutrition-plan-mutations";
 import type { NutritionPlanUpdateChanges, ProfessionalIdentity } from "../mutation-types";
 import type { NutritionPlan } from "../types";
@@ -160,8 +161,25 @@ export interface NutritionPlanEditDialogProps {
    * read model still shows the superseded revision, so a follow-up UPDATE cannot
    * be started against a revision that is already stale. Also fires on an
    * idempotent replay (`wasNoOp`).
+   *
+   * Success-only: it reports a revision the backend actually confirmed. Never
+   * fired for an unverifiable response — see `onUpdateOutcomeUncertain`.
    */
   onUpdated?: (resultingRevision: number) => void;
+  /**
+   * Fired when the backend answered `success: true` but the client could not
+   * verify the response (`invalid-mutation-response`).
+   *
+   * Carries the FROZEN pre-mutation snapshot, not a resulting revision. We do not
+   * know what was written — synthesizing `initialRevision + 1` would fabricate a
+   * confirmation the response never gave. What the caller needs is narrower: the
+   * revision on screen may already be superseded, so it must not be offered as
+   * the `expectedRevision` of another mutation until the reader moves.
+   */
+  onUpdateOutcomeUncertain?: (staleSnapshot: {
+    planId: string;
+    staleRevision: number;
+  }) => void;
 }
 
 export function NutritionPlanEditDialog({
@@ -170,6 +188,7 @@ export function NutritionPlanEditDialog({
   open,
   onClose,
   onUpdated,
+  onUpdateOutcomeUncertain,
 }: NutritionPlanEditDialogProps) {
   const { updateState, prepareUpdate, executeUpdate, retryUpdate, resetUpdate } =
     useNutritionPlanMutations();
@@ -202,6 +221,18 @@ export function NutritionPlanEditDialog({
   );
 
   const [localError, setLocalError] = useState<string | null>(null);
+  /*
+   * The backend answered `success: true` and we could not verify the response.
+   *
+   * The panel latch withholds EDIT on the card, but the card is behind this
+   * dialog. Without a lock here the submit button is live again (the hook state is
+   * `error`, so `isBusy` is false), and another click would mint a NEW
+   * operationId against the same frozen `expectedRevision` — a second logical
+   * UPDATE while the first one's fate is unknown.
+   *
+   * Local to the dialog: cleared on close, while the panel latch survives.
+   */
+  const [outcomeUncertain, setOutcomeUncertain] = useState(false);
   const [prevOpen, setPrevOpen] = useState(open);
 
   // Re-seed during render when the dialog opens, so a reopen never shows values
@@ -228,7 +259,9 @@ export function NutritionPlanEditDialog({
 
   const isBusy = updateState.status === "preparing" || updateState.status === "executing";
   const isSuccess = updateState.status === "success";
-  const isError = updateState.status === "error";
+  // An uncertain outcome is NOT an ordinary error: claiming "failed" would invite
+  // the retry we must not allow. It gets its own surface below.
+  const isError = updateState.status === "error" && !outcomeUncertain;
 
   const isStale = shouldShowNutritionUpdateStale({
     mutationStatus: updateState.status,
@@ -263,14 +296,38 @@ export function NutritionPlanEditDialog({
 
   const handleClose = () => {
     if (isBusy) return;
+    // Only the dialog's local lock is cleared. The panel latch is the caller's
+    // state and stays engaged, so closing this cannot buy back the EDIT action.
+    setOutcomeUncertain(false);
     resetUpdate();
     setLocalError(null);
     onClose();
   };
 
+  /**
+   * Latches the caller against the frozen snapshot when the outcome is unknowable.
+   *
+   * Reports the snapshot we SENT expectations for, not the live plan and not a
+   * guessed result. Normal rejections fall through: the backend refused, so the
+   * revision on screen is still valid to act on.
+   */
+  const reportUncertainOutcome = (error: unknown) => {
+    if (isPotentiallyCommittedOutcome(error)) {
+      setOutcomeUncertain(true);
+      onUpdateOutcomeUncertain?.({
+        planId: initialPlanId,
+        staleRevision: initialRevision,
+      });
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isBusy) return;
+    // Belt and braces: the button is disabled, but a form submit can also arrive
+    // from Enter or programmatically, and past here we would mint a new
+    // operationId against an outcome we cannot see.
+    if (outcomeUncertain) return;
 
     setLocalError(null);
 
@@ -313,23 +370,31 @@ export function NutritionPlanEditDialog({
       });
       const result = await executeUpdate();
       onUpdated?.(result.revision);
-    } catch {
-      // Normalized into updateState by the hook.
+    } catch (error) {
+      // Normalized into updateState by the hook. If the backend claimed success
+      // and we could not verify it, the revision on screen may already be gone.
+      reportUncertainOutcome(error);
     }
   };
 
   const handleRetry = async () => {
+    // Once the outcome is uncertain, no further attempt is safe — not even a
+    // same-operationId replay, which would return the same unverifiable payload.
+    if (outcomeUncertain) return;
     try {
       // Same operationId, same expectedRevision — a replay, not a new operation.
       const result = await retryUpdate();
       onUpdated?.(result.revision);
-    } catch {
-      // Normalized into updateState by the hook.
+    } catch (error) {
+      // A replay only exists because a first attempt persisted something. Same
+      // latch as the initial execute.
+      reportUncertainOutcome(error);
     }
   };
 
   const retryable =
     updateState.status === "error" &&
+    !outcomeUncertain &&
     !("kind" in updateState.error) &&
     updateState.error.retryable;
 
@@ -376,6 +441,24 @@ export function NutritionPlanEditDialog({
             className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-200"
           >
             {localError}
+          </p>
+        )}
+
+        {/*
+          Neither the success nor the error surface. "Falha ao atualizar" reads as
+          "nothing changed", which invites exactly the retry that could apply a
+          second update. The copy states what we know — unconfirmed — and asks the
+          operator to wait for the refresh. No backend details, no revision.
+        */}
+        {outcomeUncertain && (
+          <p
+            data-testid="edit-plan-outcome-uncertain"
+            role="alert"
+            className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100"
+          >
+            Não foi possível confirmar o resultado desta operação. A alteração pode
+            ter sido aplicada. Aguarde a atualização das informações antes de
+            tentar novamente.
           </p>
         )}
 
@@ -501,7 +584,7 @@ export function NutritionPlanEditDialog({
           {!isSuccess && (
             <Button
               type="submit"
-              disabled={isBusy || isStale || !hasChanges}
+              disabled={isBusy || isStale || !hasChanges || outcomeUncertain}
               data-testid="edit-plan-submit"
             >
               {isBusy ? "Salvando..." : "Salvar alterações"}

@@ -518,3 +518,325 @@ describe("WEB-01B.4 — success handling", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
+
+/**
+ * WEB-01B.6R — the backend said `success: true` and the client could not verify
+ * the response.
+ *
+ * This is the one failure where "it threw" does not mean "it did not happen".
+ * The service raises it only past the success gate, so a plan may already exist
+ * while the reader still reports `empty`. Treating it as an ordinary error would
+ * hand the CREATE button back and let a second, non-replay CREATE through — the
+ * exact window B.4's latch was built to close.
+ */
+describe("WEB-01B.6R — CREATE potentially-committed outcome", () => {
+  const invalidMutationResponse = {
+    firebaseCode: "internal",
+    message: "Falha ao criar plano nutricional",
+    retryable: false,
+    details: { code: "invalid-mutation-response" },
+  };
+
+  beforeEach(() => {
+    mockCan.mockReturnValue(true);
+  });
+
+  it("engages the reconciliation latch while the reader still says empty", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    // The reader has not moved: still the pre-mutation `empty` snapshot.
+    expect(screen.getByText(/Nenhum plano alimentar ativo/i)).toBeInTheDocument();
+    // ...and the affordance is withheld anyway, because a plan may exist.
+    await waitFor(() =>
+      expect(screen.queryByTestId("nutrition-create-plan-action")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("does not start a second logical CREATE", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    // Exactly one prepare, one execute: no new operationId, no auto-retry.
+    expect(mutationMocks.prepareCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.retryCreate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the dialog open with sanitized copy, neither success nor plain failure", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+    mutationMocks.createState = {
+      status: "error",
+      intent: { operationId: "op-A" },
+      error: invalidMutationResponse,
+    };
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalled());
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // The uncertain surface replaces the ordinary error surface: "Falha ao criar"
+    // would read as "nothing happened" and invite an unsafe retry.
+    expect(screen.getByTestId("create-plan-outcome-uncertain")).toBeInTheDocument();
+    expect(screen.queryByTestId("create-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("create-plan-success")).not.toBeInTheDocument();
+    // Non-retryable: retrying could mint a second mutation on an unknown state.
+    expect(screen.queryByTestId("create-plan-retry")).not.toBeInTheDocument();
+    // The raw response never reaches the operator.
+    expect(screen.queryByText(/plan-/)).not.toBeInTheDocument();
+  });
+
+  it("engages the latch from a retry too — a replay implies something persisted", async () => {
+    mutationMocks.createState = {
+      status: "error",
+      intent: { operationId: "op-A" },
+      error: {
+        firebaseCode: "unavailable",
+        message: "Serviço temporariamente indisponível.",
+        retryable: true,
+      },
+    };
+    mutationMocks.retryCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fireEvent.click(screen.getByTestId("nutrition-create-plan-action"));
+    fireEvent.click(screen.getByTestId("create-plan-retry"));
+
+    await waitFor(() => expect(mutationMocks.retryCreate).toHaveBeenCalledTimes(1));
+
+    // Same operationId reused, and no third attempt fired automatically.
+    expect(mutationMocks.prepareCreate).not.toHaveBeenCalled();
+    expect(mutationMocks.retryCreate).toHaveBeenCalledTimes(1);
+
+    // A retry that lands in the uncertain state closes the door behind it: the
+    // retry affordance is withdrawn even though the hook still reports the
+    // original error as retryable, and submit is locked.
+    expect(screen.queryByTestId("create-plan-retry")).not.toBeInTheDocument();
+    const submit = screen.getByTestId("create-plan-submit");
+    expect(submit).toBeDisabled();
+
+    // Force both paths anyway — there must be no third attempt.
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(mutationMocks.prepareCreate).not.toHaveBeenCalled();
+    expect(mutationMocks.retryCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeCreate).not.toHaveBeenCalled();
+  });
+
+  it("releases the latch once the reader leaves the empty snapshot", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("create-plan-close"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("nutrition-create-plan-action")).not.toBeInTheDocument(),
+    );
+
+    // The reader speaks: a canonical plan now exists. Truth arrived from the
+    // reader, never from the response we refused to trust.
+    mockUseNutritionPlans.mockReturnValue(
+      stateFor({
+        status: "canonical",
+        activePlan: {
+          id: "plan-real",
+          dogId: "dog-1",
+          foodType: "Ração",
+          amountGramsPerDay: 500,
+          mealsPerDay: 2,
+          mealSchedule: [],
+          validFrom: new Date(),
+          timezone: "America/Sao_Paulo",
+          recordedBy: { uid: "u1", name: "Vet", internalRole: "Vet" },
+          status: "active",
+          schemaVersion: 1,
+          revision: 1,
+          supplements: [],
+        } as never,
+      }),
+    );
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    expect(screen.queryByText(/Nenhum plano alimentar ativo/i)).not.toBeInTheDocument();
+  });
+
+  /*
+   * The panel latch only governs the card behind the dialog. If the dialog that
+   * is ALREADY OPEN keeps a live submit button, the operator never has to close
+   * it — one more click mints a fresh operationId and a second logical CREATE,
+   * while the first one's fate is still unknown. This asserts the lock inside the
+   * dialog, which affordance-absence tests cannot reach.
+   */
+  it("locks its own submit — a second click cannot start another CREATE", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    // The dialog is still open, and the reader has not moved.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    const submit = screen.getByTestId("create-plan-submit");
+    expect(submit).toBeDisabled();
+
+    // Attempt it anyway: no second prepare, no second execute, no new operationId.
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(mutationMocks.prepareCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1);
+    expect(mutationMocks.retryCreate).not.toHaveBeenCalled();
+  });
+
+  it("offers no retry affordance in the uncertain state", async () => {
+    mutationMocks.executeCreate.mockRejectedValue({
+      ...invalidMutationResponse,
+      // Even if something upstream marked it retryable, retrying is unsafe here.
+      retryable: true,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByTestId("create-plan-retry")).not.toBeInTheDocument();
+  });
+
+  it("tells the operator the result is unconfirmed, not that it failed", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    const notice = screen.getByTestId("create-plan-outcome-uncertain");
+    expect(notice).toBeInTheDocument();
+    expect(notice.textContent).toMatch(/não foi possível confirmar/i);
+    // Must not assert a definite failure — the plan may exist.
+    expect(screen.queryByTestId("create-plan-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("create-plan-success")).not.toBeInTheDocument();
+  });
+
+  it("keeps the panel latch engaged after the dialog is closed", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+
+    // Closing clears the dialog's local lock but must NOT clear the panel latch.
+    fireEvent.click(screen.getByTestId("create-plan-close"));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nutrition-create-plan-action")).not.toBeInTheDocument();
+  });
+
+  it("does not leak the uncertain lock into a later legitimate CREATE", async () => {
+    mutationMocks.executeCreate.mockRejectedValue(invalidMutationResponse);
+
+    const { rerender } = render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("create-plan-close"));
+
+    // Reader reconciles to a canonical plan, then back to empty later (plan
+    // cancelled elsewhere). A fresh CREATE must be fully usable.
+    mockUseNutritionPlans.mockReturnValue(
+      stateFor({
+        status: "canonical",
+        activePlan: {
+          id: "plan-real",
+          dogId: "dog-1",
+          foodType: "Ração",
+          amountGramsPerDay: 500,
+          mealsPerDay: 2,
+          mealSchedule: [],
+          validFrom: new Date(),
+          timezone: "America/Sao_Paulo",
+          recordedBy: { uid: "u1", name: "Vet", internalRole: "Vet" },
+          status: "active",
+          schemaVersion: 1,
+          revision: 1,
+          supplements: [],
+        } as never,
+      }),
+    );
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    mockUseNutritionPlans.mockReturnValue(stateFor({ status: "empty", error: null }));
+    rerender(<NutritionPlanPanel dogId="dog-1" />);
+
+    fireEvent.click(screen.getByTestId("nutrition-create-plan-action"));
+    fireEvent.change(screen.getByLabelText("Tipo de alimento"), {
+      target: { value: "Ração Premium" },
+    });
+    fireEvent.change(screen.getByLabelText("Quantidade (g)"), { target: { value: "500" } });
+
+    expect(screen.getByTestId("create-plan-submit")).not.toBeDisabled();
+    expect(screen.queryByTestId("create-plan-outcome-uncertain")).not.toBeInTheDocument();
+  });
+
+  it("a normal backend rejection does NOT engage the latch", async () => {
+    // permission-denied means the mutation provably never landed, so the `empty`
+    // snapshot is still trustworthy and the affordance must survive.
+    mutationMocks.executeCreate.mockRejectedValue({
+      firebaseCode: "permission-denied",
+      domainCode: "permission-denied",
+      message: "Você não tem permissão para gerenciar planos alimentares.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("create-plan-close"));
+
+    expect(screen.getByTestId("nutrition-create-plan-action")).toBeInTheDocument();
+  });
+
+  it("a revision-conflict does NOT engage the latch either", async () => {
+    mutationMocks.executeCreate.mockRejectedValue({
+      firebaseCode: "failed-precondition",
+      domainCode: "active-plan-conflict",
+      message: "Já existe um plano ativo.",
+      retryable: false,
+    });
+
+    render(<NutritionPlanPanel dogId="dog-1" />);
+    fillMinimumValidForm();
+    fireEvent.click(screen.getByTestId("create-plan-submit"));
+
+    await waitFor(() => expect(mutationMocks.executeCreate).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId("create-plan-close"));
+
+    expect(screen.getByTestId("nutrition-create-plan-action")).toBeInTheDocument();
+  });
+});

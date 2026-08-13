@@ -331,10 +331,19 @@ function markNormalized(error: NutritionMutationError): NutritionMutationError {
  *
  * `wasNoOp` and `supersededPlanId` are deliberately NOT required: the backend
  * omits them on paths where they do not apply, and their absence is meaningful
- * rather than malformed.
+ * rather than malformed. Presence, however, is held to the declared type — a
+ * truthy string `wasNoOp` or a numeric `supersededPlanId` is malformed, not a
+ * value to coerce. Coercion here would let `wasNoOp: "false"` read as a replay
+ * and a non-string `supersededPlanId` slip past the correlation comparison.
  */
 function assertValidMutationPayload(
-  data: { planId?: unknown; status?: unknown; revision?: unknown },
+  data: {
+    planId?: unknown;
+    status?: unknown;
+    revision?: unknown;
+    wasNoOp?: unknown;
+    supersededPlanId?: unknown;
+  },
   defaultMessage: string,
 ): asserts data is { planId: string; status: string; revision: number } {
   const planIdOk = typeof data.planId === "string" && data.planId.trim().length > 0;
@@ -344,13 +353,193 @@ function assertValidMutationPayload(
     data.revision >= 0;
   const statusOk = typeof data.status === "string" && data.status.trim().length > 0;
 
-  if (!planIdOk || !revisionOk || !statusOk) {
+  // Optional-by-contract, but never loosely typed when present.
+  const wasNoOpOk = data.wasNoOp === undefined || typeof data.wasNoOp === "boolean";
+  const supersededOk =
+    data.supersededPlanId === undefined ||
+    data.supersededPlanId === null ||
+    (typeof data.supersededPlanId === "string" && data.supersededPlanId.trim().length > 0);
+
+  if (!planIdOk || !revisionOk || !statusOk || !wasNoOpOk || !supersededOk) {
     throw markNormalized({
       firebaseCode: "internal",
       message: defaultMessage,
       retryable: false,
       details: { code: "invalid-mutation-response" },
     });
+  }
+}
+
+// =============================================================================
+// RESPONSE CORRELATION (WEB-01B.6R)
+// =============================================================================
+
+/**
+ * Raises the same fail-closed error the shape gate uses.
+ *
+ * Correlation runs AFTER the backend answered `success: true`, so the mutation
+ * may already be persisted. That makes it deliberately non-retryable: replaying
+ * it would either hit the receipt (returning the same uncorrelatable payload) or
+ * mint a second mutation. The caller must reload and look at the reader, which
+ * is the only authority on what actually exists.
+ *
+ * The raw response never reaches the message — the operator gets the generic
+ * operation failure, and `invalid-mutation-response` is the machine-readable
+ * discriminator shared with the shape gate.
+ */
+function invalidMutationResponse(defaultMessage: string): never {
+  throw markNormalized({
+    firebaseCode: "internal",
+    message: defaultMessage,
+    retryable: false,
+    details: { code: "invalid-mutation-response" },
+  });
+}
+
+/**
+ * True when a mutation failed AFTER the backend already answered `success: true`.
+ *
+ * This is the one error in the taxonomy where "failed" does not mean "did not
+ * happen". Every other failure — permission-denied, revision-conflict,
+ * active-plan-conflict, validation, transport — means the backend either refused
+ * the mutation or never received it, so the pre-mutation snapshot is still
+ * authoritative. `invalid-mutation-response` is raised only past the
+ * `success: true` gate, by the shape check or by correlation, so the write may
+ * already be persisted and the snapshot on screen may already be dead.
+ *
+ * Callers use this to withhold further mutations against that stale snapshot
+ * until the realtime reader reconciles. It deliberately does NOT match bare
+ * `internal`, `unknown` or `internal-integrity-error`: those can arise without
+ * the client ever observing a success, and treating them as potentially
+ * committed would freeze the UI after operations that plainly never landed.
+ */
+export function isPotentiallyCommittedOutcome(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const details = (error as { details?: unknown }).details;
+  if (typeof details !== "object" || details === null) return false;
+  return (details as { code?: unknown }).code === "invalid-mutation-response";
+}
+
+/**
+ * Correlates a CREATE/REPLACE response with the request that produced it.
+ *
+ * Shape validity is not correlation: `{planId, status, revision}` can all be
+ * well-typed and still describe an operation nobody asked for. The backend
+ * contract (canil-gcm @ feature/health-v1-foundation) is narrow enough to check
+ * exactly:
+ *
+ * - `status` is written as the literal "active" (engine 1654/1661)
+ * - `revision` is written as the literal 1 — a plan is BORN at revision 1
+ *   (engine 1654/1662); `planRevision` rejects anything < 1 (engine 1515)
+ * - REPLACE (expectation pair present) supersedes precisely the plan the client
+ *   named: the transaction refuses unless `previous.id === expectedActivePlanId`
+ *   (engine 1612) and then reports that same id (engine 1641/1664)
+ * - CREATE (no expectation pair) has no `previous`, so `supersededPlanId` is
+ *   null (engine 1641). A non-null value would mean the backend silently
+ *   superseded a plan this client never saw.
+ * - REPLACE mints a NEW document, so the new planId cannot be the superseded one
+ *
+ * All of the above hold identically for a `wasNoOp: true` receipt replay: the
+ * receipt stores the original `result` verbatim (engine 1157) and replay only
+ * returns it after re-asserting intent + expectation pair (engine 1096-1102),
+ * so a legitimate replay passes these checks unchanged.
+ */
+function assertCreateOrReplaceCorrelation(
+  request: CreateNutritionPlanWireRequest,
+  data: { planId: string; status: string; revision: number; supersededPlanId?: string | null },
+  defaultMessage: string,
+): void {
+  if (data.status !== "active" || data.revision !== 1) {
+    invalidMutationResponse(defaultMessage);
+  }
+
+  const expectedActivePlanId = request.expectedActivePlanId;
+  const isReplace =
+    typeof expectedActivePlanId === "string" &&
+    expectedActivePlanId.length > 0 &&
+    typeof request.expectedActiveRevision === "number";
+
+  if (!isReplace) {
+    // Plain CREATE: nothing existed to supersede.
+    if (data.supersededPlanId != null) {
+      invalidMutationResponse(defaultMessage);
+    }
+    return;
+  }
+
+  if (
+    typeof data.supersededPlanId !== "string" ||
+    data.supersededPlanId !== expectedActivePlanId ||
+    data.planId === expectedActivePlanId
+  ) {
+    invalidMutationResponse(defaultMessage);
+  }
+}
+
+/**
+ * Correlates an UPDATE response with the request that produced it.
+ *
+ * UPDATE patches one existing document in place, so the response must name that
+ * same document, leave it active, and land exactly one revision ahead:
+ * `assertExpectedRevision` requires `current === expectedRevision` (engine 1533)
+ * and the write uses `currentRevision + 1` (engine 1722). Any other revision
+ * means the response does not describe the write this request asked for, and
+ * adopting it would poison the `expectedRevision` of the next mutation.
+ *
+ * `supersededPlanId` must be null. UPDATE patches one document in place and
+ * never supersedes anything, so the engine result carries no such field (engine
+ * 1732) and `planResponse` normalizes the absence to null (callables 281). A
+ * non-null value is therefore semantically impossible: it would claim this
+ * UPDATE ended some other plan's life.
+ */
+function assertUpdateCorrelation(
+  request: UpdateNutritionPlanWireRequest,
+  data: {
+    planId: string;
+    status: string;
+    revision: number;
+    supersededPlanId?: string | null;
+  },
+  defaultMessage: string,
+): void {
+  if (
+    data.planId !== request.planId ||
+    data.status !== "active" ||
+    data.revision !== request.expectedRevision + 1 ||
+    data.supersededPlanId != null
+  ) {
+    invalidMutationResponse(defaultMessage);
+  }
+}
+
+/**
+ * Correlates a CANCEL response with the request that produced it.
+ *
+ * Same identity and revision arithmetic as UPDATE (engine 1758-1760), with the
+ * terminal status: CANCEL writes the literal "cancelled". A response still
+ * claiming "active" would let the UI report a cancellation that did not happen.
+ *
+ * `supersededPlanId` must be null for the same reason as UPDATE: cancelling ends
+ * one plan without promoting a successor, so the engine result omits the field
+ * (engine 1768) and `planResponse` reports null (callables 281).
+ */
+function assertCancelCorrelation(
+  request: CancelNutritionPlanWireRequest,
+  data: {
+    planId: string;
+    status: string;
+    revision: number;
+    supersededPlanId?: string | null;
+  },
+  defaultMessage: string,
+): void {
+  if (
+    data.planId !== request.planId ||
+    data.status !== "cancelled" ||
+    data.revision !== request.expectedRevision + 1 ||
+    data.supersededPlanId != null
+  ) {
+    invalidMutationResponse(defaultMessage);
   }
 }
 
@@ -392,6 +581,11 @@ export async function executeCreateNutritionPlan(
     }
 
     assertValidMutationPayload(response.data, "Falha ao criar plano nutricional");
+    assertCreateOrReplaceCorrelation(
+      request,
+      response.data,
+      "Falha ao criar plano nutricional",
+    );
 
     return {
       success: true,
@@ -425,6 +619,10 @@ export async function executeUpdateNutritionPlan(
         planId?: string;
         status?: string;
         revision?: number;
+        // Always transmitted by `planResponse` (callables 281), normalized to
+        // null on this path. Declared so correlation can reject a non-null value
+        // instead of it disappearing into the index signature.
+        supersededPlanId?: string | null;
         wasNoOp?: boolean;
         [key: string]: unknown;
       }
@@ -440,6 +638,11 @@ export async function executeUpdateNutritionPlan(
     }
 
     assertValidMutationPayload(response.data, "Falha ao atualizar plano nutricional");
+    assertUpdateCorrelation(
+      request,
+      response.data,
+      "Falha ao atualizar plano nutricional",
+    );
 
     return {
       success: true,
@@ -472,6 +675,8 @@ export async function executeCancelNutritionPlan(
         planId?: string;
         status?: string;
         revision?: number;
+        // Same rationale as UPDATE: always sent, contractually null here.
+        supersededPlanId?: string | null;
         wasNoOp?: boolean;
         [key: string]: unknown;
       }
@@ -487,6 +692,11 @@ export async function executeCancelNutritionPlan(
     }
 
     assertValidMutationPayload(response.data, "Falha ao cancelar plano nutricional");
+    assertCancelCorrelation(
+      request,
+      response.data,
+      "Falha ao cancelar plano nutricional",
+    );
 
     return {
       success: true,

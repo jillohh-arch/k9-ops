@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isPotentiallyCommittedOutcome } from "../data/nutrition-plan-mutation-service";
 import { useNutritionPlanMutations } from "../hooks/use-nutrition-plan-mutations";
 import type { CreateNutritionPlanCommand, ProfessionalIdentity } from "../mutation-types";
 import type { MealPeriod } from "../types";
@@ -73,8 +74,22 @@ export interface NutritionPlanCreateDialogProps {
    * read model reconciles, so a second (non-replay) CREATE is unreachable in
    * that window. Also fires for an idempotent replay (`wasNoOp`), which is a
    * confirmed plan just the same.
+   *
+   * Success-only: it asserts the plan EXISTS. Never fired for an unverifiable
+   * response — see `onCreateOutcomeUncertain`.
    */
   onCreated?: () => void;
+  /**
+   * Fired when the backend answered `success: true` but the client could not
+   * verify the response (`invalid-mutation-response`).
+   *
+   * Deliberately separate from `onCreated`: we do NOT know that a plan exists.
+   * What we do know is that one MAY exist, so the pre-mutation `empty` snapshot
+   * can no longer be trusted to authorize a second CREATE. The caller withholds
+   * the affordance on exactly the same terms as a confirmed create, but without
+   * any claim that the mutation landed.
+   */
+  onCreateOutcomeUncertain?: () => void;
 }
 
 export function NutritionPlanCreateDialog({
@@ -83,6 +98,7 @@ export function NutritionPlanCreateDialog({
   open,
   onClose,
   onCreated,
+  onCreateOutcomeUncertain,
 }: NutritionPlanCreateDialogProps) {
   const { createState, prepareCreate, executeCreate, retryCreate, resetCreate } =
     useNutritionPlanMutations();
@@ -96,10 +112,26 @@ export function NutritionPlanCreateDialog({
   const [profRegNum, setProfRegNum] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
+  /*
+   * The backend answered `success: true` and we could not verify the response.
+   *
+   * The panel latch withholds the CREATE action on the card, but the card is
+   * behind this dialog — which stays open so the operator can read what happened.
+   * Without a lock here the submit button is simply live again (the hook state is
+   * `error`, so `isBusy` is false), and one more click would mint a NEW
+   * operationId: a second logical CREATE while the first one's fate is unknown.
+   *
+   * Local to the dialog on purpose. It is cleared on close, while the panel latch
+   * survives and keeps the action withheld until the reader reconciles.
+   */
+  const [outcomeUncertain, setOutcomeUncertain] = useState(false);
+
   const isBusy =
     createState.status === "preparing" || createState.status === "executing";
   const isSuccess = createState.status === "success";
-  const isError = createState.status === "error";
+  // An uncertain outcome is NOT an ordinary error: claiming "failed" would invite
+  // the retry we must not allow. It gets its own surface below.
+  const isError = createState.status === "error" && !outcomeUncertain;
 
   const totalGrams = useMemo(
     () =>
@@ -133,13 +165,34 @@ export function NutritionPlanCreateDialog({
     // Closing mid-flight would leave a sent mutation without a surface to report
     // on, and the hook's stale-completion guard would discard the result.
     if (isBusy) return;
+    // Only the dialog's local lock is cleared. The panel latch is the caller's
+    // state and stays engaged, so closing this cannot buy back the CREATE action.
+    setOutcomeUncertain(false);
     resetCreate();
     onClose();
   }, [isBusy, onClose, resetCreate]);
 
+  /**
+   * Latches the caller when the outcome is unknowable from the response.
+   *
+   * Normal rejections (permission, conflict, validation, transport) fall through
+   * untouched: the backend refused, so the snapshot on screen is still the truth
+   * and freezing the UI would punish an operation that never happened.
+   */
+  const reportUncertainOutcome = (error: unknown) => {
+    if (isPotentiallyCommittedOutcome(error)) {
+      setOutcomeUncertain(true);
+      onCreateOutcomeUncertain?.();
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isBusy) return;
+    // Belt and braces: the button is disabled, but a form submit can also arrive
+    // from Enter or programmatically, and this is the guard that must not be
+    // bypassed — past here we would mint a new operationId.
+    if (outcomeUncertain) return;
 
     setLocalError(null);
 
@@ -233,24 +286,33 @@ export function NutritionPlanCreateDialog({
       // Only after the backend confirmed. Latches the caller against a second
       // CREATE until the reader reconciles.
       onCreated?.();
-    } catch {
-      // Normalized into createState by the hook.
+    } catch (error) {
+      // Normalized into createState by the hook. One class of failure still has
+      // to latch: the backend said success and we could not verify it, so a plan
+      // may exist even though this threw.
+      reportUncertainOutcome(error);
     }
   };
 
   const handleRetry = async () => {
+    // Once the outcome is uncertain, no further attempt is safe — not even a
+    // same-operationId replay, which would return the same unverifiable payload.
+    if (outcomeUncertain) return;
     try {
       // Same prepared intent, same operationId — the backend treats it as a
       // replay instead of a second plan.
       await retryCreate();
       onCreated?.();
-    } catch {
-      // Normalized into createState by the hook.
+    } catch (error) {
+      // A replay can come back unverifiable too, and a replay only exists
+      // because something was persisted. Same latch.
+      reportUncertainOutcome(error);
     }
   };
 
   const retryable =
     createState.status === "error" &&
+    !outcomeUncertain &&
     !("kind" in createState.error) &&
     createState.error.retryable;
 
@@ -284,6 +346,26 @@ export function NutritionPlanCreateDialog({
             className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-200"
           >
             {localError}
+          </p>
+        )}
+
+        {/*
+          Deliberately neither the success nor the error surface.
+          "Falha ao criar" would be a lie in the direction that causes damage: it
+          reads as "nothing happened", which invites exactly the retry that could
+          create a second plan. The copy states what we actually know — the result
+          is unconfirmed — and tells the operator to wait for the data to refresh.
+          No backend details, no planId, no revision.
+        */}
+        {outcomeUncertain && (
+          <p
+            data-testid="create-plan-outcome-uncertain"
+            role="alert"
+            className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100"
+          >
+            Não foi possível confirmar o resultado desta operação. O plano pode ter
+            sido criado. Aguarde a atualização das informações antes de tentar
+            novamente.
           </p>
         )}
 
@@ -479,7 +561,11 @@ export function NutritionPlanCreateDialog({
             Fechar
           </Button>
           {!isSuccess && (
-            <Button type="submit" disabled={isBusy} data-testid="create-plan-submit">
+            <Button
+              type="submit"
+              disabled={isBusy || outcomeUncertain}
+              data-testid="create-plan-submit"
+            >
               {isBusy ? "Registrando..." : "Registrar plano"}
             </Button>
           )}

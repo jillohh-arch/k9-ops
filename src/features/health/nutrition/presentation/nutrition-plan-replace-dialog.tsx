@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isPotentiallyCommittedOutcome } from "../data/nutrition-plan-mutation-service";
 import { useNutritionPlanMutations } from "../hooks/use-nutrition-plan-mutations";
 import type { CreateNutritionPlanCommand } from "../mutation-types";
 import type { MealPeriod, NutritionPlan } from "../types";
@@ -363,11 +364,27 @@ export interface NutritionPlanReplaceDialogProps {
    * latch on the exact snapshot it is waiting to see replaced. Also fires for an
    * idempotent replay (`wasNoOp`), which is a confirmed replacement just the
    * same.
+   *
+   * Success-only: it asserts `newPlanId` exists and is active. Never fired for an
+   * unverifiable response — see `onReplaceOutcomeUncertain`.
    */
   onReplaced?: (outcome: {
     supersededPlanId: string;
     supersededRevision: number;
     newPlanId: string;
+  }) => void;
+  /**
+   * Fired when the backend answered `success: true` but the client could not
+   * verify the response (`invalid-mutation-response`).
+   *
+   * No `newPlanId`: the response is precisely what we refused to trust, so
+   * `result.planId` carries no authority here. The latch does not need it — what
+   * it needs is that the plan on screen MAY already be superseded, which is fully
+   * expressed by the frozen expectation pair. The reader decides what replaced it.
+   */
+  onReplaceOutcomeUncertain?: (staleSnapshot: {
+    planId: string;
+    staleRevision: number;
   }) => void;
 }
 
@@ -377,6 +394,7 @@ export function NutritionPlanReplaceDialog({
   open,
   onClose,
   onReplaced,
+  onReplaceOutcomeUncertain,
 }: NutritionPlanReplaceDialogProps) {
   const { createState, prepareCreate, executeCreate, retryCreate, resetCreate } =
     useNutritionPlanMutations();
@@ -430,6 +448,19 @@ export function NutritionPlanReplaceDialog({
 
   const [localError, setLocalError] = useState<string | null>(null);
   const [correlation, setCorrelation] = useState<SupersedeCorrelation | null>(null);
+  /*
+   * The backend answered `success: true` and we could not verify the response.
+   *
+   * The panel latch withholds EDIT and REPLACE on the card, but the card is behind
+   * this dialog. Without a lock here the submit button is live again (the hook
+   * state is `error`, so `isBusy` is false), and another click would mint a NEW
+   * operationId — a second structural replacement while the first one's fate is
+   * unknown. This is the highest-risk resubmit of the three: plan A may already be
+   * superseded and plan B already active.
+   *
+   * Local to the dialog: cleared on close, while the panel latch survives.
+   */
+  const [outcomeUncertain, setOutcomeUncertain] = useState(false);
   const [prevOpen, setPrevOpen] = useState(open);
 
   // Re-seed during render on the closed -> open edge, so a reopen never carries
@@ -461,7 +492,9 @@ export function NutritionPlanReplaceDialog({
   const isBusy =
     createState.status === "preparing" || createState.status === "executing";
   const isSuccess = createState.status === "success";
-  const isError = createState.status === "error";
+  // An uncertain outcome is NOT an ordinary error: claiming "failed" would invite
+  // the retry we must not allow. It gets its own surface below.
+  const isError = createState.status === "error" && !outcomeUncertain;
 
   const isStale = shouldShowNutritionReplaceStale({
     mutationStatus: createState.status,
@@ -510,6 +543,9 @@ export function NutritionPlanReplaceDialog({
     // on, and the hook's stale-completion guard would discard the result. All
     // four close paths (Escape, backdrop, X, Fechar) funnel through here.
     if (isBusy) return;
+    // Only the dialog's local lock is cleared. The panel latch is the caller's
+    // state and stays engaged, so closing this cannot buy back EDIT or REPLACE.
+    setOutcomeUncertain(false);
     resetCreate();
     onClose();
   }, [isBusy, onClose, resetCreate]);
@@ -559,9 +595,32 @@ export function NutritionPlanReplaceDialog({
     });
   }
 
+  /**
+   * Latches the caller against the frozen expectation pair when the outcome is
+   * unknowable.
+   *
+   * Note what is NOT done here: `setCorrelation` is not called. Correlation state
+   * describes a response we accepted, and this response was rejected. Normal
+   * rejections fall through untouched — the backend refused, so the plan on
+   * screen is still the live authority.
+   */
+  const reportUncertainOutcome = (error: unknown) => {
+    if (isPotentiallyCommittedOutcome(error)) {
+      setOutcomeUncertain(true);
+      onReplaceOutcomeUncertain?.({
+        planId: expectedActivePlanId,
+        staleRevision: expectedActiveRevision,
+      });
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isBusy) return;
+    // Belt and braces: the button is disabled, but a form submit can also arrive
+    // from Enter or programmatically, and past here we would mint a new
+    // operationId for a second structural replacement.
+    if (outcomeUncertain) return;
 
     setLocalError(null);
 
@@ -584,24 +643,32 @@ export function NutritionPlanReplaceDialog({
       prepareCreate(command);
       const result = await executeCreate();
       reportOutcome(result);
-    } catch {
-      // Normalized into createState by the hook.
+    } catch (error) {
+      // Normalized into createState by the hook. The dangerous case: the backend
+      // may have superseded the plan still on screen.
+      reportUncertainOutcome(error);
     }
   };
 
   const handleRetry = async () => {
+    // Once the outcome is uncertain, no further attempt is safe — not even a
+    // same-operationId replay, which would return the same unverifiable payload.
+    if (outcomeUncertain) return;
     try {
       // Same prepared intent: same operationId, same planData, same expectation
       // pair. The backend treats it as a replay, never as a second replacement.
       const result = await retryCreate();
       reportOutcome(result);
-    } catch {
-      // Normalized into createState by the hook.
+    } catch (error) {
+      // A replay implies a first attempt already persisted a replacement. Same
+      // latch as the initial execute.
+      reportUncertainOutcome(error);
     }
   };
 
   const retryable =
     createState.status === "error" &&
+    !outcomeUncertain &&
     !("kind" in createState.error) &&
     createState.error.retryable;
 
@@ -687,6 +754,25 @@ export function NutritionPlanReplaceDialog({
             className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-200"
           >
             {localError}
+          </p>
+        )}
+
+        {/*
+          Neither the success nor the error surface. "Falha ao substituir" reads as
+          "the old plan is still active", which is the most dangerous thing we
+          could imply here: it invites a retry that could produce a second
+          replacement. The copy states what we know — unconfirmed — and names both
+          possibilities without asserting either. No planId, no revision.
+        */}
+        {outcomeUncertain && (
+          <p
+            data-testid="replace-plan-outcome-uncertain"
+            role="alert"
+            className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100"
+          >
+            Não foi possível confirmar o resultado desta operação. A substituição
+            pode ter sido concluída. Aguarde a atualização das informações antes de
+            tentar novamente.
           </p>
         )}
 
@@ -926,7 +1012,7 @@ export function NutritionPlanReplaceDialog({
           {!isSuccess && (
             <Button
               type="submit"
-              disabled={isBusy || isStale}
+              disabled={isBusy || isStale || outcomeUncertain}
               data-testid="replace-plan-submit"
             >
               {isBusy ? "Substituindo..." : "Substituir plano"}

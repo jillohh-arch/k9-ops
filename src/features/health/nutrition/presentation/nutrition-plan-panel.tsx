@@ -78,6 +78,18 @@ export function NutritionPlanPanel({
    * the only authority. This only withholds the affordance until the reader
    * leaves the pre-mutation `empty` snapshot, in any direction (canonical,
    * legacy, conflict, degraded or error).
+   *
+   * WEB-01B.6R widened what engages this latch, not what it does. Three outcomes
+   * are now distinguished at the dialog boundary:
+   *
+   *   SUCCESS            — response verified; the plan exists
+   *   NORMAL FAILURE     — backend refused; the snapshot is still the truth
+   *   OUTCOME UNCERTAIN  — backend said success, client could not verify it
+   *
+   * The first and third both engage the latch, because both mean the snapshot
+   * on screen may already be obsolete. The second deliberately does not: freezing
+   * the UI after a permission-denied or a revision-conflict would penalize an
+   * operation that provably never landed.
    */
   const [pendingReconciliation, setPendingReconciliation] = useState(false);
   const [latchedDogId, setLatchedDogId] = useState(dogId);
@@ -157,12 +169,18 @@ export function NutritionPlanPanel({
    * conflict. `newPlanId` is retained only as reconciliation evidence: it is
    * never used to fabricate a card, seed the read model, or claim plan B exists
    * before the reader says so (§28). The reader stays the only authority.
+   *
+   * WEB-01B.6R makes `newPlanId` optional rather than required. An unverifiable
+   * response cannot supply it — its `planId` is exactly the field we refused to
+   * trust — and the latch never needed it: the release condition reads only the
+   * superseded snapshot. Requiring it would have forced the uncertain path to
+   * invent a value, which is the fabrication this whole discipline forbids.
    */
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [pendingReplace, setPendingReplace] = useState<{
     supersededPlanId: string;
     supersededRevision: number;
-    newPlanId: string;
+    newPlanId?: string;
   } | null>(null);
 
   if (dogId !== latchedDogId) {
@@ -270,6 +288,13 @@ export function NutritionPlanPanel({
               onUpdated={() =>
                 setPendingUpdate({ planId: plan.id, staleRevision: plan.revision })
               }
+              /*
+                Same latch, weaker premise. A confirmed UPDATE and an unverifiable
+                one both mean the revision on screen may no longer be current, and
+                that is the only thing this latch encodes. The dialog reports the
+                snapshot it froze, so no resulting revision is invented.
+              */
+              onUpdateOutcomeUncertain={(stale) => setPendingUpdate(stale)}
               onClose={() => setEditOpen(false)}
             />
           )}
@@ -281,6 +306,17 @@ export function NutritionPlanPanel({
               // The dialog reports the snapshot it actually sent expectations
               // for, which may already differ from the live plan.
               onReplaced={(outcome) => setPendingReplace(outcome)}
+              /*
+                Same latch, no `newPlanId`. The response was rejected, so it
+                cannot say what replaced A — only that A may already be dead,
+                which is what the release condition actually reads.
+              */
+              onReplaceOutcomeUncertain={(stale) =>
+                setPendingReplace({
+                  supersededPlanId: stale.planId,
+                  supersededRevision: stale.staleRevision,
+                })
+              }
               onClose={() => setReplaceOpen(false)}
             />
           )}
@@ -332,6 +368,12 @@ export function NutritionPlanPanel({
               dogName={dogName}
               open={createOpen}
               onCreated={() => setPendingReconciliation(true)}
+              /*
+                Same latch, weaker premise: a plan MAY now exist. Either way the
+                `empty` snapshot has stopped being trustworthy grounds for a
+                second CREATE, which is all this latch withholds.
+              */
+              onCreateOutcomeUncertain={() => setPendingReconciliation(true)}
               onClose={() => setCreateOpen(false)}
             />
           )}

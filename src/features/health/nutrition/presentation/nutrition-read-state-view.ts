@@ -96,6 +96,39 @@ export function canOfferNutritionEdit(
   return decision.kind === "canonical";
 }
 
+/**
+ * WEB-01B.6 — structural REPLACE eligibility.
+ *
+ * REPLACE supersedes the active plan and activates a new one in a single backend
+ * transaction, so it needs exactly what EDIT needs: a canonical active plan (the
+ * authority whose id + revision become the expectation pair) and an explicit
+ * management grant.
+ *
+ * The predicate is therefore identical to `canOfferNutritionEdit` today, and is
+ * kept as its own function rather than aliased because the two answer different
+ * questions and are free to diverge:
+ *
+ * - EDIT needs a revision to patch against.
+ * - REPLACE needs an active plan to supersede.
+ *
+ * Every non-canonical state refuses for the same reasons EDIT refuses, with one
+ * worth stating explicitly: `legacy` has no canonical planId/revision pair, so it
+ * could not populate `expectedActivePlanId`/`expectedActiveRevision` at all, and
+ * replacing without an expectation pair would race `active-plan-conflict`.
+ *
+ * Like CREATE and EDIT, this decides capability x read state ONLY. Whether a
+ * mutation is awaiting reader reconciliation is a separate concern owned by the
+ * panel's latch, because it is temporal state rather than a property of the read
+ * model.
+ */
+export function canOfferNutritionReplace(
+  decision: NutritionViewDecision,
+  canManage: boolean,
+): boolean {
+  if (!canManage) return false;
+  return decision.kind === "canonical";
+}
+
 export function resolveNutritionView(state: NutritionPlanState): NutritionViewDecision {
   // 1. Error has absolute priority, including the inherited `empty` + error case.
   if (state.status === "error" || state.error !== null) {

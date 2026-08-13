@@ -224,13 +224,13 @@ describe("WEB-01B.5 — administrative-only surface", () => {
     );
   });
 
-  it("offers no REPLACE or CANCEL affordance in this phase", () => {
+  // WEB-01B.6 delivered REPLACE, so "Substituir" now appears alongside EDIT and is
+  // asserted in the B.6 suites. CANCEL remains deferred to B.7.
+  it("offers no CANCEL affordance in this phase", () => {
     const { container } = render(<NutritionPlanPanel dogId="dog-1" />);
     openEdit();
 
-    const text = container.textContent ?? "";
-    expect(text).not.toMatch(/Substituir/i);
-    expect(text).not.toMatch(/Cancelar plano/i);
+    expect(container.textContent ?? "").not.toMatch(/Cancelar plano/i);
   });
 });
 

@@ -33,9 +33,11 @@ import { NutritionPlanCanonicalCard } from "./nutrition-plan-canonical-card";
 import { NutritionPlanCreateDialog } from "./nutrition-plan-create-dialog";
 import { NutritionPlanLegacyCard } from "./nutrition-plan-legacy-card";
 import { NutritionPlanEditDialog } from "./nutrition-plan-edit-dialog";
+import { NutritionPlanReplaceDialog } from "./nutrition-plan-replace-dialog";
 import {
   canOfferNutritionCreate,
   canOfferNutritionEdit,
+  canOfferNutritionReplace,
   resolveNutritionView,
 } from "./nutrition-read-state-view";
 import type { LegacyNutritionPlanView, NutritionPlan } from "../types";
@@ -136,7 +138,60 @@ export function NutritionPlanPanel({
     setPendingUpdate(null);
   }
 
-  const offerEdit = canOfferNutritionEdit(decision, canManage) && pendingUpdate === null;
+  /*
+   * WEB-01B.6 — structural REPLACE, and the sharpest temporal seam so far.
+   *
+   * CREATE's seam was "the reader still says empty". UPDATE's was "the reader
+   * still shows the superseded revision of the SAME plan". REPLACE's is worse:
+   * the backend has already superseded plan A and activated plan B, but the
+   * reader may still be showing A as active. In that window the interface is
+   * asserting something false — A is not the active plan any more.
+   *
+   * Offering EDIT or REPLACE there would freeze an expectation pair against a
+   * plan that is already `superseded`, so the next submit is a guaranteed
+   * conflict. The pre-Foundation source left both actions live in exactly this
+   * window; that gap is closed here.
+   *
+   * Keyed on the snapshot that DIED, so it releases as soon as the reader stops
+   * showing it — whether it advances to plan B, leaves canonical, or reports a
+   * conflict. `newPlanId` is retained only as reconciliation evidence: it is
+   * never used to fabricate a card, seed the read model, or claim plan B exists
+   * before the reader says so (§28). The reader stays the only authority.
+   */
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [pendingReplace, setPendingReplace] = useState<{
+    supersededPlanId: string;
+    supersededRevision: number;
+    newPlanId: string;
+  } | null>(null);
+
+  if (dogId !== latchedDogId) {
+    setPendingReplace(null);
+  }
+
+  if (
+    pendingReplace !== null &&
+    (activeCanonical === null ||
+      activeCanonical.id !== pendingReplace.supersededPlanId ||
+      activeCanonical.revision !== pendingReplace.supersededRevision)
+  ) {
+    setPendingReplace(null);
+  }
+
+  /*
+   * Both latches gate both actions.
+   *
+   * A pending REPLACE withholds EDIT because the plan on screen is dead — there
+   * is nothing valid to patch. A pending UPDATE withholds REPLACE because the
+   * revision on screen is already superseded, so it cannot serve as
+   * `expectedActiveRevision`. Either way the operator is not offered an action
+   * the backend is certain to refuse.
+   */
+  const awaitingReconciliation = pendingUpdate !== null || pendingReplace !== null;
+
+  const offerEdit = canOfferNutritionEdit(decision, canManage) && !awaitingReconciliation;
+  const offerReplace =
+    canOfferNutritionReplace(decision, canManage) && !awaitingReconciliation;
 
   switch (decision.kind) {
     case "loading":
@@ -167,8 +222,8 @@ export function NutritionPlanPanel({
       );
 
     /*
-     * WEB-01B.5 — the only state where administrative UPDATE is offered. No
-     * REPLACE and no CANCEL affordance here: those are B.6 and B.7.
+     * WEB-01B.5 / WEB-01B.6 — the only state offering administrative UPDATE and
+     * structural REPLACE. No CANCEL affordance here: that is B.7.
      */
     case "canonical": {
       const plan = state.activePlan as NutritionPlan;
@@ -177,20 +232,33 @@ export function NutritionPlanPanel({
           <NutritionPlanCanonicalCard
             plan={plan}
             action={
-              offerEdit ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => setEditOpen(true)}
-                  data-testid="nutrition-edit-plan-action"
-                >
-                  Editar
-                </Button>
+              offerEdit || offerReplace ? (
+                <>
+                  {offerEdit && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => setEditOpen(true)}
+                      data-testid="nutrition-edit-plan-action"
+                    >
+                      Editar
+                    </Button>
+                  )}
+                  {offerReplace && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => setReplaceOpen(true)}
+                      data-testid="nutrition-replace-plan-action"
+                    >
+                      Substituir plano
+                    </Button>
+                  )}
+                </>
               ) : undefined
             }
           />
           {/*
-            Gated on `canManage`, not on the full `offerEdit`: engaging the
-            revision latch flips `offerEdit` to false, and an open dialog must
+            Gated on `canManage`, not on the full `offerEdit`/`offerReplace`:
+            engaging either latch flips those to false, and an open dialog must
             not be torn down underneath a mutation in flight or reporting its
             result. A revoked capability does withdraw it.
           */}
@@ -203,6 +271,17 @@ export function NutritionPlanPanel({
                 setPendingUpdate({ planId: plan.id, staleRevision: plan.revision })
               }
               onClose={() => setEditOpen(false)}
+            />
+          )}
+          {replaceOpen && canManage && (
+            <NutritionPlanReplaceDialog
+              dogId={dogId}
+              plan={plan}
+              open={replaceOpen}
+              // The dialog reports the snapshot it actually sent expectations
+              // for, which may already differ from the live plan.
+              onReplaced={(outcome) => setPendingReplace(outcome)}
+              onClose={() => setReplaceOpen(false)}
             />
           )}
         </>

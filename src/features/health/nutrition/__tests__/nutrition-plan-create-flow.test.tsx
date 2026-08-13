@@ -228,7 +228,11 @@ describe("WEB-01B.4 — states that must never offer CREATE", () => {
     });
   }
 
-  it("canonical active offers no REPLACE/EDIT/CANCEL either (deferred phases)", () => {
+  // WEB-01B.6 delivered REPLACE, so "Substituir" is now expected on a canonical
+  // active plan and is asserted in the B.6 suites. What this test still guards is
+  // the part that matters to B.4: CREATE must not be reachable from a canonical
+  // plan, and CANCEL remains deferred to B.7.
+  it("canonical active offers no CREATE and no CANCEL (CREATE needs proven absence)", () => {
     mockCan.mockReturnValue(true);
     mockUseNutritionPlans.mockReturnValue(
       stateFor({
@@ -253,7 +257,6 @@ describe("WEB-01B.4 — states that must never offer CREATE", () => {
 
     const { container } = render(<NutritionPlanPanel dogId="dog-1" />);
     const text = container.textContent ?? "";
-    expect(text).not.toMatch(/Substituir/i);
     expect(text).not.toMatch(/Cancelar plano/i);
     expect(text).not.toMatch(/Novo plano/i);
   });

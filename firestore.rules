@@ -98,12 +98,35 @@ service cloud.firestore {
     // =====================================================================
     // SEC-02A.2 — ESTADO DE AUTORIZAÇÃO E ESCOPO, FALHA FECHADA
     //
-    // Perfil de acesso é a autoridade de escopo. A claim não amplia — só
-    // restringe. AUSENTE/DESCONHECIDO/MALFORMADO => DENY.
+    // Histórico do defeito:
+    //   SEC-02A  — `token.get('access_scope', 'global')` tratava claim ausente
+    //              como global, e os guards eram
+    //              `!hasOwnRecordsScope() || <vínculo>`: claim ausente tornava a
+    //              negação verdadeira e liberava QUALQUER K9.
+    //   SEC-02A.2 — a claim deixou de ser AUTORIDADE. O documento de perfil
+    //              (access_profiles/{id}.scope) é a autoridade vigente, como já
+    //              é no backend. Uma claim antiga não amplia acesso enquanto o
+    //              token não é renovado; só pode RESTRINGIR.
     //
-    // authState() é chamada uma vez e o resultado reaproveitado via `let` —
-    // Rules não memoizam funções e encadear helpers estoura o limite de 1000
-    // expressões por avaliação.
+    // Ordem contratual para chamador NÃO-admin:
+    //   RA válida -> users/{ra} existe -> não soft-deleted ->
+    //   access_profile_id válido -> perfil existe -> status permite ->
+    //   scope é enum válido -> claim/espelho podem só restringir ->
+    //   vínculo com o K9 quando o escopo efetivo é own_records
+    //
+    // AUSENTE / DESCONHECIDO / MALFORMADO => DENY.
+    // =====================================================================
+
+    // Estado de autorização resolvido UMA ÚNICA VEZ.
+    //
+    // Rules não memoizam chamadas de função: helpers encadeados re-derivam a
+    // cadeia inteira a cada referência e estouram o limite de 1000 expressões
+    // por avaliação. Por isso todo o estado é calculado aqui, com `let`, e
+    // devolvido como mapa; cada guard chama esta função uma vez.
+    //
+    // Sentinelas evitam segmento de path vazio quando a claim/campo falta:
+    // exists() falha e o acesso é negado, sem herdar perfil por omissão
+    // (o default 'operador_k9' foi justamente o vetor corrigido no backend).
     function authState() {
       let userPath = /databases/$(database)/documents/users/$(request.auth.token.get('ra', '__sec02_no_ra__'));
       let userOk = hasRaClaim() && exists(userPath);
@@ -112,8 +135,12 @@ service cloud.firestore {
       let profilePath = /databases/$(database)/documents/access_profiles/$(profileId is string && profileId.size() > 0 ? profileId : '__sec02_no_profile__');
       let profileOk = userOk && exists(profilePath);
       let profile = profileOk ? get(profilePath).data : {};
+      // Enum persistido é 'active' | 'inactive'. AUSENTE é tolerado como ativo
+      // para não divergir de activeProfileGrants nem do backend.
       let statusOk = profile.get('status', 'active') == 'active';
       let scope = profile.get('scope', '');
+      // Qualquer camada que declare own_records RESTRINGE. Ampliar é
+      // impossível: só o perfil concede global.
       let restricted = user.get('access_scope', user.get('accessScope', '')) == 'own_records'
         || request.auth.token.get('access_scope', '') == 'own_records';
       return {
@@ -130,6 +157,8 @@ service cloud.firestore {
       return signedIn() && authState().get('valid', false);
     }
 
+    // Escopo amplo vigente: perfil ATUAL diz global e nada restringe. Uma claim
+    // 'global' obsoleta não satisfaz esta função — o perfil é a autoridade.
     function hasExplicitGlobalScope() {
       let st = authState();
       return signedIn()
@@ -139,8 +168,8 @@ service cloud.firestore {
         );
     }
 
-    // NÃO usar sua negação como guard de acesso amplo — negação não prova
-    // autorização. Mantido para compatibilidade de leitura do contrato.
+    // Escopo restrito vigente. NÃO usar sua negação como guard de acesso
+    // amplo — negação não prova autorização.
     function hasOwnRecordsScope() {
       let st = authState();
       return signedIn()
@@ -173,6 +202,12 @@ service cloud.firestore {
         );
     }
 
+    // SEC-02A.2: vínculo com o K9 só vale sob estado de autorização íntegro.
+    // Admin conserva o bypass explícito canônico.
+    //
+    // `authState()` é chamado UMA vez e o resultado reaproveitado via `let` —
+    // encadear helpers aqui re-deriva a cadeia e estoura o limite de 1000
+    // expressões por avaliação.
     function canAccessDogRecord(dogId) {
       let dogPath = /databases/$(database)/documents/dogs/$(dogId);
       let st = authState();
@@ -197,6 +232,44 @@ service cloud.firestore {
           data.get('dog_id', '') is string && data.get('dog_id', '').size() > 0
             ? data.get('dog_id', '')
             : data.get('caoId', '')
+        );
+    }
+
+    // HW-4A.2C.5R — Identidade ESTRITA da Agenda (Health Schedule).
+    //
+    // A fronteira de segurança collection-group de health_schedule aceita
+    // EXCLUSIVAMENTE `dog_id`. Aliases legados (`dogId`, `caoId`), tolerados por
+    // recordDogId() para coexistência em OUTROS domínios, NÃO autorizam aqui:
+    // um documento sem dog_id canônico não tem identidade válida nesta coleção
+    // e é negado — inclusive para escopo global (fail-closed de namespace).
+    //
+    // Não duplica autorização: delega a canAccessDogRecord(), o mesmo helper
+    // canônico do SEC-02. `data.get('dog_id', '')` evita erro de campo ausente.
+    //
+    // authState() é derivado UMA vez e o escopo amplo curto-circuita ANTES de
+    // canAccessDogRecord(): em query collection-group a regra é avaliada por
+    // documento, e um exists()+get() extra por documento estoura o limite de
+    // acessos por requisição (comprovado: 'list' negado para global).
+    //
+    // CONSEQUÊNCIA DE QUERY (Rules não são filtros): com dog_id exigido FORA do
+    // OR, o motor só consegue provar a condição para TODOS os documentos via
+    // igualdade/`in` em dog_id. Portanto NENHUMA query collection-group
+    // irrestrita passa — nem para global. GLOBAL também enumera dog_id e
+    // também está sujeito ao limite de 30 valores por `in`.
+    function canReadHealthScheduleRecord(data) {
+      let dogId = data.get('dog_id', '');
+      let st = authState();
+      return dogId is string
+        && dogId.size() > 0
+        && (
+          isAdmin()
+          || (
+            st.get('valid', false)
+            && (
+              st.get('global', false)
+              || canAccessDogRecord(dogId)
+            )
+          )
         );
     }
 
@@ -1995,6 +2068,14 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Health v1 — Agenda preventiva: leitura cliente com acesso ao K9.
+      // Writes cliente proibidos. Mutações aprovadas somente via callables
+      // Admin SDK (healthScheduleCreateManual/UpdateOpen/Complete/Cancel).
+      match /health_schedule/{scheduleId} {
+        allow read: if signedIn() && canAccessDogRecord(dogId);
+        allow create, update, delete: if false;
+      }
+
       // Health v1 — Restrições operacionais canônicas, mantidas pelo backend.
       // Leitura cliente somente no escopo autorizado do K9.
       match /operational_restrictions/{restrictionId} {
@@ -2010,6 +2091,74 @@ service cloud.firestore {
           && canAccessDogRecord(dogId);
         allow create, update, delete: if false;
       }
+
+      // Health v1 — Nutrição canônica (5D Gate 4): read-only no cliente.
+      // Mesmo predicado da Agenda: signedIn + canAccessDogRecord(dogId).
+      // Writes canônicos exclusivamente via callables Admin SDK
+      // (healthNutritionCreateMealLog / healthNutritionCreateSupplementLog).
+      // Plan write futuro: backend/Web — cliente permanece DENY em write.
+      match /nutrition_plans/{planId} {
+        allow read: if signedIn() && canAccessDogRecord(dogId);
+        allow create, update, delete: if false;
+      }
+
+      match /meal_logs/{mealId} {
+        allow read: if signedIn() && canAccessDogRecord(dogId);
+        allow create, update, delete: if false;
+      }
+
+      match /supplement_logs/{logId} {
+        allow read: if signedIn() && canAccessDogRecord(dogId);
+        allow create, update, delete: if false;
+      }
+
+      // Receipts operacionais internos (idempotência / fingerprint).
+      // Nunca expostos ao app cliente — nem get/list nem write.
+      match /nutrition_operations/{receiptId} {
+        allow read, create, update, delete: if false;
+      }
+
+      // Health Timeline v1 — projeção server‑side reconciliável
+      // Leitura cliente com acesso ao K9, writes canônicos exclusivamente via backend.
+      match /health_timeline/{timelineId} {
+        allow read: if signedIn() && canAccessDogRecord(dogId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    // Health v1 — HW-4A.2C.5: Agenda Preventiva GLOBAL (collection group).
+    //
+    // A Agenda Web precisa ler health_schedule de VÁRIOS K9s em uma única
+    // consulta. collectionGroup() só é autorizado pela forma recursiva; tentar
+    // recuperar o dogId estrutural via /dogs/{dogId}/{path=**}/... NÃO autoriza
+    // a query (comprovado no Emulator). Portanto a identidade cross-dog
+    // disponível às Rules é resource.data.dog_id.
+    //
+    // Usa canReadHealthScheduleRecord(), que exige `dog_id` canônico e delega a
+    // autorização a canAccessDogRecord() — o MESMO helper fail-closed do SEC-02.
+    // NÃO usa canAccessDogData()/recordDogId() aqui: os aliases legados `dogId`
+    // e `caoId` autorizariam documentos sem identidade canônica (comprovado no
+    // Emulator, HW-4A.2C.5R), abrindo bypass nesta fronteira.
+    //
+    // LIMITE CONHECIDO DO FIRESTORE: em collection group, as Rules não alcançam
+    // o dogId do path pai, logo NÃO podem comparar dog_id com o pai estrutural.
+    // A integridade de dog_id é garantida fora das Rules (writer canônico via
+    // callables Admin SDK + migração HW-4A.2C.4 dos registros legados);
+    // divergência é INCIDENTE DE INTEGRIDADE, não caso de autorização.
+    //
+    // Writes cliente permanecem negados: mutação só via callables Admin SDK.
+    match /{path=**}/health_schedule/{scheduleId} {
+      // SUPERFÍCIE MÍNIMA (HW-4A.2C.5R.1): `list` — NÃO `read`.
+      //
+      // `read` cobriria get + list. A Agenda Global precisa desta regra apenas
+      // para QUERY. O GET individual continua sob a regra aninhada
+      // dogs/{dogId}/health_schedule/{id}, que é autoridade de PATH.
+      //
+      // Comprovado: com `read`, um doc fisicamente sob DOG_A declarando
+      // dog_id=DOG_B era ABERTO por GET direto do dono de B (regras sobrepostas
+      // são OR). Com `list`, o mismatch deixa de ampliar GET.
+      allow list: if signedIn() && canReadHealthScheduleRecord(resource.data);
+      allow create, update, delete: if false;
     }
 
     match /occurrences/{occurrenceId} {
@@ -2189,6 +2338,12 @@ service cloud.firestore {
       allow create: if canCreateNotification(userId);
       allow update: if emailMatchesRa(userId) && canUpdateOwnNotification();
       allow delete: if false;
+    }
+
+    // Estado interno da projeção Health Timeline v1
+    // Invisível ao cliente — writes somente pelo backend Admin SDK.
+    match /_health_projection_state/{document=**} {
+      allow read, write: if false;
     }
 
     // ── Coleções legadas (somente leitura) ──────────────────────────────────

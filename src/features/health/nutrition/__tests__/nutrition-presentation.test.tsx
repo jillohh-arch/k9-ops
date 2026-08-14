@@ -45,6 +45,9 @@ vi.mock("../hooks/use-nutrition-plans", () => ({
 
 // Imported after the mock so the panel picks up the mocked hook.
 const { NutritionPlanPanel } = await import("../presentation/nutrition-plan-panel");
+const { NutritionPlanCanonicalCard } = await import(
+  "../presentation/nutrition-plan-canonical-card"
+);
 
 function baseState(overrides: Partial<NutritionPlanState>): NutritionPlanState {
   return {
@@ -275,5 +278,62 @@ describe("WEB-01B.2 — NutritionPlanPanel rendering", () => {
     mockUseNutritionPlans.mockReturnValue(baseState({ status: "loading" }));
     render(<NutritionPlanPanel dogId="dog-XYZ-42" />);
     expect(mockUseNutritionPlans).toHaveBeenCalledWith("dog-XYZ-42");
+  });
+});
+
+/**
+ * WEB-01 VISUAL CORRECTIONS V1 — MAJOR-V2.
+ *
+ * The browser measured scrollWidth 429 against clientWidth 375 at 390x844: the
+ * badge and the three action buttons sat in one unbreakable flex row, pushing
+ * "Cancelar plano" off-screen.
+ *
+ * The card is rendered directly here rather than through the panel, because this is
+ * a pure presentation concern — no capability, no read state, no reconciliation.
+ * jsdom cannot measure the overflow itself, so these assertions pin the layout
+ * mechanism that removes it; the real browser retest is the authority.
+ */
+describe("WEB-01 VISUAL — canonical card action layout", () => {
+  function renderWithActions() {
+    return render(
+      <NutritionPlanCanonicalCard
+        plan={canonicalPlan}
+        action={
+          <>
+            <button type="button">Editar</button>
+            <button type="button">Substituir plano</button>
+            <button type="button">Cancelar plano</button>
+          </>
+        }
+      />,
+    );
+  }
+
+  it("allows the action group to wrap instead of forcing one long line", () => {
+    renderWithActions();
+    const actions = screen.getByTestId("nutrition-canonical-actions");
+    expect(actions.className).toMatch(/flex-wrap/);
+  });
+
+  it("stacks the badge above the actions on narrow widths and restores the row at sm", () => {
+    renderWithActions();
+    const group = screen.getByTestId("nutrition-canonical-actions").parentElement!;
+    // Column by default (narrow), row from the sm breakpoint up.
+    expect(group.className).toMatch(/\bflex-col\b/);
+    expect(group.className).toMatch(/sm:flex-row/);
+  });
+
+  it("keeps every action label intact — no truncation, no overflow menu", () => {
+    renderWithActions();
+    const actions = screen.getByTestId("nutrition-canonical-actions");
+    expect(actions.textContent).toContain("Editar");
+    expect(actions.textContent).toContain("Substituir plano");
+    expect(actions.textContent).toContain("Cancelar plano");
+    expect(actions.className).not.toMatch(/truncate|overflow-hidden/);
+  });
+
+  it("renders no action container when the caller passes no actions", () => {
+    render(<NutritionPlanCanonicalCard plan={canonicalPlan} />);
+    expect(screen.queryByTestId("nutrition-canonical-actions")).not.toBeInTheDocument();
   });
 });

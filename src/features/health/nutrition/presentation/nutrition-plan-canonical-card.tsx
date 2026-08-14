@@ -71,9 +71,28 @@ export function NutritionPlanCanonicalCard({
             {plan.foodType}
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        {/*
+          MAJOR-V2 — mobile action overflow.
+
+          This row previously had no `flex-wrap`, so the badge plus three buttons
+          formed one unbreakable line: at 390px the page measured scrollWidth 429
+          against clientWidth 375 and "Cancelar plano" ended off-screen.
+
+          The fix is layout, not truncation. On narrow widths the badge takes its own
+          line and the actions wrap beneath it, each keeping its full label and touch
+          target. From `sm` up the original single-line arrangement returns, so the
+          desktop composition the review found good is unchanged.
+        */}
+        <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Badge tone="cyan">Revisão {plan.revision}</Badge>
-          {action}
+          {action ? (
+            <div
+              className="flex flex-wrap items-center gap-2"
+              data-testid="nutrition-canonical-actions"
+            >
+              {action}
+            </div>
+          ) : null}
         </div>
       </header>
 

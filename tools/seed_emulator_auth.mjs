@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 const AUTH_DOMAIN = "gcm.com.br";
+const EMULATOR_OWNER_TOKEN = "owner";
 
 export const TEST_SCENARIOS = [
   {
@@ -26,6 +27,26 @@ export const TEST_SCENARIOS = [
     displayName: "No Access Health E2E",
     profileId: "health-e2e-no-access",
     permissions: {},
+  },
+  {
+    key: "nutrition-manager",
+    ra: "100004",
+    password: "TestPassword123!",
+    displayName: "Nutrition Manager E2E",
+    profileId: "health-e2e-nutrition-manager",
+    level: "manager",
+    permissions: {
+      health: { view: true, read: true, manage_nutrition_plan: true },
+    },
+    dog: {
+      id: "dog-e2e-nutrition-empty",
+      name: "K9 E2E Nutrition Empty",
+      registrationNumber: "E2E-NUT-001",
+      conductorRa: "100004",
+      conductorName: "Nutrition Manager E2E",
+      active: true,
+      status: "active",
+    },
   },
 ];
 
@@ -133,6 +154,24 @@ async function createOrResolveIdentity(fetchImpl, authBase, scenario) {
   return payload.localId;
 }
 
+async function setEmulatorClaims(fetchImpl, authBase, uid, scenario) {
+  const response = await fetchImpl(
+    `${authBase}/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-api-key`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${EMULATOR_OWNER_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        localId: uid,
+        customAttributes: JSON.stringify({ ra: scenario.ra }),
+      }),
+    },
+  );
+  if (!response.ok) throw jsonResponseError("Auth claims write", response);
+}
+
 function firestoreValue(value) {
   if (typeof value === "boolean") return { booleanValue: value };
   if (typeof value === "number") return { integerValue: String(value) };
@@ -163,10 +202,18 @@ function documentUrl(options, collection, id) {
   return `${options.firestoreEmulator}/v1/projects/${options.projectId}/databases/(default)/documents/${collection}/${encodeURIComponent(id)}`;
 }
 
+function collectionUrl(options, ...segments) {
+  const path = segments.map((segment) => encodeURIComponent(segment)).join("/");
+  return `${options.firestoreEmulator}/v1/projects/${options.projectId}/databases/(default)/documents/${path}`;
+}
+
 async function writeDocument(fetchImpl, url, fields, operation) {
   const response = await fetchImpl(url, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${EMULATOR_OWNER_TOKEN}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(documentBody(fields)),
   });
   if (!response.ok) throw jsonResponseError(operation, response);
@@ -192,13 +239,29 @@ function fieldValue(field) {
 }
 
 async function readDocument(fetchImpl, url, operation) {
-  const payload = await readJson(await fetchImpl(url), operation);
+  const payload = await readJson(
+    await fetchImpl(url, {
+      headers: { Authorization: `Bearer ${EMULATOR_OWNER_TOKEN}` },
+    }),
+    operation,
+  );
   return Object.fromEntries(
     Object.entries(payload.fields ?? {}).map(([key, value]) => [
       key,
       fieldValue(value),
     ]),
   );
+}
+
+async function assertCollectionEmpty(fetchImpl, url, operation) {
+  const response = await fetchImpl(url, {
+    headers: { Authorization: `Bearer ${EMULATOR_OWNER_TOKEN}` },
+  });
+  if (response.status === 404) return;
+  const payload = await readJson(response, operation);
+  if ((payload.documents ?? []).length !== 0) {
+    throw new Error(`${operation} diverged`);
+  }
 }
 
 function assertEqual(actual, expected, message) {
@@ -213,6 +276,7 @@ async function seedScenario(fetchImpl, options, scenario) {
     options.authEmulator,
     scenario,
   );
+  await setEmulatorClaims(fetchImpl, options.authEmulator, uid, scenario);
   const userUrl = documentUrl(options, "users", scenario.ra);
   const profileUrl = documentUrl(
     options,
@@ -233,7 +297,7 @@ async function seedScenario(fetchImpl, options, scenario) {
     id: scenario.profileId,
     name: scenario.displayName,
     description: "Synthetic HW-2 emulator profile",
-    level: "read-only",
+    level: scenario.level ?? "read-only",
     module_tags: ["health"],
     role_keys: [],
     scope: "global",
@@ -247,6 +311,13 @@ async function seedScenario(fetchImpl, options, scenario) {
 
   await writeDocument(fetchImpl, userUrl, userFields, "User association write");
   await writeDocument(fetchImpl, profileUrl, profileFields, "Profile write");
+
+  let dogUrl;
+  if (scenario.dog) {
+    dogUrl = documentUrl(options, "dogs", scenario.dog.id);
+    const { id: _id, ...dogFields } = scenario.dog;
+    await writeDocument(fetchImpl, dogUrl, dogFields, "Dog association write");
+  }
 
   const storedUser = await readDocument(
     fetchImpl,
@@ -265,6 +336,29 @@ async function seedScenario(fetchImpl, options, scenario) {
   for (const [field, expected] of Object.entries(profileFields)) {
     assertEqual(storedProfile[field], expected, "Profile verification diverged");
   }
+
+  if (scenario.dog && dogUrl) {
+    const { id: dogId, ...dogFields } = scenario.dog;
+    const storedDog = await readDocument(
+      fetchImpl,
+      dogUrl,
+      "Dog association verification",
+    );
+    for (const [field, expected] of Object.entries(dogFields)) {
+      assertEqual(storedDog[field], expected, "Dog association verification diverged");
+    }
+    for (const collection of [
+      "nutrition_plans",
+      "nutritional_prescriptions",
+      "nutrition_prescriptions",
+    ]) {
+      await assertCollectionEmpty(
+        fetchImpl,
+        collectionUrl(options, "dogs", dogId, collection),
+        `${collection} empty-state verification`,
+      );
+    }
+  }
 }
 
 export async function runSeed(options, dependencies = {}) {
@@ -281,6 +375,10 @@ export async function runSeed(options, dependencies = {}) {
     log(`${scenario.key} identity: valid`);
     log(`${scenario.key} user association: valid`);
     log(`${scenario.key} profile: valid`);
+    if (scenario.dog) {
+      log(`${scenario.key} dog association: valid`);
+      log(`${scenario.key} nutrition state: empty`);
+    }
   }
 }
 

@@ -24,20 +24,36 @@ function response(body: unknown, status = 200) {
 
 function createFakeBackend(config: {
   authFailure?: boolean;
+  claimsFailure?: boolean;
   firestoreFailure?: boolean;
-  divergentRead?: boolean;
+  divergentRead?: "user" | "profile" | "dog";
+  nonEmptyNutrition?: string;
 } = {}) {
   const documents = new Map<string, unknown>();
-  const requests: Array<{ body?: string; method: string; url: string }> = [];
+  const requests: Array<{
+    body?: string;
+    headers?: HeadersInit;
+    method: string;
+    url: string;
+  }> = [];
   const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
-    requests.push({ body: init?.body as string | undefined, method, url });
+    requests.push({
+      body: init?.body as string | undefined,
+      headers: init?.headers,
+      method,
+      url,
+    });
 
     if (url.includes("accounts:signUp")) {
       if (config.authFailure) return response("AUTH_DISABLED", 503);
       const payload = JSON.parse(String(init?.body));
       return response({ localId: `uid-${payload.email.split("@")[0]}` });
+    }
+    if (url.includes("accounts:update")) {
+      if (config.claimsFailure) return response("CLAIMS_DISABLED", 503);
+      return response({});
     }
     if (method === "PATCH") {
       if (config.firestoreFailure) return response("write failed", 500);
@@ -45,12 +61,27 @@ function createFakeBackend(config: {
       return response({});
     }
     if (method === "GET") {
+      if (
+        config.nonEmptyNutrition &&
+        url.endsWith(`/${config.nonEmptyNutrition}`)
+      ) {
+        return response({ documents: [{ name: "unexpected-plan" }] });
+      }
       const stored = structuredClone(documents.get(url)) as {
         fields?: Record<string, unknown>;
       };
       if (!stored) return response("missing", 404);
-      if (config.divergentRead && url.includes("/users/")) {
+      if (config.divergentRead === "user" && url.includes("/users/")) {
         delete stored.fields?.access_profile_id;
+      }
+      if (
+        config.divergentRead === "profile" &&
+        url.includes("/access_profiles/")
+      ) {
+        delete stored.fields?.permissions;
+      }
+      if (config.divergentRead === "dog" && url.includes("/dogs/")) {
+        delete stored.fields?.conductorRa;
       }
       return response(stored);
     }
@@ -94,7 +125,7 @@ describe("HW-2 emulator seed", () => {
     }
   });
 
-  it("creates the exact canonical, legacy and no-access profiles", async () => {
+  it("creates the exact canonical, legacy, no-access and nutrition profiles", async () => {
     const backend = createFakeBackend();
     await runSeed(options, { fetchImpl: backend.fetchImpl, log: () => undefined });
 
@@ -111,6 +142,94 @@ describe("HW-2 emulator seed", () => {
       mapValue: { fields: { health: { mapValue: { fields: { view: { booleanValue: true } } } } } },
     });
     expect(profilePermissions[2]).toEqual({ mapValue: { fields: {} } });
+    expect(profilePermissions[3]).toMatchObject({
+      mapValue: {
+        fields: {
+          health: {
+            mapValue: {
+              fields: {
+                view: { booleanValue: true },
+                read: { booleanValue: true },
+                manage_nutrition_plan: { booleanValue: true },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it("sets only the synthetic RA claim through the local Auth emulator", async () => {
+    const backend = createFakeBackend();
+    await runSeed(options, { fetchImpl: backend.fetchImpl, log: () => undefined });
+
+    const claimsWrites = backend.requests.filter((request) =>
+      request.url.includes("accounts:update"),
+    );
+    expect(claimsWrites).toHaveLength(TEST_SCENARIOS.length);
+    for (const [index, request] of claimsWrites.entries()) {
+      expect(new Headers(request.headers).get("Authorization")).toBe("Bearer owner");
+      expect(JSON.parse(String(request.body))).toEqual({
+        localId: `uid-${TEST_SCENARIOS[index].ra}`,
+        customAttributes: JSON.stringify({ ra: TEST_SCENARIOS[index].ra }),
+      });
+    }
+  });
+
+  it("creates the synthetic dog without creating any nutrition document", async () => {
+    const backend = createFakeBackend();
+    await runSeed(options, { fetchImpl: backend.fetchImpl, log: () => undefined });
+
+    const scenario = TEST_SCENARIOS.find(({ key }) => key === "nutrition-manager");
+    expect(scenario?.dog).toBeDefined();
+
+    const dogWrite = backend.requests.find(
+      (request) =>
+        request.method === "PATCH" &&
+        request.url.endsWith(`/dogs/${scenario?.dog?.id}`),
+    );
+    const dogBody = JSON.parse(String(dogWrite?.body));
+    expect(dogBody.fields).toMatchObject({
+      name: { stringValue: "K9 E2E Nutrition Empty" },
+      registrationNumber: { stringValue: "E2E-NUT-001" },
+      conductorRa: { stringValue: "100004" },
+      active: { booleanValue: true },
+      status: { stringValue: "active" },
+    });
+
+    const nutritionCollections = [
+      "nutrition_plans",
+      "nutritional_prescriptions",
+      "nutrition_prescriptions",
+    ];
+    for (const collection of nutritionCollections) {
+      expect(
+        backend.requests.some(
+          (request) =>
+            request.method === "GET" &&
+            request.url.endsWith(`/dogs/${scenario?.dog?.id}/${collection}`),
+        ),
+      ).toBe(true);
+      expect(
+        backend.requests.some(
+          (request) =>
+            request.method === "PATCH" && request.url.includes(`/${collection}/`),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("uses the local Emulator Suite owner token for every Firestore request", async () => {
+    const backend = createFakeBackend();
+    await runSeed(options, { fetchImpl: backend.fetchImpl, log: () => undefined });
+
+    const firestoreRequests = backend.requests.filter((request) =>
+      request.url.startsWith(options.firestoreEmulator),
+    );
+    expect(firestoreRequests.length).toBeGreaterThan(0);
+    for (const request of firestoreRequests) {
+      expect(new Headers(request.headers).get("Authorization")).toBe("Bearer owner");
+    }
   });
 
   it("fails on Auth and Firestore errors", async () => {
@@ -119,17 +238,25 @@ describe("HW-2 emulator seed", () => {
     ).rejects.toThrow(/Auth identity creation failed/);
     await expect(
       runSeed(options, {
+        fetchImpl: createFakeBackend({ claimsFailure: true }).fetchImpl,
+      }),
+    ).rejects.toThrow(/Auth claims write failed/);
+    await expect(
+      runSeed(options, {
         fetchImpl: createFakeBackend({ firestoreFailure: true }).fetchImpl,
       }),
     ).rejects.toThrow(/User association write failed/);
   });
 
   it("fails when independent Firestore verification diverges", async () => {
-    await expect(
-      runSeed(options, {
-        fetchImpl: createFakeBackend({ divergentRead: true }).fetchImpl,
-      }),
-    ).rejects.toThrow(/verification diverged/);
+    for (const divergentRead of ["user", "profile", "dog"] as const) {
+      await expect(
+        runSeed(options, {
+          fetchImpl: createFakeBackend({ divergentRead }).fetchImpl,
+          log: () => undefined,
+        }),
+      ).rejects.toThrow(/verification diverged/);
+    }
   });
 
   it("rejects non-local hosts and non-demo projects", async () => {
@@ -154,6 +281,24 @@ describe("HW-2 emulator seed", () => {
       expect(output).not.toContain(raToAuthEmail(scenario.ra));
       expect(output).not.toContain(`uid-${scenario.ra}`);
     }
-    expect(logs).toHaveLength(9);
+    expect(logs).toHaveLength(14);
+  });
+
+  it("fails when any synthetic nutrition source is not empty", async () => {
+    for (const collection of [
+      "nutrition_plans",
+      "nutritional_prescriptions",
+      "nutrition_prescriptions",
+    ]) {
+      await expect(
+        runSeed(options, {
+          fetchImpl: createFakeBackend({ nonEmptyNutrition: collection })
+            .fetchImpl,
+          log: () => undefined,
+        }),
+      ).rejects.toThrow(
+        new RegExp(`${collection} empty-state verification diverged`),
+      );
+    }
   });
 });

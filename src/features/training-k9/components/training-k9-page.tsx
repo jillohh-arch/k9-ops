@@ -11,8 +11,9 @@ import { EvaluationsTab } from "./evaluations-tab";
 import { OverviewTab } from "./overview-tab";
 import { SessionsTab } from "./sessions-tab";
 import { TrainingK9Header } from "./training-k9-header";
+import { ReportsTab } from "./reports-tab";
+import { TrainingReportsDataProvider } from "../hooks/use-training-reports-data";
 import {
-  TabPlaceholder,
   TrainingK9Error,
   TrainingK9Skeleton,
 } from "./training-k9-shell";
@@ -53,7 +54,9 @@ function TrainingK9Content() {
             </EvaluationsProvider>
           )}
           {activeTab === "reports" && (
-            <TabPlaceholder tabLabel="Relatórios" />
+            <TrainingReportsDataProvider>
+              <ReportsTab />
+            </TrainingReportsDataProvider>
           )}
         </div>
       )}

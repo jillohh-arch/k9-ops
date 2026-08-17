@@ -1,17 +1,67 @@
 "use client";
 
-import { Dog, Pencil, UserRound, Users } from "lucide-react";
+import {
+  Dog,
+  PawPrint,
+  Pencil,
+  Radar,
+  Shield,
+  Target,
+  UserRound,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 import type { K9ProfileBinomialContext } from "@/features/effective/hooks/use-k9-profile-context";
 import type { EffectiveDog } from "@/features/effective/hooks/use-effective-data";
-import type { buildK9ProfileStatus } from "@/features/effective/lib/k9-profile-status";
+import { canônicalModality } from "@/features/effective/lib/k9-modalities";
+import type {
+  buildK9ProfileStatus,
+  K9ProfileTone,
+} from "@/features/effective/lib/k9-profile-status";
 import { cn } from "@/lib/utils";
 
-import { ProfileField, ProfilePill } from "./k9-profile-ui";
+import { ProfileField } from "./k9-profile-ui";
 
 const NOT_INFORMED = "Não informado";
+
+/**
+ * Tons da pill sobreposta à foto.
+ *
+ * Diferente de `TONE_PILL` (usado sobre card escuro), estes fundos são quase
+ * opacos: a pill fica sobre a imagem, onde translucidez custaria legibilidade.
+ */
+const OVERLAY_PILL_TONE: Record<K9ProfileTone, string> = {
+  amber: "border-amber-300/40 bg-amber-950/80 text-amber-200",
+  cyan: "border-cyan-300/40 bg-cyan-950/80 text-cyan-200",
+  green: "border-emerald-300/40 bg-emerald-950/80 text-emerald-200",
+  red: "border-red-300/40 bg-red-950/80 text-red-200",
+  slate: "border-slate-300/30 bg-slate-900/85 text-slate-200",
+  violet: "border-violet-300/40 bg-violet-950/80 text-violet-200",
+};
+
+/**
+ * Ícone da especialidade, resolvido pela modalidade canônica.
+ *
+ * O rótulo chega já humanizado ("Busca & Captura"), então voltamos ao slug
+ * canônico com o mesmo normalizador do resto do módulo em vez de comparar
+ * strings de exibição. Modalidade desconhecida cai na pata — decorativo, e o
+ * texto da especialidade continua sendo a informação de fato.
+ */
+function specialtyIcon(label: string): LucideIcon {
+  switch (canônicalModality(label)) {
+    case "busca_captura":
+      return Target;
+    case "deteccao":
+      return Radar;
+    case "guarda_protecao":
+      return Shield;
+    default:
+      return PawPrint;
+  }
+}
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -67,9 +117,18 @@ export function K9ProfileHero({
         globals.css) e não o `2xl` (1536) do Tailwind: com 2xl, a resolução de
         1440 cairia em duas colunas e o hero passaria de 730px de altura.
       */}
-      <div className="grid gap-0 lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)] wide:grid-cols-[minmax(290px,320px)_minmax(0,1fr)_minmax(260px,290px)]">
+      {/*
+        V1.2: a faixa da foto ganhou ~40px em cada breakpoint (300→340 no `lg`,
+        320→370 no `wide`). O slot fica mais próximo do retrato original, o que
+        reduz o recorte lateral e dá à imagem o peso que ela tem no mockup.
+
+        Os tetos continuam existindo para a identidade não ser comprimida: em
+        1280 (container útil ~899px) a foto usa 340 e ainda restam ~530px para
+        nome e metadados.
+      */}
+      <div className="grid gap-0 lg:grid-cols-[minmax(300px,340px)_minmax(0,1fr)] wide:grid-cols-[minmax(330px,370px)_minmax(0,1fr)_minmax(280px,320px)]">
         {/* Zona 1 — foto. */}
-        <div className="relative h-[300px] w-full overflow-hidden border-b border-white/[0.06] sm:h-[360px] lg:h-full lg:min-h-[420px] lg:border-b-0 lg:border-r">
+        <div className="relative h-[320px] w-full overflow-hidden border-b border-white/[0.06] sm:h-[380px] lg:h-full lg:min-h-[440px] lg:border-b-0 lg:border-r">
           {dog.profileImageUrl ? (
             <Image
               alt={`Foto de ${dog.name}`}
@@ -97,7 +156,7 @@ export function K9ProfileHero({
               className="object-cover object-top lg:scale-[1.4]"
               fill
               priority
-              sizes="(min-width: 1440px) 320px, (min-width: 1024px) 300px, 100vw"
+              sizes="(min-width: 1440px) 370px, (min-width: 1024px) 340px, 100vw"
               src={dog.profileImageUrl}
               // Origem no topo: o zoom cresce para baixo e preserva a cabeça.
               style={{ transformOrigin: "top center" }}
@@ -117,29 +176,70 @@ export function K9ProfileHero({
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#081320] via-transparent to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-transparent lg:to-[#081320]/70"
           />
+
+          {/*
+            V1.2: a situação operacional passa a ser overlay da foto, no canto
+            inferior esquerdo. Antes era uma pill solta acima do nome, na mesma
+            linha do botão de edição, e disputava atenção com ele.
+
+            O overlay não reaproveita `ProfilePill`: aquele primitive usa fundo
+            translúcido, feito para card escuro, e sobre a foto o rótulo ficava
+            ilegível (medido no Bono: texto âmbar sobre gramado claro). Aqui a
+            cápsula tem fundo próprio quase opaco + blur, garantindo contraste
+            em qualquer imagem. Rótulo e tom continuam vindo de
+            `status.operational` — a mudança é só de apresentação.
+          */}
+          <div className="absolute bottom-3 left-3 right-3 flex">
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center rounded-lg border px-2.5 py-1 text-[11px] font-bold shadow-[0_2px_12px_rgba(0,0,0,0.45)] backdrop-blur-md",
+                OVERLAY_PILL_TONE[status.operational.tone],
+              )}
+            >
+              {status.operational.label}
+            </span>
+          </div>
         </div>
 
         {/*
           Zona 2 — identidade.
 
-          `justify-center` no desktop: a coluna é mais alta que o conteúdo (a
-          foto define ~420px), e com alinhamento ao topo sobrava um vazio grande
-          embaixo. Centralizar verticalmente encosta a identidade na foto e
-          elimina o miolo vazio sem inventar conteúdo.
+          A coluna (440px) é mais alta que o conteúdo (~280px). `justify-center`
+          repartia a folga igualmente — medido em 1920: 81px acima e 81px
+          abaixo — e o nome ficava baixo demais em relação ao mockup.
+
+          Agora o bloco alinha ao topo com padding próprio: ~44px acima, o que
+          sobe a identidade cerca de 37px sem encostá-la na borda. A folga
+          restante fica embaixo, onde não compete com a leitura do nome.
         */}
-        <div className="flex min-w-0 flex-col p-5 sm:p-6 lg:justify-center">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <ProfilePill
-              label={status.operational.label}
-              tone={status.operational.tone}
-            />
+        <div className="flex min-w-0 flex-col p-5 sm:p-6 lg:justify-start lg:pt-11">
+          {/*
+            A pill de situação migrou para dentro da foto, então esta linha
+            passa a hospedar só a ação — alinhada à direita.
+          */}
+          <div className="flex flex-wrap items-start justify-end gap-3">
             <div className="flex shrink-0 items-center gap-2">
               {canEdit ? (
+                /*
+                  V1.2: o botão ganha linguagem K9 Ops — moldura cyan sobre
+                  fundo translúcido, ícone em cápsula própria e glow discreto no
+                  hover. O peso continua abaixo do nome e da foto: é uma ação de
+                  controle, não o assunto da Hero.
+                */
                 <Link
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-bold text-slate-300 transition hover:border-cyan-300/30 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70"
+                  className={cn(
+                    "group inline-flex items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/[0.06] py-2 pl-2 pr-3.5 text-xs font-bold text-cyan-100 transition",
+                    "hover:border-cyan-300/45 hover:bg-cyan-300/[0.12] hover:shadow-[0_0_22px_rgba(34,211,238,0.16)]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 motion-reduce:transition-none",
+                  )}
                   href={editHref}
                 >
-                  <Pencil aria-hidden className="h-3.5 w-3.5" />
+                  <span
+                    aria-hidden
+                    className="flex h-6 w-6 items-center justify-center rounded-lg border border-cyan-300/25 bg-cyan-300/10 text-cyan-200 transition group-hover:border-cyan-300/40 group-hover:bg-cyan-300/[0.18] motion-reduce:transition-none"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </span>
                   Editar perfil
                 </Link>
               ) : null}
@@ -190,15 +290,25 @@ export function K9ProfileHero({
               Especialidades
             </h2>
             {specialtyLabels.length ? (
-              <ul className="mt-2 flex flex-wrap gap-2">
-                {specialtyLabels.map((label) => (
-                  <li
-                    className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-1.5 text-xs font-semibold text-cyan-200"
-                    key={label}
-                  >
-                    {label}
-                  </li>
-                ))}
+              /*
+                V1.2: chips com mais presença — ícone da modalidade, padding
+                maior e borda com mais contraste. O ícone é decorativo
+                (`aria-hidden`): o rótulo textual continua sendo a informação.
+              */
+              <ul className="mt-2.5 flex flex-wrap gap-2">
+                {specialtyLabels.map((label) => {
+                  const Icon = specialtyIcon(label);
+
+                  return (
+                    <li
+                      className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-300/[0.09] px-3 py-2 text-xs font-bold text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                      key={label}
+                    >
+                      <Icon aria-hidden className="h-4 w-4 shrink-0 text-cyan-300" />
+                      {label}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="mt-2 text-xs text-slate-400">
@@ -214,8 +324,15 @@ export function K9ProfileHero({
           ocupa as duas colunas, mas o card recebe um teto de largura para não
           virar uma barra esticada de ponta a ponta.
         */}
+        {/*
+          A partir de `wide` a zona vira coluna própria e o card estica para
+          acompanhar a altura da Hero: medido em 1920, o card ocupava 296px de
+          uma coluna de 440px e deixava 120px vazios embaixo. `h-full` na
+          cadeia (zona → wrapper → card) transfere a altura, e a distribuição
+          interna do card faz o resto — sem conteúdo de enchimento.
+        */}
         <div className="border-t border-white/[0.06] p-5 sm:p-6 lg:col-span-2 wide:col-span-1 wide:border-l wide:border-t-0">
-          <div className="lg:max-w-[420px] wide:max-w-none">
+          <div className="h-full lg:max-w-[420px] wide:max-w-none">
             <HeroBinomialCard context={binomialContext} status={status} />
           </div>
         </div>
@@ -262,42 +379,48 @@ function HeroBinomialCard({
         </p>
       ) : (
         <>
-          <div className="mt-3.5 flex items-start gap-3">
-            <div className="relative h-[56px] w-[56px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-cyan-300/[0.055]">
+          {/*
+            V1.2: avatar maior (72px) e badge de turno em linha própria, para o
+            bloco ocupar melhor a coluna direita em vez de deixar o conteúdo
+            comprimido no topo do card.
+          */}
+          <div className="mt-4 flex items-start gap-3.5">
+            <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-cyan-300/[0.055]">
               {conductor?.photoUrl ? (
                 <Image
                   alt={`Foto de ${conductor.callsign}`}
                   className="object-cover"
                   fill
-                  sizes="56px"
+                  sizes="72px"
                   src={conductor.photoUrl}
                   unoptimized
                 />
               ) : (
                 <span className="flex h-full w-full items-center justify-center text-cyan-200/45">
-                  <UserRound aria-hidden className="h-6 w-6" />
+                  <UserRound aria-hidden className="h-7 w-7" />
                 </span>
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-black leading-tight text-white">
+              <p className="truncate text-lg font-black leading-tight text-white">
                 {conductor?.callsign ?? binomial?.handlerName ?? NOT_INFORMED}
               </p>
-              <p className="mt-1 font-mono text-[11px] font-semibold text-slate-400">
+              <p className="mt-1.5 font-mono text-[11px] font-semibold text-slate-400">
                 MAT. {conductor?.ra ?? binomial?.handlerRa ?? NOT_INFORMED}
               </p>
-              <span
-                className={cn(
-                  "mt-2 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-bold",
-                  status.shift.tone === "green"
-                    ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200"
-                    : "border-slate-400/20 bg-slate-400/[0.08] text-slate-400",
-                )}
-              >
-                {status.shift.label}
-              </span>
             </div>
           </div>
+
+          <span
+            className={cn(
+              "mt-3 inline-flex w-fit items-center rounded-md border px-2.5 py-1 text-[10px] font-bold",
+              status.shift.tone === "green"
+                ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200"
+                : "border-slate-400/20 bg-slate-400/[0.08] text-slate-400",
+            )}
+          >
+            {status.shift.label}
+          </span>
 
           {/*
             "Vínculo desde" só faz sentido quando existe vínculo. No fallback
@@ -308,8 +431,13 @@ function HeroBinomialCard({
             de autorização com fallback "Operador", não função operacional —
             exibi-la afirmaria algo que o dado não sustenta.
           */}
+          {/*
+            `mt-auto` encosta o vínculo na base do card, na mesma lógica da nota
+            do fallback: sem isso o conteúdo fica agrupado no topo e sobra um
+            vazio embaixo na coluna direita.
+          */}
           {binomial ? (
-            <dl className="mt-4">
+            <dl className="mt-4 border-t border-white/[0.06] pt-3">
               <ProfileField
                 label="Vínculo desde"
                 value={
@@ -322,9 +450,16 @@ function HeroBinomialCard({
           ) : null}
 
           {isLegacyFallback ? (
-            // Nenhum path/coleção interna na superfície: só o que o dado
-            // significa para quem opera.
-            <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+            /*
+              Nenhum path/coleção interna na superfície: só o que o dado
+              significa para quem opera.
+
+              A nota fica na área intermediária, logo após o bloco do condutor.
+              O `mt-auto` vive só no rodapé do card: com dois `mt-auto` na mesma
+              coluna flex a folga se dividia entre eles e o conteúdo terminava
+              agrupado embaixo, com um vazio no meio.
+            */
+            <p className="mt-4 border-t border-white/[0.06] pt-3 text-[11px] leading-relaxed text-slate-500">
               Condutor indicado no cadastro do K9. Não há binômio ativo
               registrado.
             </p>

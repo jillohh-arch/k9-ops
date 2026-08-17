@@ -106,7 +106,7 @@ function renderDrawer(overrides: {
   const mergedDog = { ...dog, ...overrides.dog };
   const onClose = overrides.onClose ?? vi.fn();
 
-  render(
+  const view = render(
     <K9DetailDrawer
       ageYears={6}
       asOverlay={overrides.asOverlay ?? false}
@@ -136,7 +136,7 @@ function renderDrawer(overrides: {
     />,
   );
 
-  return { onClose };
+  return { onClose, unmount: view.unmount };
 }
 
 afterEach(() => {
@@ -213,6 +213,186 @@ describe("binômio", () => {
   it("afirma turno ativo somente com turno real", () => {
     renderDrawer({ hasActiveShift: true });
     expect(screen.getByText("Ativo no turno")).toBeInTheDocument();
+  });
+});
+
+describe("autoridade do vínculo — binômio real vs. referência cadastral", () => {
+  it("com binômio ativo real usa 'Binômio atual' e exibe o vínculo", () => {
+    renderDrawer();
+
+    expect(
+      screen.getByRole("heading", { name: "Binômio atual" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Condutor de referência"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Referência cadastral")).not.toBeInTheDocument();
+    // Vínculo formal existe: a data pertence ao binômio.
+    expect(screen.getByText("Vínculo desde")).toBeInTheDocument();
+    expect(screen.getByText(/10\/01\/2023/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Ver binômio/ })).toHaveAttribute(
+      "href",
+      "/binomials/bin-1",
+    );
+  });
+
+  it("sem binômio real usa 'Condutor de referência' com marcador de origem", () => {
+    renderDrawer({ binomial: null });
+
+    expect(
+      screen.getByRole("heading", { name: "Condutor de referência" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Referência cadastral")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Binômio atual" }),
+    ).not.toBeInTheDocument();
+    // O condutor resolvido continua visível — só a autoridade muda.
+    expect(screen.getByText("Ragonha")).toBeInTheDocument();
+  });
+
+  it("no fallback não exibe campos de vínculo formal", () => {
+    renderDrawer({ binomial: null });
+
+    expect(screen.queryByText("Vínculo desde")).not.toBeInTheDocument();
+    expect(screen.queryByText("Função")).not.toBeInTheDocument();
+    expect(screen.queryByText(/10\/01\/2023/)).not.toBeInTheDocument();
+  });
+
+  it("no fallback explica a origem em linguagem institucional", () => {
+    renderDrawer({ binomial: null });
+
+    expect(
+      screen.getByText(/Condutor indicado no cadastro do K9/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Não há binômio ativo registrado/),
+    ).toBeInTheDocument();
+  });
+
+  it("nunca expõe path/schema técnico na UI", () => {
+    for (const props of [{}, { binomial: null }]) {
+      cleanup();
+      renderDrawer(props);
+      const text = document.body.textContent ?? "";
+      for (const leak of [
+        "conductorRa",
+        "conductor_ra",
+        "dogs.conductorRa",
+        "binomials",
+        "compatibilidade",
+        "legacy",
+        "isLegacyFallback",
+      ]) {
+        expect(text).not.toContain(leak);
+      }
+    }
+  });
+
+  it("no fallback o link de binômio não é renderizado e a ação fica desabilitada", () => {
+    renderDrawer({ binomial: null });
+
+    expect(
+      screen.queryByRole("link", { name: /Ver binômio/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ver binômio/ })).toBeDisabled();
+  });
+
+  it("fallback sem turno factual não afirma 'Ativo no turno'", () => {
+    renderDrawer({ binomial: null, hasActiveShift: false });
+
+    expect(screen.getByText("Sem turno ativo")).toBeInTheDocument();
+    expect(screen.queryByText("Ativo no turno")).not.toBeInTheDocument();
+  });
+
+  it("fallback com turno factual mantém 'Ativo no turno'", () => {
+    renderDrawer({ binomial: null, hasActiveShift: true });
+    expect(screen.getByText("Ativo no turno")).toBeInTheDocument();
+  });
+});
+
+describe("humanização da última atividade", () => {
+  it("não renderiza token técnico cru", () => {
+    renderDrawer({
+      detail: {
+        lastTrainingSession: {
+          date: new Date(2026, 6, 11, 7, 35),
+          modality: "detection_formation",
+          title: "detection_formation",
+        },
+      },
+    });
+
+    const text = document.body.textContent ?? "";
+    expect(text).not.toContain("detection_formation");
+  });
+
+  it("exibe o rótulo humano equivalente", () => {
+    renderDrawer({
+      detail: {
+        lastTrainingSession: {
+          date: new Date(2026, 6, 11, 7, 35),
+          modality: "detection_formation",
+          title: "detection_formation",
+        },
+      },
+    });
+
+    expect(
+      screen.getAllByText(/Detecção — Em formação/).length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("nenhum snake_case conhecido vaza pela última atividade", () => {
+    const tokens = [
+      "guarda_protecao",
+      "busca_captura",
+      "obedience_formation",
+      "in_formation",
+    ];
+
+    for (const token of tokens) {
+      cleanup();
+      renderDrawer({
+        detail: {
+          lastTrainingSession: {
+            date: new Date(2026, 6, 11, 7, 35),
+            modality: token,
+            title: token,
+          },
+        },
+      });
+      expect(document.body.textContent ?? "").not.toContain(token);
+    }
+  });
+
+  it("título não traduzível cai no texto genérico", () => {
+    renderDrawer({
+      detail: {
+        lastTrainingSession: { date: null, modality: null, title: "" },
+      },
+    });
+
+    expect(screen.getByText("Sessão de treinamento")).toBeInTheDocument();
+  });
+});
+
+describe("scroll-lock do sheet", () => {
+  it("trava o scroll do body ao abrir como overlay", () => {
+    renderDrawer({ asOverlay: true });
+    expect(document.body.style.overflow).toBe("hidden");
+  });
+
+  it("restaura o scroll ao desmontar", () => {
+    const { unmount } = renderDrawer({ asOverlay: true });
+    expect(document.body.style.overflow).toBe("hidden");
+
+    unmount();
+    expect(document.body.style.overflow).not.toBe("hidden");
+  });
+
+  it("não trava o scroll no modo inline", () => {
+    renderDrawer({ asOverlay: false });
+    expect(document.body.style.overflow).not.toBe("hidden");
   });
 });
 

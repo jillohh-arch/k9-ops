@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 
 import { EntityImage } from "@/features/effective/components/effective-ui";
+import { humanizeTrainingLabel } from "@/features/effective/lib/k9-profile-activity";
 import type {
   EffectiveBinomial,
   EffectiveDog,
@@ -29,6 +30,20 @@ import {
 import { cn } from "@/lib/utils";
 
 const NOT_INFORMED = "Não informado";
+
+/**
+ * Traduz apenas o que é token técnico persistido.
+ *
+ * Um valor é tratado como token quando não tem espaço nem acento — o formato de
+ * enum (`detection_formation`). Título redigido por pessoa passa intacto, para
+ * que a humanização não vire perda de acentuação.
+ */
+function humanizeIfToken(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const looksTechnical = /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(raw);
+  return looksTechnical ? humanizeTrainingLabel(raw) : raw;
+}
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -89,15 +104,21 @@ function Field({
 function Block({
   children,
   title,
+  trailing,
 }: {
   children: React.ReactNode;
   title: string;
+  /** Marcador opcional à direita do título (ex.: origem do dado). */
+  trailing?: React.ReactNode;
 }) {
   return (
     <section>
-      <h3 className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-        {title}
-      </h3>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h3 className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+          {title}
+        </h3>
+        {trailing}
+      </div>
       <div className="rounded-2xl border border-white/[0.08] bg-[#0c182a]/80 p-3.5 shadow-sm">
         {children}
       </div>
@@ -133,6 +154,24 @@ export function K9DetailDrawer({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [asOverlay, onClose]);
 
+  /*
+    Scroll-lock apenas no modo overlay (sheet tablet/mobile): sem isso a página
+    de fundo rola atrás do sheet. O Drawer monta o próprio overlay em vez de usar
+    o primitive `Dialog`, então o lock não vem de graça — o padrão aqui é o mesmo
+    de `components/ui/dialog.tsx`, restaurando o valor anterior no cleanup.
+
+    No modo inline o drawer é uma coluna da página: travar o body impediria a
+    rolagem normal do roster.
+  */
+  useEffect(() => {
+    if (!asOverlay) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [asOverlay]);
+
   // Foco controlado: ao abrir como overlay, o foco vai para o botão fechar.
   useEffect(() => {
     if (!asOverlay) return;
@@ -143,6 +182,31 @@ export function K9DetailDrawer({
   const groupLabel = classification
     ? K9_ROSTER_GROUP_LABEL[classification.group]
     : null;
+
+  /*
+    Última atividade em linguagem humana.
+
+    `humanizeTrainingLabel` slugifica antes de traduzir, então aplicá-lo a um
+    texto que já é humano removeria os acentos ("Treinamento de detecção" →
+    "Treinamento de deteccao"). Por isso só passam pelo helper os valores que
+    realmente parecem token técnico — snake_case, sem espaço nem acento. O resto
+    é texto redigido por pessoa e vai para a UI como está.
+  */
+  const activityTitle =
+    humanizeIfToken(detail.lastTrainingSession?.title) ??
+    "Sessão de treinamento";
+  const activityModality = humanizeIfToken(
+    detail.lastTrainingSession?.modality,
+  );
+
+  /*
+    Autoridade do vínculo, na mesma regra do Perfil K9: só existe "Binômio
+    atual" quando há vínculo ativo real em `binomials`. Com o condutor vindo
+    apenas da referência cadastral do K9, o bloco se chama "Condutor de
+    referência" — chamá-lo de binômio afirmaria um vínculo inexistente.
+  */
+  const isLegacyFallback = !binomial && conductor != null;
+  const binomialTitle = binomial ? "Binômio atual" : "Condutor de referência";
 
   const body = (
     <div
@@ -221,7 +285,17 @@ export function K9DetailDrawer({
           </dl>
         </div>
 
-        <Block title="Binômio atual">
+        <Block
+          title={binomialTitle}
+          trailing={
+            isLegacyFallback ? (
+              // Origem do dado dita em linguagem institucional, sem citar schema.
+              <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Referência cadastral
+              </span>
+            ) : null
+          }
+        >
           {binomial || conductor ? (
             <div className="flex items-start gap-3">
               <EntityImage
@@ -255,30 +329,39 @@ export function K9DetailDrawer({
                   {hasActiveShift ? "Ativo no turno" : "Sem turno ativo"}
                 </span>
               </div>
-              <dl className="grid shrink-0 gap-2.5">
-                <Field
-                  align="right"
-                  label="Vínculo desde"
-                  value={
-                    binomial?.startAt
-                      ? dateFormatter.format(binomial.startAt)
-                      : NOT_INFORMED
-                  }
-                />
-                {/*
-                  O mockup traz "Função" (ex.: Operador K9), mas não existe
-                  campo canônico de função operacional em `users`:
-                  `accessLevel` é perfil de autorização (e cai para
-                  "Operador" por padrão). Exibi-lo aqui afirmaria uma função
-                  que o dado não sustenta, então o campo degrada para
-                  "Não informado" até haver fonte real.
-                */}
-                <Field label="Função" value={NOT_INFORMED} />
-              </dl>
+              {/*
+                "Vínculo desde" e "Função" pertencem ao vínculo formal. Sem
+                binômio ativo real não existe vínculo a datar, então os campos
+                não são renderizados — exibi-los como "Não informado" sugeriria
+                um vínculo apenas incompleto.
+
+                "Função" continua ausente mesmo com binômio real: `users` não
+                tem campo canônico de função operacional (`accessLevel` é
+                perfil de autorização, com fallback "Operador").
+              */}
+              {binomial ? (
+                <dl className="grid shrink-0 gap-2.5">
+                  <Field
+                    align="right"
+                    label="Vínculo desde"
+                    value={
+                      binomial.startAt
+                        ? dateFormatter.format(binomial.startAt)
+                        : NOT_INFORMED
+                    }
+                  />
+                </dl>
+              ) : null}
             </div>
           ) : (
             <p className="text-xs text-slate-400">Sem binômio ativo</p>
           )}
+          {isLegacyFallback ? (
+            <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-slate-400">
+              Condutor indicado no cadastro do K9. Não há binômio ativo
+              registrado.
+            </p>
+          ) : null}
         </Block>
 
         <Block title="Especialidades">
@@ -361,18 +444,22 @@ export function K9DetailDrawer({
                 className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300/80"
               />
               <div className="min-w-0 flex-1">
-                {/* Título dominante; modalidade e data como linha secundária. */}
+                {/*
+                  Título dominante; modalidade e data como linha secundária.
+
+                  Os valores persistidos são técnicos (`detection_formation`), e
+                  o mesmo helper do Perfil os traduz aqui — "Detecção — Em
+                  formação". Nenhum mapa local: divergir do Perfil criaria dois
+                  vocabulários para o mesmo dado.
+                */}
                 <p className="truncate text-[13px] font-bold leading-snug text-slate-100">
-                  {detail.lastTrainingSession.title}
+                  {activityTitle}
                 </p>
                 <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-slate-400">
-                  {detail.lastTrainingSession.modality ? (
-                    <span className="truncate">
-                      {detail.lastTrainingSession.modality}
-                    </span>
+                  {activityModality ? (
+                    <span className="truncate">{activityModality}</span>
                   ) : null}
-                  {detail.lastTrainingSession.modality &&
-                  detail.lastTrainingSession.date ? (
+                  {activityModality && detail.lastTrainingSession.date ? (
                     <span aria-hidden className="shrink-0 text-slate-600">
                       ·
                     </span>

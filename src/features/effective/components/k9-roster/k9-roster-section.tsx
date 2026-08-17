@@ -59,11 +59,22 @@ export function K9RosterSection({
           className="ml-1 h-px flex-1 bg-gradient-to-r from-white/10 to-transparent"
         />
       </div>
+      {/*
+        O máximo da trilha precisa ser flexível (`1fr`), não um pixel fixo:
+        quando o máximo é definido, o CSS Grid usa esse valor para contar as
+        repetições de `auto-fill`. Com `minmax(270px,320px)` o roster colapsava
+        para uma única coluna sempre que o container ficava abaixo de ~640px —
+        medido em 1440px com o drawer aberto (container de 635px gerava 1
+        trilha de 320px e ~315px de vazio, com os cards empilhados).
+
+        O teto de largura fica no card, via `max-w`, preservando a contagem de
+        colunas e ainda impedindo o card de crescer indefinidamente.
+      */}
       <div
         className={cn(
           "grid gap-3.5",
           viewMode === "grid"
-            ? "grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(270px,320px))]"
+            ? "grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(270px,1fr))] sm:[&>*]:max-w-[320px]"
             : "grid-cols-1",
         )}
       >

@@ -37,6 +37,20 @@
   --font-mono: var(--font-geist-mono);
 }
 
+@theme {
+  /*
+    Breakpoint intermediário para layouts de 3 zonas.
+    `lg` (64rem) e `2xl` (96rem) deixam 1440 — resolução comum de trabalho —
+    sem variante própria.
+
+    O valor precisa estar em `rem`, como os breakpoints nativos: declarado em
+    `px`, o Tailwind ordena a media query antes das demais (o `@media` de 1440px
+    sai na frente do de 40rem), e `lg:` passa a vencer `wide:` justamente em
+    1440. 90rem = 1440px com a raiz de 16px.
+  */
+  --breakpoint-wide: 90rem;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

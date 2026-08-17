@@ -350,3 +350,71 @@ export async function archiveK9({
   }
   await callAdminArchiveK9({ id: dogId, reason: normalizedReason });
 }
+
+/**
+ * CREATE V1 narrow contract.
+ *
+ * Distinta de `saveK9` (usada pelo Edit legado, que espalha o payload inteiro).
+ * Aqui o payload é construído campo a campo, contendo APENAS os dados que
+ * pertencem à criação de um K9:
+ *
+ *   - Identificação: name, registrationNumber, breed, sex, birthDate
+ *   - Complementares opcionais: color, size, microchip, notes
+ *   - Foto opcional
+ *   - operationalStatus fixado em "Ativo"
+ *
+ * NÃO envia peso, peso ideal, condição corporal (Saúde), conductorRa
+ * (Binômios) nem specialties (Treinamento). Esses subsistemas são as
+ * autoridades desses dados e o backend em modo create não deve recebê-los.
+ */
+export type K9CreateV1Values = {
+  birthDate: string;
+  breed: string;
+  color: string;
+  microchip: string;
+  name: string;
+  notes: string;
+  profileImageUrl: string;
+  registrationNumber: string;
+  sex: string;
+  size: string;
+};
+
+export async function saveNewK9V1({
+  photoFile,
+  values,
+}: {
+  photoFile: File | null;
+  profile: AuthProfile;
+  values: K9CreateV1Values;
+}) {
+  const resolvedDogId = doc(collection(db, "dogs")).id;
+
+  const photoUrl = photoFile
+    ? await uploadProfilePhoto(resolvedDogId, photoFile)
+    : values.profileImageUrl;
+
+  // Payload explícito. Só existem chaves administrativas de identificação e
+  // complementares; nenhuma chave de Saúde / Binômios / Treinamento é montada.
+  const profilePayload: Record<string, unknown> = {
+    name: values.name.trim(),
+    registrationNumber: values.registrationNumber.trim(),
+    breed: values.breed.trim(),
+    sex: values.sex,
+    birthDate: values.birthDate,
+    color: values.color.trim(),
+    size: values.size.trim(),
+    microchip: values.microchip.trim(),
+    notes: values.notes.trim(),
+    operationalStatus: "Ativo",
+    profileImageUrl: photoUrl || null,
+  };
+
+  const result = await callAdminUpsertK9({
+    dogId: resolvedDogId,
+    mode: "create",
+    profile: profilePayload,
+  });
+
+  return result.data.id ?? resolvedDogId;
+}

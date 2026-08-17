@@ -8,6 +8,7 @@ import {
   Bell,
   BellRing,
   Boxes,
+  ChevronDown,
   ChevronRight,
   ClipboardList,
   Clock,
@@ -32,6 +33,11 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { HudStatusDot } from "@/components/hud-status-dot";
+import {
+  effectiveActivePrefixes,
+  effectiveChildren,
+  effectiveModuleIds,
+} from "@/features/effective/lib/effective-navigation";
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAuth } from "@/features/auth/providers/auth-provider";
 import { db } from "@/lib/firebase/client";
@@ -48,8 +54,16 @@ import type {
 } from "@/lib/permissions/access-control";
 import { cn } from "@/lib/utils";
 
+type NavChild = {
+  href: string;
+  label: string;
+  moduleId: AccessModuleId;
+};
+
 type NavItem = {
   activePrefixes?: string[];
+  /** Quando presente, o item vira grupo expansível em vez de link simples. */
+  children?: NavChild[];
   href: string;
   icon: ComponentType<{ className?: string }>;
   label: string;
@@ -65,17 +79,12 @@ const navItems = [
     moduleId: "dashboard",
   },
   {
-    activePrefixes: [
-      paths.effective,
-      paths.k9,
-      paths.humans,
-      paths.binomials,
-      paths.vehicles,
-    ],
+    activePrefixes: effectiveActivePrefixes,
+    children: effectiveChildren.map((child) => ({ ...child })),
     icon: Users,
     href: paths.effective,
     label: "Efetivo",
-    moduleIds: ["k9", "humans", "binomials", "vehicles"],
+    moduleIds: effectiveModuleIds,
   },
   {
     href: paths.occurrences,
@@ -210,6 +219,104 @@ function AccessDenied({ onGoHome }: { onGoHome: () => void }) {
   );
 }
 
+function isChildActive(child: NavChild, pathname: string) {
+  return pathname === child.href || pathname.startsWith(`${child.href}/`);
+}
+
+function NavGroup({
+  isActive,
+  item,
+  onNavigate,
+  pathname,
+}: {
+  isActive: boolean;
+  item: NavItem;
+  onNavigate?: () => void;
+  pathname: string;
+}) {
+  const children = item.children ?? [];
+  const hasActiveChild = children.some((child) =>
+    isChildActive(child, pathname),
+  );
+  // Autoexpansão: o grupo abre sempre que a rota atual pertence a ele.
+  // O colapso manual fica atrelado à rota em que foi feito, de modo que
+  // navegar devolve o controle à autoexpansão sem precisar de efeito.
+  const [override, setOverride] = useState<{
+    open: boolean;
+    pathname: string;
+  } | null>(null);
+  const autoExpanded = isActive || hasActiveChild;
+  const isExpanded =
+    override && override.pathname === pathname ? override.open : autoExpanded;
+  const panelId = `nav-group-${item.label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")}`;
+
+  return (
+    <div>
+      <button
+        aria-controls={panelId}
+        aria-expanded={isExpanded}
+        className={cn(
+          "relative flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-400 transition hover:bg-white/[0.045] hover:text-white",
+          isActive &&
+            "border border-cyan-300/25 bg-cyan-300/10 text-white shadow-[0_0_32px_rgba(0,188,212,0.12)]",
+        )}
+        onClick={() => setOverride({ open: !isExpanded, pathname })}
+        type="button"
+      >
+        {isActive ? (
+          <span className="absolute -left-3 top-1/2 h-9 w-1 -translate-y-1/2 rounded-r-full bg-cyan-300 shadow-[0_0_18px_rgba(77,208,225,0.8)]" />
+        ) : null}
+        <item.icon className="h-5 w-5 shrink-0" />
+        <span className="flex-1 text-left">{item.label}</span>
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "h-4 w-4 shrink-0 transition-transform duration-[var(--hud-fast)] motion-reduce:transition-none",
+            isExpanded && "rotate-180",
+          )}
+        />
+      </button>
+
+      {isExpanded ? (
+        <ul className="mt-1 space-y-0.5 border-l border-cyan-200/12 pl-3 ml-6" id={panelId}>
+          {children.map((child) => {
+            const childActive = isChildActive(child, pathname);
+
+            return (
+              <li key={child.href}>
+                <Link
+                  aria-current={childActive ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-slate-400 transition hover:bg-white/[0.04] hover:text-white",
+                    childActive && "bg-cyan-300/12 text-cyan-100",
+                  )}
+                  href={child.href}
+                  onClick={onNavigate}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
+                      childActive
+                        ? "bg-cyan-300 shadow-[0_0_10px_rgba(77,208,225,0.85)]"
+                        : "bg-slate-600",
+                    )}
+                  />
+                  {child.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function SidebarContent({
   items,
   onNavigate,
@@ -249,6 +356,18 @@ function SidebarContent({
       <nav className="relative mt-7 flex-1 space-y-1 px-3">
         {items.map((item) => {
           const isActive = isNavItemActive(item, pathname);
+
+          if (item.children?.length) {
+            return (
+              <NavGroup
+                isActive={isActive}
+                item={item}
+                key={item.href}
+                onNavigate={onNavigate}
+                pathname={pathname}
+              />
+            );
+          }
 
           return (
             <Link
@@ -512,9 +631,22 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const avatarSrc = profile?.photoUrl ?? null;
   const accessResolved = accessStatus !== "loading";
   const visibleNavItems = accessResolved
-    ? navItems.filter((item) =>
-        navModules(item).some((moduleId) => can(moduleId, "view")),
-      )
+    ? navItems
+        .filter((item) =>
+          navModules(item).some((moduleId) => can(moduleId, "view")),
+        )
+        // Cada filho só aparece se o módulo correspondente for visível.
+        // A visibilidade da sidebar não concede acesso: é apenas reflexo dele.
+        .map((item) =>
+          item.children
+            ? {
+                ...item,
+                children: item.children.filter((child) =>
+                  can(child.moduleId, "view"),
+                ),
+              }
+            : item,
+        )
     : navItems;
   const currentAccess = getModulesForPath(pathname);
   const routeBlocked = Boolean(

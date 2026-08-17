@@ -26,9 +26,11 @@ export type K9Specialty = {
 };
 
 export type EffectiveDog = {
+  color: string | null;
   conductorRa: string | null;
   dateOfBirth: Date | null;
   id: string;
+  microchip: string | null;
   name: string;
   profileImageUrl: string | null;
   registrationNumber: string | null;
@@ -177,6 +179,8 @@ function isDeleted(record: Record<string, unknown>) {
 
 function mapDog(record: RawRecord, specialties: K9Specialty[]): EffectiveDog {
   return {
+    // Mesmas chaves usadas pelo perfil do K9, para não divergir de fonte.
+    color: text(record.cor, record.color),
     conductorRa: text(
       record.conductorRa,
       record.conductor_ra,
@@ -185,6 +189,7 @@ function mapDog(record: RawRecord, specialties: K9Specialty[]): EffectiveDog {
     ),
     dateOfBirth: dateValue(record.dateOfBirth ?? record.date_of_birth),
     id: record._id,
+    microchip: text(record.microchip),
     name: text(record.name, record.nome) ?? "K9 sem nome",
     profileImageUrl: text(
       record.profileImageUrl,

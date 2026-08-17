@@ -10,12 +10,21 @@ import {
 } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 
+import type { ProfileRecord } from "@/features/effective/lib/k9-profile-records";
 import { db } from "@/lib/firebase/client";
 
-export type ProfileRecord = Record<string, unknown> & {
-  _id: string;
-  _source?: string;
-};
+/**
+ * Os helpers puros de leitura de registro vivem em `lib/k9-profile-records.ts`
+ * para não acoplar lógica testável ao cliente Firebase. São reexportados aqui
+ * porque os consumidores existentes já os importavam deste módulo.
+ */
+export {
+  profileDate,
+  profileNumber,
+  profileRecordDate,
+  profileText,
+} from "@/features/effective/lib/k9-profile-records";
+export type { ProfileRecord } from "@/features/effective/lib/k9-profile-records";
 
 export type K9ProfileState = {
   dog: ProfileRecord | null;
@@ -321,68 +330,4 @@ export function useK9ProfileData(dogId: string): K9ProfileState {
       weightRecords,
     ],
   );
-}
-
-export function profileText(record: Record<string, unknown> | null, keys: string[]) {
-  if (!record) return null;
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" || typeof value === "number") {
-      const parsed = String(value).trim();
-      if (parsed) return parsed;
-    }
-  }
-  return null;
-}
-
-export function profileNumber(
-  record: Record<string, unknown> | null,
-  keys: string[],
-) {
-  const value = profileText(record, keys);
-  if (value == null) return null;
-  const parsed = Number(value.replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-export function profileDate(value: unknown): Date | null {
-  if (value instanceof Date) return value;
-  if (typeof value === "string" || typeof value === "number") {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  if (value && typeof value === "object" && "toDate" in value) {
-    const toDate = (value as { toDate?: unknown }).toDate;
-    if (typeof toDate === "function") {
-      const parsed = toDate.call(value);
-      return parsed instanceof Date && !Number.isNaN(parsed.getTime())
-        ? parsed
-        : null;
-    }
-  }
-  return null;
-}
-
-export function profileRecordDate(record: Record<string, unknown>) {
-  const keys = [
-    "date",
-    "measured_at",
-    "measuredAt",
-    "performed_at",
-    "performedAt",
-    "started_at",
-    "startedAt",
-    "finalized_at",
-    "finalizedAt",
-    "dataUpload",
-    "created_at",
-    "createdAt",
-    "updated_at",
-    "updatedAt",
-  ];
-  for (const key of keys) {
-    const parsed = profileDate(record[key]);
-    if (parsed) return parsed;
-  }
-  return null;
 }

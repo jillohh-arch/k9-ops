@@ -7,6 +7,8 @@ export type AccessAction =
   | "create"
   | "edit"
   | "export"
+  | "manage_nutrition_plan"
+  | "read"
   | "view";
 
 export type AccessModuleId =
@@ -27,8 +29,11 @@ export type AccessModuleId =
   | "training_matrix"
   | "vehicles";
 
+export type AccessModulePermissions = Partial<Record<AccessAction, boolean>> &
+  Record<string, boolean | undefined>;
+
 export type AccessPermissionMap = Partial<
-  Record<AccessModuleId, Partial<Record<AccessAction, boolean>>>
+  Record<AccessModuleId, AccessModulePermissions>
 >;
 
 type AccessActionSeed = {

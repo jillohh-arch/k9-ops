@@ -173,7 +173,7 @@ export type AccessProfileInput = AccessProfile & {
   actorRa?: string | null;
 };
 
-function accessProfileForFunction(profile: AccessProfile) {
+export function accessProfileForFunction(profile: AccessProfile) {
   return {
     description: profile.description,
     id: profile.id,

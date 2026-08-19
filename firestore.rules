@@ -95,10 +95,58 @@ service cloud.firestore {
         );
     }
 
+    // =====================================================================
+    // SEC-02A.2 — ESTADO DE AUTORIZAÇÃO E ESCOPO, FALHA FECHADA
+    //
+    // Perfil de acesso é a autoridade de escopo. A claim não amplia — só
+    // restringe. AUSENTE/DESCONHECIDO/MALFORMADO => DENY.
+    //
+    // authState() é chamada uma vez e o resultado reaproveitado via `let` —
+    // Rules não memoizam funções e encadear helpers estoura o limite de 1000
+    // expressões por avaliação.
+    function authState() {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.token.get('ra', '__sec02_no_ra__'));
+      let userOk = hasRaClaim() && exists(userPath);
+      let user = userOk ? get(userPath).data : {};
+      let profileId = user.get('access_profile_id', user.get('accessProfileId', '__sec02_no_profile__'));
+      let profilePath = /databases/$(database)/documents/access_profiles/$(profileId is string && profileId.size() > 0 ? profileId : '__sec02_no_profile__');
+      let profileOk = userOk && exists(profilePath);
+      let profile = profileOk ? get(profilePath).data : {};
+      let statusOk = profile.get('status', 'active') == 'active';
+      let scope = profile.get('scope', '');
+      let restricted = user.get('access_scope', user.get('accessScope', '')) == 'own_records'
+        || request.auth.token.get('access_scope', '') == 'own_records';
+      return {
+        'valid': userOk
+          && user.get('deleted_at', null) == null
+          && profileOk
+          && statusOk
+          && (scope == 'global' || scope == 'own_records'),
+        'global': scope == 'global' && !restricted,
+      };
+    }
+
+    function hasValidAuthorizationState() {
+      return signedIn() && authState().get('valid', false);
+    }
+
+    function hasExplicitGlobalScope() {
+      let st = authState();
+      return signedIn()
+        && (
+          isAdmin()
+          || (st.get('valid', false) && st.get('global', false))
+        );
+    }
+
+    // NÃO usar sua negação como guard de acesso amplo — negação não prova
+    // autorização. Mantido para compatibilidade de leitura do contrato.
     function hasOwnRecordsScope() {
+      let st = authState();
       return signedIn()
         && !isAdmin()
-        && request.auth.token.get('access_scope', 'global') == 'own_records';
+        && st.get('valid', false)
+        && !st.get('global', false);
     }
 
     function dogAssignedToAuth(data) {
@@ -127,12 +175,19 @@ service cloud.firestore {
 
     function canAccessDogRecord(dogId) {
       let dogPath = /databases/$(database)/documents/dogs/$(dogId);
-      return !hasOwnRecordsScope()
+      let st = authState();
+      return isAdmin()
         || (
-          exists(dogPath)
-          && dogAssignedToAuth(get(dogPath).data)
-        )
-        || activeShiftDogMatches(dogId);
+          st.get('valid', false)
+          && (
+            st.get('global', false)
+            || (
+              exists(dogPath)
+              && dogAssignedToAuth(get(dogPath).data)
+            )
+            || activeShiftDogMatches(dogId)
+          )
+        );
     }
 
     function recordDogId(data) {
@@ -147,28 +202,49 @@ service cloud.firestore {
 
     function canAccessDogData(data) {
       let dogId = recordDogId(data);
-      return !hasOwnRecordsScope()
+      let st = authState();
+      return isAdmin()
         || (
-          dogId is string
-          && dogId.size() > 0
-          && canAccessDogRecord(dogId)
+          st.get('valid', false)
+          && (
+            st.get('global', false)
+            || (
+              dogId is string
+              && dogId.size() > 0
+              && canAccessDogRecord(dogId)
+            )
+          )
         );
     }
 
     function canReadTrainingData(data) {
       let handlerId = trainingHandlerId(data);
-      return !hasOwnRecordsScope()
-        || emailMatchesRa(handlerId)
-        || canAccessDogData(data);
+      let st = authState();
+      return isAdmin()
+        || (
+          st.get('valid', false)
+          && (
+            st.get('global', false)
+            || emailMatchesRa(handlerId)
+            || canAccessDogData(data)
+          )
+        );
     }
 
     function canReadAuditRecord(data) {
-      return !hasOwnRecordsScope()
+      let st = authState();
+      return isAdmin()
         || (
-          data.get('actor', {}) is map
+          st.get('valid', false)
           && (
-            data.get('actor', {}).get('uid', '') == request.auth.uid
-            || emailMatchesRa(data.get('actor', {}).get('ra', ''))
+            st.get('global', false)
+            || (
+              data.get('actor', {}) is map
+              && (
+                data.get('actor', {}).get('uid', '') == request.auth.uid
+                || emailMatchesRa(data.get('actor', {}).get('ra', ''))
+              )
+            )
           )
         );
     }
@@ -1917,6 +1993,22 @@ service cloud.firestore {
         allow create: if canAccessDogRecord(dogId) && canCreateAuditedRecord();
         allow update: if canAccessDogRecord(dogId) && canUpdateAuditedOrSoftDelete();
         allow delete: if false;
+      }
+
+      // Health v1 — Restrições operacionais canônicas, mantidas pelo backend.
+      // Leitura cliente somente no escopo autorizado do K9.
+      match /operational_restrictions/{restrictionId} {
+        allow read: if signedIn() && canAccessDogRecord(dogId);
+        allow create, update, delete: if false;
+      }
+
+      // Health v1 — Projeção server-side singleton para prontidão atual.
+      // Não expõe histórico nem aceita writes diretos de clientes.
+      match /health_summary/{summaryId} {
+        allow read: if summaryId == 'current'
+          && signedIn()
+          && canAccessDogRecord(dogId);
+        allow create, update, delete: if false;
       }
     }
 

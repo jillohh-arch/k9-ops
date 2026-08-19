@@ -170,6 +170,14 @@ export function hasAccessPermission(
   action: AccessAction = "view",
 ) {
   if (!profile || profile.status !== "active") return false;
+  if (
+    moduleId === "health" &&
+    action === "view" &&
+    (profile.permissions.health as Record<string, boolean> | undefined)?.read ===
+      true
+  ) {
+    return true;
+  }
   return profile.permissions[moduleId]?.[action] === true;
 }
 

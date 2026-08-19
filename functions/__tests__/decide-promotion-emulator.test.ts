@@ -25,7 +25,7 @@ function rejectPayload(requestId = "req-001"): DecisionPayload {
 }
 
 beforeAll(() => {
-  process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+  process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8181";
   app = initializeApp({ projectId: "k9-ops-test" }, "emulator-test");
   db = getFirestore(app);
 });
@@ -129,7 +129,7 @@ async function cleanup() {
 
 async function isEmulatorRunning(): Promise<boolean> {
   try {
-    const resp = await fetch("http://127.0.0.1:8080/", { signal: AbortSignal.timeout(1000) });
+    const resp = await fetch("http://127.0.0.1:8181/", { signal: AbortSignal.timeout(1000) });
     return resp.ok || resp.status === 200 || resp.status === 404;
   } catch {
     return false;

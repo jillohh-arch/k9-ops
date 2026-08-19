@@ -61,6 +61,7 @@ function resolveProfileId(profile: AuthProfile | null) {
 
   const explicit = getProfileIdFromLegacyValue(explicitProfileId);
   if (explicit) return explicit;
+  if (explicitProfileId) return explicitProfileId;
 
   for (const role of profile.roles) {
     const roleProfile = getProfileIdFromLegacyValue(role);

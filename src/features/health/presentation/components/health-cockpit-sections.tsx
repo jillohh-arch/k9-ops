@@ -13,6 +13,7 @@
  * - Absence of restrictions may only be affirmed when the read actually succeeded.
  */
 
+import Link from "next/link";
 import {
   ShieldAlert,
   ShieldCheck,
@@ -27,6 +28,7 @@ import {
   FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { paths } from "../../domain/paths";
 import type {
   EvidenceAvailability,
   OperationalRestrictionReadModel,
@@ -387,10 +389,18 @@ export function CockpitPreventiveEvidence({
   weightEvidence,
   vaccinationEvidence,
   nutritionSummary,
+  dogId,
 }: {
   weightEvidence: EvidenceAvailability;
   vaccinationEvidence: EvidenceAvailability;
   nutritionSummary: EvidenceAvailability;
+  /*
+   * Optional on purpose (NUT-WEB-5B): when present, the existing nutrition
+   * evidence gains a link to the Nutrition vertical of the SAME K9. Absent, the
+   * panel renders exactly as before — no caller is forced to change, and the
+   * cockpit gains no capability requirement or command.
+   */
+  dogId?: string;
 }) {
   const weight = weightEvidence.data as
     | { kg: number; measuredAt: Date; bcs?: number | null }
@@ -461,6 +471,20 @@ export function CockpitPreventiveEvidence({
         ) : (
           <UnavailableEvidence reason={nutritionSummary.reason} />
         )}
+
+        {dogId ? (
+          <Link
+            href={paths.health_nutrition_dog(dogId)}
+            className={cn(
+              "inline-flex items-center gap-1.5 self-start rounded-xl border border-border bg-background/60 px-3.5 py-1.5 text-xs font-semibold text-foreground transition-colors",
+              "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            )}
+            data-testid="cockpit-to-nutrition-link"
+          >
+            <Utensils className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Abrir nutrição deste K9</span>
+          </Link>
+        ) : null}
       </div>
 
       {anyAvailable && <ProjectionProvenance />}

@@ -13,7 +13,7 @@
  * different things, and that the cockpit renders no mutation control.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { HealthCockpitHeader } from "../components/health-cockpit-header";
 import {
@@ -24,6 +24,20 @@ import {
   CockpitTimeline,
 } from "../components/health-cockpit-sections";
 import { aggregateReadinessCockpit } from "../../domain/readiness-aggregator";
+import { paths } from "../../domain/paths";
+
+/*
+ * NUT-WEB-5B: the composition itself is under test, so the cockpit view is
+ * rendered for real and only its READ source is substituted. Mocking the hook
+ * keeps this suite free of Firebase while still exercising the actual JSX that
+ * wires dogId from the route into the preventive evidence panel.
+ */
+const mockCockpitState = vi.fn();
+vi.mock("../hooks/use-readiness-cockpit", () => ({
+  useReadinessCockpit: (dogId: string) => mockCockpitState(dogId),
+}));
+
+import { HealthCockpitView } from "../components/health-cockpit-view";
 import type {
   CanonicalHealthSummaryDoc,
   CanonicalRestrictionDoc,
@@ -597,5 +611,95 @@ describe("HW-3D — read-only guarantee", () => {
 
     render(<CockpitRestrictions restrictions={items} coverageComplete />);
     expect(screen.queryByText(/https?:\/\//)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// NUT-WEB-5B — the cockpit VIEW binds the route dogId to the Nutrition link
+// ---------------------------------------------------------------------------
+
+/**
+ * The panel-level contract (link shape, encoding, capability independence) is
+ * locked in nutrition-cross-navigation.test.tsx. What is proven HERE is the
+ * thing that test cannot see: the real cockpit composition actually forwards
+ * the dogId it received from the route, so the affordance exists on the page a
+ * user reaches — not only when a test passes the prop by hand.
+ */
+describe("NUT-WEB-5B — cockpit view -> Nutrition binding", () => {
+  const successState = (dogId: string) => {
+    const c = cockpitOf(
+      summary("operational", {
+        dogId,
+        nutritionPlan: { active: true, foodType: "Ração Premium", amountGrams: 600 },
+      }),
+    );
+    return {
+      status: "success" as const,
+      cockpit: c,
+      restrictionsCoverageComplete: true,
+      errorMessage: null,
+      refetch: () => undefined,
+    };
+  };
+
+  it("31. renders the cockpit->Nutrition link on the real composition", () => {
+    mockCockpitState.mockReturnValue(successState("k9-bono"));
+    render(<HealthCockpitView dogId="k9-bono" />);
+
+    // The rendered page — not a hand-wired panel — carries the affordance.
+    expect(screen.getByTestId("health-cockpit")).toBeDefined();
+    const link = screen.getByTestId("cockpit-to-nutrition-link");
+    expect(link).toHaveAttribute("href", paths.health_nutrition_dog("k9-bono"));
+    expect(link).toHaveAttribute("href", "/health/nutrition/dogs/k9-bono");
+    expect(link.tagName).toBe("A");
+  });
+
+  it("32. forwards the SAME dogId the view was mounted with", () => {
+    mockCockpitState.mockReturnValue(successState("dog-77"));
+    render(<HealthCockpitView dogId="dog-77" />);
+
+    // Read source and navigation target must agree on the K9 identity.
+    expect(mockCockpitState).toHaveBeenCalledWith("dog-77");
+    expect(screen.getByTestId("cockpit-to-nutrition-link")).toHaveAttribute(
+      "href",
+      paths.health_nutrition_dog("dog-77"),
+    );
+  });
+
+  it("33. a dogId needing escaping stays encoded through the path authority", () => {
+    mockCockpitState.mockReturnValue(successState("dog/42"));
+    render(<HealthCockpitView dogId="dog/42" />);
+
+    const link = screen.getByTestId("cockpit-to-nutrition-link");
+    expect(link).toHaveAttribute("href", "/health/nutrition/dogs/dog%2F42");
+    expect(link).toHaveAttribute("href", paths.health_nutrition_dog("dog/42"));
+    // Never a query-string fallback contract.
+    expect(link.getAttribute("href")).not.toContain("?dogId=");
+  });
+
+  it("34. the binding introduces no mutation action in the cockpit", () => {
+    mockCockpitState.mockReturnValue(successState("k9-bono"));
+    render(<HealthCockpitView dogId="k9-bono" />);
+
+    // Success path: navigation only. (The error path's retry button is the sole
+    // cockpit button, and it is a re-read, not a write.)
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    for (const label of [/criar plano/i, /novo plano/i, /editar/i, /substituir/i]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+  });
+
+  it("35. no link is offered when there is no cockpit to link from", () => {
+    mockCockpitState.mockReturnValue({
+      status: "not_found" as const,
+      cockpit: null,
+      restrictionsCoverageComplete: true,
+      errorMessage: null,
+      refetch: () => undefined,
+    });
+    render(<HealthCockpitView dogId="ghost" />);
+
+    expect(screen.getByTestId("cockpit-not-found")).toBeDefined();
+    expect(screen.queryByTestId("cockpit-to-nutrition-link")).toBeNull();
   });
 });

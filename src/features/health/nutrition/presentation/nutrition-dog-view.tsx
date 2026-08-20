@@ -13,9 +13,10 @@
  */
 
 import Link from "next/link";
-import { ArrowLeft, Dog as DogIcon } from "lucide-react";
+import { Activity, ArrowLeft, Dog as DogIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { paths } from "../../domain/paths";
 import { HealthModuleShell } from "../../presentation/components/health-module-shell";
 import {
   ErrorState,
@@ -26,6 +27,18 @@ import { useNutritionDogContext } from "./use-nutrition-dog-context";
 
 const backLink = cn(
   "mt-4 inline-flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-3.5 py-1.5 text-xs font-semibold text-foreground transition-colors",
+  "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+);
+
+/*
+ * Cross-navigation to the readiness cockpit of the SAME K9 (NUT-WEB-5B).
+ *
+ * Read affordance only: it carries no capability requirement and issues no
+ * command. The href always comes from `paths.health_readiness_dog`, never from
+ * manual concatenation, so dogId encoding stays with the single path authority.
+ */
+const cockpitLink = cn(
+  "inline-flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-3.5 py-1.5 text-xs font-semibold text-foreground transition-colors",
   "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 );
 
@@ -90,6 +103,17 @@ export function NutritionDogView({ dogId }: { dogId: string }) {
         photo: dog.photoUrl ?? undefined,
       }}
     >
+      <div className="flex flex-wrap items-center gap-2" data-testid="nutrition-dog-cross-nav">
+        <Link
+          href={paths.health_readiness_dog(dog.id)}
+          className={cockpitLink}
+          data-testid="nutrition-to-cockpit-link"
+        >
+          <Activity className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Ver prontidão deste K9</span>
+        </Link>
+      </div>
+
       <NutritionPlanPanel dogId={dog.id} dogName={dog.name} />
     </HealthModuleShell>
   );

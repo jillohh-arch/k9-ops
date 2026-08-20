@@ -153,6 +153,7 @@ export function HealthCockpitView({ dogId }: { dogId: string }) {
           weightEvidence={cockpit.weightEvidence}
           vaccinationEvidence={cockpit.vaccinationEvidence}
           nutritionSummary={cockpit.nutritionSummary}
+          dogId={dogId}
         />
         <CockpitClinicalContext
           clinicalSummary={cockpit.clinicalSummary}

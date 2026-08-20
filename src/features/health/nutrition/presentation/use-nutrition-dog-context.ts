@@ -29,11 +29,32 @@ export interface NutritionDogContextState {
 }
 
 /**
+ * True when `dogId` can stand as a SINGLE Firestore document-id segment.
+ *
+ * NUT-WEB-5B.F: a route param is user-controlled, so a hand-typed or tampered
+ * URL can decode to something that is not a usable document id. `dogs/dog/42`
+ * has three segments, and `doc()` throws synchronously on it — which took the
+ * whole module down before the Health shell could respond.
+ *
+ * The check is deliberately narrow: only what Firestore itself rejects for a
+ * single segment. It is NOT an arbitrary business-rule validator, and it never
+ * tries to escape "/" into a usable id — after decoding, `dog/42` simply is not
+ * one document.
+ */
+function isValidFirestoreDocumentId(dogId: string): boolean {
+  return dogId.length > 0 && !dogId.includes("/");
+}
+
+/**
  * An unusable dogId is decided synchronously, so no effect ever has to publish
  * it — this keeps the effect body free of synchronous setState calls.
+ *
+ * An invalid id resolves to `not_found`, exactly like a nonexistent or
+ * out-of-scope K9: fail-closed, controlled, and indistinguishable, so a
+ * malformed deep link reveals nothing and crashes nothing.
  */
 function initialStateFor(dogId: string): NutritionDogContextState {
-  if (!dogId.trim()) {
+  if (!isValidFirestoreDocumentId(dogId.trim())) {
     return { status: "not_found", dog: null, errorMessage: null };
   }
   return { status: "loading", dog: null, errorMessage: null };
@@ -55,7 +76,13 @@ export function useNutritionDogContext(dogId: string): NutritionDogContextState 
 
   useEffect(() => {
     const trimmed = dogId.trim();
-    if (!trimmed) {
+    /*
+     * Guard BEFORE doc(): an invalid id must never reach the Firestore SDK.
+     * `initialStateFor` has already published `not_found` for this case, so
+     * returning early keeps the state controlled AND issues no request for a
+     * malformed path.
+     */
+    if (!isValidFirestoreDocumentId(trimmed)) {
       return;
     }
 

@@ -49,6 +49,9 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  FIREBASE_CLI_EXPERIMENTS: webframeworks
+
 jobs:
   validate:
     name: Validate release candidate
@@ -96,6 +99,19 @@ jobs:
 
       - name: Tests
         run: npm test
+
+      - name: Verify Firebase CLI webframeworks experiment enabled
+        run: |
+          set -euo pipefail
+          node -e '
+            const exp = require("firebase-tools/lib/experiments");
+            exp.enableExperimentsFromCliEnvVariable();
+            if (!exp.isEnabled("webframeworks")) {
+              console.error("::error::Experiment webframeworks is not enabled for firebase-tools.");
+              process.exit(1);
+            }
+            console.log("Verified: Firebase CLI webframeworks experiment is enabled.");
+          '
 
       - name: Build
         run: npm run build

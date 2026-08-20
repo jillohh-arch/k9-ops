@@ -53,7 +53,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "firebase-admin": "^14.1.0",
-    "firebase-tools": "^15.20.0",
+    "firebase-tools": "15.25.1",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4",
     "typescript": "^5",

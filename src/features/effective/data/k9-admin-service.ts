@@ -20,6 +20,11 @@ import {
 } from "@/features/effective/lib/k9-modalities";
 import { db, storage } from "@/lib/firebase/client";
 import { callAdminArchiveK9, callAdminUpsertK9 } from "@/lib/firebase/functions";
+import {
+  patchK9Identity,
+  resolveK9VersionToken,
+  type K9IdentitySaveResult,
+} from "@/features/effective/components/k9-edit-v1/k9-edit-adapter";
 
 export type K9FormValues = {
   birthDate: string;
@@ -208,6 +213,9 @@ export async function loadK9ForEdit(dogId: string) {
 
   if (!dogSnapshot.exists()) return null;
   const data = dogSnapshot.data();
+  // Concurrency baseline for Edit V1: newest of both timestamp mirrors.
+  // Never `updated_at ?? updatedAt` — see resolveK9VersionToken.
+  const versionToken = resolveK9VersionToken(data);
   const birthValue = text(data, "dateOfBirth", "date_of_birth");
   const parsedBirth = birthValue ? new Date(birthValue) : null;
   const specialtyValues = new Set(
@@ -263,7 +271,18 @@ export async function loadK9ForEdit(dogId: string) {
     : "";
 
   return {
+    // Canonical archive signals, mirroring the backend guard. Used to tell a
+    // concurrency conflict apart from an archived K9 after FAILED_PRECONDITION,
+    // instead of matching on the backend's error prose.
+    archived:
+      data.active === false ||
+      data.deleted_at != null ||
+      data.archived_at != null ||
+      ["inativo", "inactive"].includes(
+        String(data.status ?? "").trim().toLowerCase(),
+      ),
     protectedSpecialties,
+    versionToken,
     values: {
       birthDate:
         parsedBirth && !Number.isNaN(parsedBirth.getTime())
@@ -334,6 +353,41 @@ export async function saveK9({
     },
   });
   return result.data.id ?? resolvedDogId;
+}
+
+/**
+ * Edit K9 V1 identity save.
+ *
+ * Deliberately separate from `saveK9` (legacy, still used by mode="create"):
+ * this path never spreads the form snapshot and only reaches the homologated
+ * `adminPatchK9Identity` callable. Photo upload reuses the existing helper.
+ */
+export async function saveK9IdentityV1({
+  baselineValues,
+  dogId,
+  photoFile,
+  values,
+  versionToken,
+}: {
+  baselineValues: K9FormValues;
+  dogId: string;
+  photoFile: File | null;
+  values: K9FormValues;
+  versionToken: number | null;
+}): Promise<K9IdentitySaveResult> {
+  const photoUrl = photoFile
+    ? await uploadProfilePhoto(dogId, photoFile)
+    : values.profileImageUrl;
+
+  return patchK9Identity({
+    baselineValues,
+    currentValues:
+      photoUrl === values.profileImageUrl
+        ? values
+        : { ...values, profileImageUrl: photoUrl },
+    dogId,
+    versionToken,
+  });
 }
 
 export async function archiveK9({

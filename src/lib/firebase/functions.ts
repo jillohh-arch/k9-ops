@@ -57,6 +57,44 @@ export const callAdminUpsertK9 = httpsCallable<
   { id?: string }
 >(functions, "adminUpsertK9");
 
+/**
+ * Edit K9 V1 — narrow administrative identity patch.
+ *
+ * Contract homologated in staging (gate E4). Deliberately NOT the wide
+ * `profile` payload of `callAdminUpsertK9`: only the 10 identity wire fields
+ * may appear in `patch`, and clearing is explicit through `clearFields`.
+ * `expectedUpdatedAt` is mandatory (may be null only when the document has
+ * neither timestamp mirror).
+ */
+export type AdminPatchK9IdentityField =
+  | "name"
+  | "registrationNumber"
+  | "breed"
+  | "sex"
+  | "birthDate"
+  | "color"
+  | "microchip"
+  | "size"
+  | "notes"
+  | "profileImageUrl";
+
+export type AdminPatchK9IdentityClearableField =
+  | "color"
+  | "microchip"
+  | "size"
+  | "notes"
+  | "profileImageUrl";
+
+export const callAdminPatchK9Identity = httpsCallable<
+  {
+    clearFields?: AdminPatchK9IdentityClearableField[];
+    dogId: string;
+    expectedUpdatedAt: number | null;
+    patch?: Partial<Record<AdminPatchK9IdentityField, string>>;
+  },
+  { clearedFields?: string[]; id?: string; updatedFields?: string[] }
+>(functions, "adminPatchK9Identity");
+
 export const callAdminArchiveK9 = httpsCallable<
   { id: string; reason: string },
   Record<string, unknown>

@@ -35,6 +35,7 @@ import {
   loadK9ForEdit,
   loadK9FormOptions,
   saveK9,
+  saveK9IdentityV1,
   type K9FormOptions,
   type K9FormValues,
 } from "@/features/effective/data/k9-admin-service";
@@ -177,6 +178,10 @@ export function K9AdminForm({
   });
   const [initialWeight, setInitialWeight] = useState<number | null>(null);
   const [protectedSpecialties, setProtectedSpecialties] = useState<string[]>([]);
+  // Edit V1: baseline snapshot + concurrency token, kept OUTSIDE K9FormValues so
+  // they can never leak into an outgoing payload.
+  const [baselineValues, setBaselineValues] = useState<K9FormValues | null>(null);
+  const [versionToken, setVersionToken] = useState<number | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -204,6 +209,8 @@ export function K9AdminForm({
             setErrors({ form: "K9 não localizado para edição." });
           } else {
             setValues(loadedDog.values);
+            setBaselineValues(loadedDog.values);
+            setVersionToken(loadedDog.versionToken);
             setPreviewUrl(loadedDog.values.profileImageUrl);
             setInitialWeight(parseNumber(loadedDog.values.weight));
             setProtectedSpecialties(loadedDog.protectedSpecialties);
@@ -315,14 +322,31 @@ export function K9AdminForm({
 
     setSaving(true);
     try {
-      const savedId = await saveK9({
-        currentWeight: initialWeight,
-        dogId,
-        mode,
-        photoFile,
-        profile,
-        values,
-      });
+      let savedId: string;
+      if (mode === "edit") {
+        if (!dogId || !baselineValues) {
+          setErrors({ form: "Cadastro do K9 não carregado para edição." });
+          setSaving(false);
+          return;
+        }
+        const result = await saveK9IdentityV1({
+          baselineValues,
+          dogId,
+          photoFile,
+          values,
+          versionToken,
+        });
+        savedId = result.id;
+      } else {
+        savedId = await saveK9({
+          currentWeight: initialWeight,
+          dogId,
+          mode,
+          photoFile,
+          profile,
+          values,
+        });
+      }
       router.push(`/k9/${encodeURIComponent(savedId)}`);
     } catch (error) {
       setErrors({

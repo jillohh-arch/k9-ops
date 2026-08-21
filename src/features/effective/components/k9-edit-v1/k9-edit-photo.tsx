@@ -37,7 +37,7 @@ export function K9EditPhoto({
             className="object-cover transition duration-300 group-hover:scale-[1.025]"
             fill
             src={previewUrl}
-            unoptimized={previewUrl.startsWith("blob:")}
+            unoptimized
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">

@@ -32,7 +32,9 @@ import {
   archiveHuman,
   emptyHumanFormValues,
   humanSpecialtyOptions,
+  legacyHumanEditBlockedMessage,
   loadHumanForEdit,
+  resolveLegacyEditAccessState,
   saveHuman,
   type HumanFormValues,
 } from "@/features/effective/data/human-admin-service";
@@ -187,8 +189,18 @@ export function HumanAdminForm({
   );
   const selectedAccessProfile =
     profileOptions.find((profile) => profile.id === values.accessProfileId) ??
-    profileOptions[0] ??
     null;
+  // W3: estado factual de acesso do registro carregado. Só habilita o save
+  // legado (acoplado a acesso/Auth) quando há perfil explícito resolvível.
+  const legacyEditAccess = useMemo(
+    () => resolveLegacyEditAccessState(values, profileOptions),
+    [values, profileOptions],
+  );
+  const isLegacyEditBlocked =
+    mode === "edit" && !loading && !legacyEditAccess.canUseLegacySave;
+  const hasSelectableProfile = profileOptions.some(
+    (profile) => profile.id === values.accessProfileId,
+  );
 
   useEffect(() => {
     if (mode !== "edit" || !ra) return;
@@ -296,6 +308,12 @@ export function HumanAdminForm({
       });
       return;
     }
+    // W3: guarda fail-closed ANTES de qualquer validação ou chamada de serviço.
+    // Registro sem acesso provisionado não percorre o Edit legado.
+    if (isLegacyEditBlocked) {
+      setErrors({ form: legacyHumanEditBlockedMessage });
+      return;
+    }
     const nextErrors = validate(values);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
@@ -373,6 +391,29 @@ export function HumanAdminForm({
         <div className="flex gap-3 rounded-2xl border border-red-300/20 bg-red-300/[0.06] p-4 text-sm text-red-200">
           <CircleAlert className="mt-0.5 h-5 w-5 shrink-0" />
           {errors.form}
+        </div>
+      ) : null}
+
+      {isLegacyEditBlocked ? (
+        <div
+          className="flex gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] p-4 text-sm text-amber-100"
+          role="alert"
+        >
+          <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+          <div className="space-y-1">
+            <p className="font-black text-amber-100">
+              Acesso não provisionado
+            </p>
+            <p className="leading-6 text-amber-100/85">
+              {legacyHumanEditBlockedMessage}
+            </p>
+            <p className="text-xs leading-5 text-amber-100/70">
+              O cadastro de pessoal permanece válido. Provisionar acesso ao
+              sistema e a edição de pessoal isolada são capacidades separadas —
+              esta edição administrativa legada não pode ser usada até que um
+              perfil de acesso factual esteja configurado.
+            </p>
+          </div>
         </div>
       ) : null}
 
@@ -542,8 +583,18 @@ export function HumanAdminForm({
                 <select
                   className={`${inputClass} appearance-none`}
                   onChange={(event) => applyAccessProfile(event.target.value)}
-                  value={values.accessProfileId}
+                  value={hasSelectableProfile ? values.accessProfileId : ""}
                 >
+                  {/*
+                    W3: sem esta opção honesta o <select> coagiria um valor
+                    vazio para o primeiro perfil da lista (operador_k9),
+                    fabricando acesso apenas por renderizar o formulário.
+                  */}
+                  {hasSelectableProfile ? null : (
+                    <option className="bg-[#0b1628]" value="">
+                      Sem perfil de acesso
+                    </option>
+                  )}
                   {profileOptions.map((profile) => (
                     <option
                       className="bg-[#0b1628]"
@@ -559,11 +610,16 @@ export function HumanAdminForm({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-black text-white">
-                      {selectedAccessProfile?.name ?? "Perfil não selecionado"}
+                      {selectedAccessProfile?.name ??
+                        (isLegacyEditBlocked
+                          ? "Não provisionado"
+                          : "Perfil não selecionado")}
                     </p>
                     <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
                       {selectedAccessProfile?.description ??
-                        "Escolha o perfil institucional do agente no sistema."}
+                        (isLegacyEditBlocked
+                          ? "Este integrante ainda não possui acesso ao sistema provisionado."
+                          : "Escolha o perfil institucional do agente no sistema.")}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -739,7 +795,7 @@ export function HumanAdminForm({
         </div>
         <button
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-200 disabled:opacity-50"
-          disabled={saving || !canSaveHuman}
+          disabled={saving || !canSaveHuman || isLegacyEditBlocked}
           type="submit"
         >
           {saving ? (

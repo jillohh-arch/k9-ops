@@ -14,6 +14,11 @@ import {
   callAdminSaveHumanMovement,
   callAdminUpsertHuman,
 } from "@/lib/firebase/functions";
+import {
+  getDefaultAccessProfile,
+  getProfileIdFromLegacyValue,
+  type AccessProfile,
+} from "@/lib/permissions/access-control";
 
 export type HumanFormValues = {
   accessLevel: string;
@@ -77,9 +82,12 @@ export const humanSpecialtyOptions = [
 ] as const;
 
 export const emptyHumanFormValues: HumanFormValues = {
-  accessLevel: "Operador",
-  accessProfile: "Operador",
-  accessProfileId: "operador_k9",
+  // W3: acesso ausente permanece genuinamente ausente. NUNCA sintetiza
+  // "Operador" / "operador_k9" — isso acoplaria o cadastro de pessoal a um
+  // perfil de acesso fabricado no primeiro save legado.
+  accessLevel: "",
+  accessProfile: "",
+  accessProfileId: "",
   active: true,
   admissionDate: "",
   birthDate: "",
@@ -124,16 +132,35 @@ export async function loadHumanForEdit(ra: string) {
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
   const rawAccessProfileId = text(data, "access_profile_id", "accessProfileId");
+  const legacyReference = text(
+    data,
+    "accessProfile",
+    "access_profile",
+    "accessLevel",
+    "access_level",
+  );
   const legacyInstructorProfile = rawAccessProfileId === "instrutor_k9";
+  // W3: resolve SOMENTE acesso explícito/factual. Ausência total de qualquer
+  // chave de acesso permanece "" — JAMAIS coage para "operador_k9"/"Operador".
+  const resolvedAccessProfileId = legacyInstructorProfile
+    ? "operador_k9"
+    : rawAccessProfileId ||
+      getProfileIdFromLegacyValue(legacyReference) ||
+      "";
+  const resolvedProfile = resolvedAccessProfileId
+    ? getDefaultAccessProfile(resolvedAccessProfileId)
+    : null;
+  const resolvedAccessProfileName = legacyInstructorProfile
+    ? "Operador"
+    : text(data, "accessProfile", "access_profile") ||
+      resolvedProfile?.name ||
+      "";
   return {
-    accessLevel: text(data, "accessLevel", "access_level") || "Operador",
-    accessProfile:
-      legacyInstructorProfile
-        ? "Operador"
-        : text(data, "accessProfile", "access_profile") || "Operador",
-    accessProfileId: legacyInstructorProfile
-      ? "operador_k9"
-      : rawAccessProfileId || "operador_k9",
+    accessLevel:
+      text(data, "accessLevel", "access_level") ||
+      resolvedAccessProfileName,
+    accessProfile: resolvedAccessProfileName,
+    accessProfileId: resolvedAccessProfileId,
     active:
       data.active !== false &&
       data.deleted_at == null &&
@@ -169,6 +196,97 @@ export async function loadHumanForEdit(ra: string) {
   } satisfies HumanFormValues;
 }
 
+/**
+ * W3 — estado de acesso do registro carregado no Edit administrativo legado.
+ *
+ * `provisioned`   -> perfil de acesso explícito e resolvível. O save legado
+ *                    (adminUpsertHuman) pode seguir com os valores factuais.
+ * `unprovisioned` -> nenhuma chave de acesso. Pessoal existe e é válido, mas o
+ *                    acesso ao sistema ainda não foi provisionado.
+ * `incomplete`    -> existe referência de acesso, porém não resolve para
+ *                    nenhum perfil conhecido.
+ *
+ * Somente `provisioned` habilita o caminho de gravação legado. Nos outros dois
+ * casos o Edit legado é bloqueado — ele é acoplado a acesso/Auth e usá-lo sem
+ * perfil factual provisionaria ou fabricaria acesso como efeito colateral.
+ */
+export type LegacyEditAccessStatus =
+  | "provisioned"
+  | "unprovisioned"
+  | "incomplete";
+
+export type LegacyEditAccessState = {
+  canUseLegacySave: boolean;
+  profileId: string | null;
+  profileName: string | null;
+  rawReference: string | null;
+  status: LegacyEditAccessStatus;
+};
+
+export function resolveLegacyEditAccessState(
+  values: Pick<
+    HumanFormValues,
+    "accessLevel" | "accessProfile" | "accessProfileId"
+  >,
+  availableProfiles: Array<Pick<AccessProfile, "id" | "name" | "slug">> = [],
+): LegacyEditAccessState {
+  const profileId = values.accessProfileId.trim();
+  const rawReference =
+    profileId ||
+    values.accessProfile.trim() ||
+    values.accessLevel.trim() ||
+    "";
+
+  if (!rawReference) {
+    return {
+      canUseLegacySave: false,
+      profileId: null,
+      profileName: null,
+      rawReference: null,
+      status: "unprovisioned",
+    };
+  }
+
+  const resolvedId =
+    profileId || getProfileIdFromLegacyValue(rawReference) || rawReference;
+  const matched =
+    availableProfiles.find(
+      (profile) => profile.id === resolvedId || profile.slug === resolvedId,
+    ) ?? getDefaultAccessProfile(resolvedId);
+
+  if (!matched) {
+    return {
+      canUseLegacySave: false,
+      profileId: null,
+      profileName: null,
+      rawReference,
+      status: "incomplete",
+    };
+  }
+
+  return {
+    canUseLegacySave: true,
+    profileId: matched.id,
+    profileName: matched.name,
+    rawReference,
+    status: "provisioned",
+  };
+}
+
+export const legacyHumanEditBlockedMessage =
+  "Este integrante ainda não possui acesso ao sistema provisionado. A edição administrativa legada não pode ser usada sem um perfil de acesso.";
+
+/** Erro de guarda local: nenhuma callable é invocada quando ele é lançado. */
+export class LegacyHumanEditBlockedError extends Error {
+  readonly status: LegacyEditAccessStatus;
+
+  constructor(status: LegacyEditAccessStatus) {
+    super(legacyHumanEditBlockedMessage);
+    this.name = "LegacyHumanEditBlockedError";
+    this.status = status;
+  }
+}
+
 export async function uploadHumanPhoto(ra: string, file: File) {
   const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
   const storageRef = ref(
@@ -196,6 +314,15 @@ export async function saveHuman(
   values: HumanFormValues,
   photoFile: File | null,
 ) {
+  // W3 backstop (defesa em profundidade): mesmo que a UI seja contornada, um
+  // registro sem acesso provisionado NUNCA percorre o Edit legado acoplado a
+  // acesso. Nada de upload de foto, nada de callAdminUpsertHuman.
+  if (mode === "edit") {
+    const accessState = resolveLegacyEditAccessState(values);
+    if (!accessState.canUseLegacySave) {
+      throw new LegacyHumanEditBlockedError(accessState.status);
+    }
+  }
   const photoUrl = photoFile
     ? await uploadHumanPhoto(values.ra, photoFile)
     : values.photoUrl;

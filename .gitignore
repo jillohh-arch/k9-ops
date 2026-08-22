@@ -42,6 +42,8 @@ graphify-out/
 
 # env files (can opt-in for committing if needed)
 .env*
+# Exception: the committed STAGING template (placeholders only, no secrets).
+!.env.staging.example
 
 # vercel
 .vercel

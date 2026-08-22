@@ -30,6 +30,8 @@ import {
   StatusPill,
   SummaryCard,
 } from "@/features/effective/components/effective-ui";
+import { HumanProfileConfigurationCenter } from "@/features/effective/components/human-profile-config/human-profile-configuration-center";
+import { resolveHumanAccessReadModel } from "@/features/effective/lib/human-access-read-model";
 import {
   humanRecordDate,
   humanText,
@@ -150,6 +152,7 @@ export default function HumanProfilePage() {
     .slice(0, 5);
   const recentEvents = data.events.slice(0, 6);
   const canEditHuman = can("humans", "edit");
+  const accessModel = resolveHumanAccessReadModel(user);
 
   return (
     <div className="space-y-5">
@@ -236,7 +239,9 @@ export default function HumanProfilePage() {
                 ],
                 [
                   "Acesso",
-                  humanText(user, "accessProfile", "accessLevel") ?? "--",
+                  accessModel.status === "configured"
+                    ? accessModel.profileName ?? "Perfil configurado"
+                    : accessModel.statusLabel,
                 ],
               ].map(([label, value]) => (
                 <div key={label}>
@@ -283,6 +288,14 @@ export default function HumanProfilePage() {
           value={String(data.certifications.length)}
         />
       </section>
+
+      <HumanProfileConfigurationCenter
+        activeShift={data.activeShift}
+        certifications={data.certifications}
+        linkedDogs={data.linkedDogs}
+        ra={ra}
+        user={user}
+      />
 
       <section className="grid gap-5 xl:grid-cols-3">
         <Panel title="Resumo funcional">

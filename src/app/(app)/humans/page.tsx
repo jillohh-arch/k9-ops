@@ -79,7 +79,13 @@ export default function HumansPage() {
   );
   const roleOptions = useMemo(
     () =>
-      Array.from(new Set(users.map((user) => user.accessLevel).filter(Boolean)))
+      Array.from(
+        new Set(
+          users
+            .map((user) => user.accessLevel)
+            .filter((value): value is string => !!value),
+        ),
+      )
         .sort()
         .map((value) => ({ label: value, value })),
     [users],
@@ -304,7 +310,7 @@ export default function HumansPage() {
                         />
                       </div>
                       <p className="mt-3 text-sm font-semibold text-slate-200">
-                        {user.accessLevel}
+                        {user.accessLevel ?? "Não provisionado"}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         {user.unit ?? "Unidade não informada"}

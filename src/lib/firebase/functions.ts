@@ -48,6 +48,47 @@ export const callAdminUpsertHuman = httpsCallable<
   }
 >(functions, "adminUpsertHuman");
 
+/**
+ * Create Human V1 — cadastro administrativo estrito de pessoal.
+ *
+ * Contrato homologado em staging (gate H4-C). Deliberadamente NÃO é o payload
+ * largo `profile` de `callAdminUpsertHuman`: a request é PLANA e só aceita os
+ * 13 campos de pessoal abaixo. O backend recusa (fail closed) qualquer chave
+ * de acesso, Auth, treino, binômio, turno, foto, ciclo de vida ou metadado.
+ *
+ * Ausência de um opcional se expressa por OMISSÃO — `null` é recusado.
+ */
+export type AdminCreateHumanRequest = {
+  admissionDate?: string;
+  birthDate?: string;
+  callsign: string;
+  cargo?: string;
+  cpf?: string;
+  fullName: string;
+  institutionalEmail?: string;
+  notes?: string;
+  phone?: string;
+  ra: string;
+  rank?: string;
+  team?: string;
+  unit?: string;
+};
+
+/**
+ * O backend responde `{ra, created: true}`. As chaves ficam opcionais aqui por
+ * convenção da camada de wrappers (a resposta é dado remoto, não garantia de
+ * tipo); a normalização para a forma estrita acontece no serviço do Create V1.
+ */
+export type AdminCreateHumanResult = {
+  created?: boolean;
+  ra?: string;
+};
+
+export const callAdminCreateHuman = httpsCallable<
+  AdminCreateHumanRequest,
+  AdminCreateHumanResult
+>(functions, "adminCreateHuman");
+
 export const callAdminUpsertK9 = httpsCallable<
   {
     dogId?: string;

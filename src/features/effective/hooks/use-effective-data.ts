@@ -41,7 +41,7 @@ export type EffectiveDog = {
 };
 
 export type EffectiveUser = {
-  accessLevel: string;
+  accessLevel: string | null;
   active: boolean;
   callsign: string;
   fullName: string | null;
@@ -213,8 +213,13 @@ function mapDog(record: RawRecord, specialties: K9Specialty[]): EffectiveDog {
 function mapUser(record: RawRecord): EffectiveUser {
   const ra = text(record.ra, record.id, record._id) ?? record._id;
   return {
-    accessLevel:
-      text(record.accessLevel, record.access_level, record.role) ?? "Operador",
+    accessLevel: text(
+      record.accessProfile,
+      record.access_profile,
+      record.accessLevel,
+      record.access_level,
+      record.role,
+    ),
     active: booleanValue(record.active, true) && !isDeleted(record),
     callsign:
       text(

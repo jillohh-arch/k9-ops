@@ -1,14 +1,16 @@
+"use client";
+
 /**
- * Clinical Page
+ * K9 Ops Web — Health Web v1 HW-6A.I3
+ * /health/clinical — Clinical case list main screen.
  *
- * Route: /health/clinical
- *
- * Based on:
- * - HEALTH_WEB_INFORMATION_ARCHITECTURE.md §16 (Clínico)
- * - HEALTH_WEB_TARGET_ARCHITECTURE.md §8.4 (Clinical Cases)
+ * This page only wires the Health module shell to the Clinical presentation
+ * view. It adds NO route, NO data access and NO logic of its own: the view owns
+ * the read state, the technical states and the list. Read-only by construction.
  */
+
 import { HealthModuleShell } from "@/features/health/presentation/components/health-module-shell";
-import { LoadingState } from "@/features/health/presentation/components/health-technical-states";
+import { ClinicalView } from "@/features/health/clinical/presentation/clinical-view";
 
 export default function HealthClinicalPage() {
   return (
@@ -17,8 +19,7 @@ export default function HealthClinicalPage() {
       description="Casos clínicos e acompanhamento"
       activeNavKey="clinical"
     >
-      {/* TODO Future: Implement Clinical content */}
-      <LoadingState message="Carregando casos clínicos..." />
+      <ClinicalView />
     </HealthModuleShell>
   );
 }

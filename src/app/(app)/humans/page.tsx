@@ -33,6 +33,7 @@ import {
   useEffectiveData,
   type EffectiveUser,
 } from "@/features/effective/hooks/use-effective-data";
+import { resolveHumanAccessReadModel } from "@/features/effective/lib/human-access-read-model";
 import { cn } from "@/lib/utils";
 import { paths } from "@/lib/routes/paths";
 
@@ -269,6 +270,13 @@ export default function HumansPage() {
             {visible.map((user) => {
               const linkedDogs = dogsByHandler.get(user.ra) ?? [];
               const onShift = activeHandlerIds.has(user.ra);
+              // Estado administrativo de acesso: usa o read-model canônico W2
+              // (mesma autoridade do Profile), NÃO a string legada accessLevel.
+              // accessLevel permanece dedicado a filtros/busca/isOperador.
+              const accessState = resolveHumanAccessReadModel({
+                access_profile_id: user.accessProfileId,
+                accessLevel: user.accessLevel,
+              });
               return (
                 <article
                   className={cn(
@@ -310,7 +318,7 @@ export default function HumansPage() {
                         />
                       </div>
                       <p className="mt-3 text-sm font-semibold text-slate-200">
-                        {user.accessLevel ?? "Não provisionado"}
+                        {accessState.statusLabel}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         {user.unit ?? "Unidade não informada"}

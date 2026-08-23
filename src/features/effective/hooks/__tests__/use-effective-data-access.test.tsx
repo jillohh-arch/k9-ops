@@ -43,6 +43,14 @@ const mockEntities = {
       fullName: "Cabo Condutor",
       ra: "1003",
     },
+    {
+      _id: "ra_id_explicito",
+      // C1: SOMENTE id canônico explícito, sem nenhum espelho legado
+      access_profile_id: "gestor",
+      callsign: "GESTOR_CANONICO",
+      fullName: "Gestor Canônico",
+      ra: "1004",
+    },
   ],
   usersLoading: false,
   vehicles: [],
@@ -76,5 +84,37 @@ describe("useEffectiveData — Honest Access Read Mapping (H3-W2)", () => {
       (u) => u.ra === "1003",
     );
     expect(userWithOperadorK9?.accessLevel).toBe("operador_k9");
+  });
+
+  // C1: o campo canônico explícito é ADITIVO. Ele não pode reescrever nem
+  // ser reescrito pela string legada `accessLevel`, que segue servindo
+  // filtros/busca/isOperador.
+  it("C1: projeta access_profile_id em accessProfileId sem contaminar accessLevel", () => {
+    const { result } = renderHook(() => useEffectiveData());
+
+    const canonical = result.current.users.find((u) => u.ra === "1004");
+
+    expect(canonical).toBeDefined();
+    expect(canonical?.accessProfileId).toBe("gestor");
+    // Sem espelho legado, accessLevel permanece null (semântica preservada)
+    expect(canonical?.accessLevel).toBeNull();
+    expect(canonical?.accessLevel).not.toBe("Operador");
+  });
+
+  it("C1: accessProfileId NÃO é derivado de role/accessLevel legado", () => {
+    const { result } = renderHook(() => useEffectiveData());
+
+    // 1002 tem accessProfile legado; 1003 tem accessLevel legado.
+    // Nenhum dos dois possui id explícito, então accessProfileId deve ser null.
+    expect(
+      result.current.users.find((u) => u.ra === "1002")?.accessProfileId,
+    ).toBeNull();
+    expect(
+      result.current.users.find((u) => u.ra === "1003")?.accessProfileId,
+    ).toBeNull();
+    // E o campo legado segue intacto
+    expect(result.current.users.find((u) => u.ra === "1002")?.accessLevel).toBe(
+      "gestor",
+    );
   });
 });

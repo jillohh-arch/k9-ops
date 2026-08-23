@@ -42,6 +42,7 @@ export type EffectiveDog = {
 
 export type EffectiveUser = {
   accessLevel: string | null;
+  accessProfileId?: string | null;
   active: boolean;
   callsign: string;
   fullName: string | null;
@@ -219,6 +220,12 @@ function mapUser(record: RawRecord): EffectiveUser {
       record.accessLevel,
       record.access_level,
       record.role,
+    ),
+    accessProfileId: text(
+      record.access_profile_id,
+      record.accessProfileId,
+      record.profile_id,
+      record.profileId,
     ),
     active: booleanValue(record.active, true) && !isDeleted(record),
     callsign:

@@ -74,6 +74,15 @@ type AccessPolicySeed = {
 export type AccessProfile = Omit<AccessProfileSeed, "permissions"> & {
   permissions: AccessPermissionMap;
   seed_version: number;
+  /**
+   * Internal optimistic-concurrency token derived from Firestore
+   * `access_profiles.updated_at` (epoch milliseconds), or `null` when the
+   * document carries no usable timestamp. Not user-editable and never part of
+   * the `profile` payload sent to the backend — it feeds only the top-level
+   * `expectedUpdatedAt` of an EDIT save. Optional so seed/default profiles,
+   * which have no persisted timestamp, remain valid.
+   */
+  updatedAtMillis?: number | null;
 };
 
 const typedPolicy = accessPolicy as AccessPolicySeed;

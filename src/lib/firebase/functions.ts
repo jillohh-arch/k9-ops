@@ -7,8 +7,17 @@ export const callSetK9InstructorRole = httpsCallable<
   Record<string, unknown>
 >(functions, "setK9InstructorRole");
 
+/**
+ * The hardened writer decides CREATE vs EDIT from the stored document, then
+ * freezes the expectation: an existing profile is EDIT and REQUIRES
+ * `expectedUpdatedAt` (epoch ms, compared against `access_profiles.updated_at`);
+ * a missing profile is CREATE and FORBIDS it. `expectedUpdatedAt` is therefore
+ * optional here — the general callable contract — while the EDIT-only
+ * requirement is enforced by `saveAccessProfile`, the wrapper that knows it is
+ * saving an existing profile.
+ */
 export const callAdminSaveAccessProfile = httpsCallable<
-  { id?: string; profile: Record<string, unknown> },
+  { expectedUpdatedAt?: number; id?: string; profile: Record<string, unknown> },
   { created?: boolean; id?: string }
 >(functions, "adminSaveAccessProfile");
 

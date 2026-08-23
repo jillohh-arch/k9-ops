@@ -99,10 +99,13 @@ describe("hasAccessPermission", () => {
     ).toBe(true);
   });
 
+  // Frozen CLIN-AUTH-BE-4B authority: canonical health.read belongs ONLY to
+  // operador_k9 and gestor. The V6 correction is subtractive pre-sync, so
+  // instrutor_k9 and administrador carry NO explicit health.read.
   it.each([
-    ["administrador", true, true],
+    ["administrador", false, true],
     ["gestor", true, true],
-    ["instrutor_k9", true, false],
+    ["instrutor_k9", false, false],
     ["operador_k9", true, false],
     ["almoxarifado", false, false],
   ])(

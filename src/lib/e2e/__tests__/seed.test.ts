@@ -11,6 +11,12 @@ import {
   runSeed,
 } from "../../../../tools/seed_emulator_auth.mjs";
 
+// The canonical Seed V6 policy source. This is the exact blob the
+// seed_access_profiles.mjs merge would publish; freezing its health.read
+// target set here (a pure JSON read — no Firebase, no emulator) is what
+// enforces the frozen CLIN-AUTH-BE-4B reconciliation BEFORE any V6 sync.
+import accessPolicy from "../../permissions/default-access-profiles.json";
+
 const options = {
   authEmulator: "http://127.0.0.1:9199",
   firestoreEmulator: "http://127.0.0.1:8181",
@@ -386,5 +392,78 @@ describe("NUT-WEB-5B.E — deterministic test-dog fixture", () => {
         log: () => undefined,
       }),
     ).rejects.toThrow(/Dog fixture write failed/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HW-ACCESS-SEED-3A — frozen V6 health.read reconciliation (CLIN-AUTH-BE-4B)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Seed V6 source is unreleased/unexecuted. Before its first sync it MUST
+ * match the frozen CLIN-AUTH-BE-4B policy: canonical `health.read` exists on
+ * operador_k9 and gestor ONLY. Because the seeder merge is positive-only
+ * (an absent key never revokes an existing grant), a read wrongly present here
+ * would be added to a profile on first sync and could never be pulled back via
+ * the seeder. This is a pure JSON assertion — no Firebase, no emulator.
+ */
+describe("HW-ACCESS-SEED-3A — V6 health.read frozen target set", () => {
+  const profilesById = new Map(
+    (accessPolicy.profiles as Array<{ id: string; permissions?: Record<string, string[]> }>).map(
+      (profile) => [profile.id, profile],
+    ),
+  );
+
+  function healthGrants(id: string): string[] | undefined {
+    return profilesById.get(id)?.permissions?.health;
+  }
+
+  const READ_TARGET_SET = ["operador_k9", "gestor"] as const;
+  const READ_EXCLUDED_SET = ["instrutor_k9", "administrador", "almoxarifado"] as const;
+
+  it("keeps the policy pinned at version 6 (no V7)", () => {
+    expect(accessPolicy.version).toBe(6);
+  });
+
+  it("grants canonical health.read to EXACTLY operador_k9 and gestor", () => {
+    const withRead = (accessPolicy.profiles as Array<{ id: string; permissions?: Record<string, string[]> }>)
+      .filter((profile) => (profile.permissions?.health ?? []).includes("read"))
+      .map((profile) => profile.id)
+      .sort();
+    expect(withRead).toEqual([...READ_TARGET_SET].sort());
+  });
+
+  it.each(READ_TARGET_SET)("includes health.read for %s", (id) => {
+    expect(healthGrants(id)).toContain("read");
+  });
+
+  it.each(READ_EXCLUDED_SET)("does NOT grant health.read to %s", (id) => {
+    expect(healthGrants(id) ?? []).not.toContain("read");
+  });
+
+  it("preserves health.view on every profile that already had a health module", () => {
+    // 4B is subtractive on read only — the legacy view adapter must survive.
+    for (const id of ["operador_k9", "instrutor_k9", "gestor", "administrador"]) {
+      expect(healthGrants(id)).toContain("view");
+    }
+  });
+
+  it("leaves instrutor_k9 and administrador health grants otherwise intact", () => {
+    // Only `read` is removed; every sibling health capability stays.
+    expect(healthGrants("instrutor_k9")).toEqual(["view", "create", "edit"]);
+    expect(healthGrants("administrador")).toEqual([
+      "view",
+      "create",
+      "edit",
+      "archive",
+      "export",
+      "approve",
+      "audit",
+      "manage_nutrition_plan",
+    ]);
+  });
+
+  it("keeps almoxarifado with no health module at all", () => {
+    expect(healthGrants("almoxarifado")).toBeUndefined();
   });
 });

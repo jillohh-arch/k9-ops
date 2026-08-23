@@ -235,8 +235,10 @@ describe("NUT-WEB-4C — default profiles keep existing read access", () => {
   });
 
   it("never removes legacy health.view from a profile that already had it", () => {
-    // The v6 policy is additive: every profile that had `view` keeps it, so no
-    // reader loses access purely because canonical `read` was introduced.
+    // Frozen CLIN-AUTH-BE-4B: the V6 correction is SUBTRACTIVE pre-sync — it
+    // removes canonical `read` from instrutor_k9/administrador — but legacy
+    // `health.view` is preserved on every profile that already had it, so no
+    // reader loses Hub read via the view→read compatibility adapter.
     for (const profileId of [
       "operador_k9",
       "instrutor_k9",
@@ -245,7 +247,39 @@ describe("NUT-WEB-4C — default profiles keep existing read access", () => {
     ]) {
       const profile = getDefaultAccessProfile(profileId)!;
       expect(hasAccessPermission(profile, "health", "view")).toBe(true);
+    }
+  });
+
+  it("grants canonical health.read to exactly the frozen 4B target set", () => {
+    // Explicit read target set: operador_k9 + gestor ONLY. instrutor_k9 and
+    // administrador carry NO explicit health.read after the subtractive V6
+    // correction; almoxarifado has no health module at all.
+    const expectedRead: Record<string, boolean> = {
+      operador_k9: true,
+      gestor: true,
+      instrutor_k9: false,
+      administrador: false,
+      almoxarifado: false,
+    };
+
+    for (const [profileId, canRead] of Object.entries(expectedRead)) {
+      const profile = getDefaultAccessProfile(profileId)!;
+      expect(hasAccessPermission(profile, "health", "read")).toBe(canRead);
+    }
+  });
+
+  it("keeps read from ever becoming a write for the read-only profiles", () => {
+    // Even where canonical read is granted, no write capability derives from it.
+    for (const profileId of ["operador_k9", "gestor"]) {
+      const profile = getDefaultAccessProfile(profileId)!;
       expect(hasAccessPermission(profile, "health", "read")).toBe(true);
+      expect(hasAccessPermission(profile, "health", "approve")).toBe(false);
+    }
+    // And the profiles that lost read via 4B gain no write from the removal.
+    for (const profileId of ["instrutor_k9", "administrador"]) {
+      const profile = getDefaultAccessProfile(profileId)!;
+      expect(hasAccessPermission(profile, "health", "read")).toBe(false);
+      expect(hasAccessPermission(profile, "health", "view")).toBe(true);
     }
   });
 

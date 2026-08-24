@@ -4,6 +4,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
+import { connectToEmulators, validateEmulatorEnvironment } from "./emulator";
 
 import { resolveFirebaseClientConfig } from "@/lib/firebase/config";
 
@@ -54,4 +55,12 @@ export function getFirebaseAnalytics() {
     .catch(() => null);
 
   return analyticsPromise;
+}
+
+// Connect to emulators after initialization (client-side only, requires valid config)
+if (typeof window !== "undefined" && firebaseConfig.apiKey && firebaseConfig.projectId) {
+  const validation = validateEmulatorEnvironment();
+  if (validation.enabled) {
+    connectToEmulators(auth, db);
+  }
 }

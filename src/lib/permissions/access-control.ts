@@ -7,6 +7,8 @@ export type AccessAction =
   | "create"
   | "edit"
   | "export"
+  | "manage_nutrition_plan"
+  | "read"
   | "view";
 
 export type AccessModuleId =
@@ -27,8 +29,11 @@ export type AccessModuleId =
   | "training_matrix"
   | "vehicles";
 
+export type AccessModulePermissions = Partial<Record<AccessAction, boolean>> &
+  Record<string, boolean | undefined>;
+
 export type AccessPermissionMap = Partial<
-  Record<AccessModuleId, Partial<Record<AccessAction, boolean>>>
+  Record<AccessModuleId, AccessModulePermissions>
 >;
 
 type AccessActionSeed = {
@@ -69,6 +74,15 @@ type AccessPolicySeed = {
 export type AccessProfile = Omit<AccessProfileSeed, "permissions"> & {
   permissions: AccessPermissionMap;
   seed_version: number;
+  /**
+   * Internal optimistic-concurrency token derived from Firestore
+   * `access_profiles.updated_at` (epoch milliseconds), or `null` when the
+   * document carries no usable timestamp. Not user-editable and never part of
+   * the `profile` payload sent to the backend — it feeds only the top-level
+   * `expectedUpdatedAt` of an EDIT save. Optional so seed/default profiles,
+   * which have no persisted timestamp, remain valid.
+   */
+  updatedAtMillis?: number | null;
 };
 
 const typedPolicy = accessPolicy as AccessPolicySeed;
@@ -170,6 +184,14 @@ export function hasAccessPermission(
   action: AccessAction = "view",
 ) {
   if (!profile || profile.status !== "active") return false;
+  if (
+    moduleId === "health" &&
+    action === "view" &&
+    (profile.permissions.health as Record<string, boolean> | undefined)?.read ===
+      true
+  ) {
+    return true;
+  }
   return profile.permissions[moduleId]?.[action] === true;
 }
 

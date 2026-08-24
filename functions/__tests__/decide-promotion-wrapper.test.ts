@@ -60,7 +60,9 @@ vi.mock("firebase-functions/v2/https", () => ({
     }
   },
   onCall: (_opts: unknown, handler: (request: unknown) => Promise<unknown>) => {
-    callableHandler = handler;
+    if (!callableHandler) {
+      callableHandler = handler;
+    }
     return handler;
   },
 }));

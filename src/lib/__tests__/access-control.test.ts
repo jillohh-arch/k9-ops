@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  accessActions,
   defaultAccessProfiles,
   getDefaultAccessProfile,
   getProfileIdFromLegacyValue,
@@ -77,9 +78,80 @@ describe("normalizePermissionMap", () => {
     const result = normalizePermissionMap(already);
     expect(result.dashboard).toEqual({ view: true, edit: true });
   });
+
+  it("preserves actions that are not represented by the current editor", () => {
+    const result = normalizePermissionMap({
+      health: { view: true, future_health_action: true },
+    });
+
+    expect(result.health).toEqual({
+      view: true,
+      future_health_action: true,
+    });
+  });
 });
 
 describe("hasAccessPermission", () => {
+  it("declares the canonical Health v1 actions in policy v6", () => {
+    expect(accessActions.some((action) => action.id === "read")).toBe(true);
+    expect(
+      accessActions.some((action) => action.id === "manage_nutrition_plan"),
+    ).toBe(true);
+  });
+
+  // Frozen CLIN-AUTH-BE-4B authority: canonical health.read belongs ONLY to
+  // operador_k9 and gestor. The V6 correction is subtractive pre-sync, so
+  // instrutor_k9 and administrador carry NO explicit health.read.
+  it.each([
+    ["administrador", false, true],
+    ["gestor", true, true],
+    ["instrutor_k9", false, false],
+    ["operador_k9", true, false],
+    ["almoxarifado", false, false],
+  ])(
+    "defaults %s health.read=%s and manage_nutrition_plan=%s",
+    (profileId, canRead, canManage) => {
+      const profile = getDefaultAccessProfile(profileId)!;
+      expect(hasAccessPermission(profile, "health", "read")).toBe(canRead);
+      expect(
+        hasAccessPermission(profile, "health", "manage_nutrition_plan"),
+      ).toBe(canManage);
+    },
+  );
+
+  it("keeps view, read and nutrition management as distinct permissions", () => {
+    const base = getDefaultAccessProfile("operador_k9")!;
+    const profile = {
+      ...base,
+      permissions: {
+        ...base.permissions,
+        health: { view: true, read: false, manage_nutrition_plan: false },
+      },
+    };
+
+    expect(hasAccessPermission(profile, "health", "view")).toBe(true);
+    expect(hasAccessPermission(profile, "health", "read")).toBe(false);
+    expect(hasAccessPermission(profile, "health", "manage_nutrition_plan")).toBe(
+      false,
+    );
+  });
+
+  it("does not grant nutrition management from health.edit", () => {
+    const base = getDefaultAccessProfile("operador_k9")!;
+    const profile = {
+      ...base,
+      permissions: {
+        ...base.permissions,
+        health: { view: true, read: true, edit: true },
+      },
+    };
+
+    expect(hasAccessPermission(profile, "health", "edit")).toBe(true);
+    expect(hasAccessPermission(profile, "health", "manage_nutrition_plan")).toBe(
+      false,
+    );
+  });
+
   it("returns true when profile has the permission", () => {
     const admin = defaultAccessProfiles.find((p) => p.id === "administrador")!;
     expect(hasAccessPermission(admin, "access", "edit")).toBe(true);

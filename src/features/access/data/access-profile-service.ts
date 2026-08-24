@@ -27,6 +27,46 @@ import {
 const ACCESS_PROFILES_COLLECTION = "access_profiles";
 const USERS_COLLECTION = "users";
 
+/**
+ * Narrows an unknown `access_profiles.updated_at` value to epoch milliseconds.
+ *
+ * Front-20 A1 proved the canonical concurrency authority for this domain is
+ * `updated_at` ONLY — there is no `updatedAt` mirror here, so (unlike the `dogs`
+ * domain) there is deliberately no camelCase fallback and no `max(...)` merge.
+ * Live Firestore delivers a `Timestamp` (has `toMillis`); `Date` is accepted
+ * for test fixtures. Anything absent or malformed yields `null` — never a
+ * fabricated `Date.now()`/`0`/server time.
+ */
+function updatedAtToMillis(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const candidate = value as { toMillis?: unknown };
+  if (typeof candidate.toMillis === "function") {
+    const millis = (candidate.toMillis as () => number)();
+    return typeof millis === "number" && Number.isFinite(millis) ? millis : null;
+  }
+  if (value instanceof Date) {
+    const millis = value.getTime();
+    return Number.isNaN(millis) ? null : millis;
+  }
+  return null;
+}
+
+/**
+ * Thrown before the callable is invoked when an EDIT save has no usable
+ * concurrency token, and to classify a backend `failed-precondition` (the
+ * profile changed underneath the draft). Callers must refetch the latest
+ * profile before retrying — this class never triggers a silent retry.
+ */
+export class AccessProfileConcurrencyError extends Error {
+  readonly code: string | null;
+
+  constructor(message: string, code: string | null = null) {
+    super(message);
+    this.name = "AccessProfileConcurrencyError";
+    this.code = code;
+  }
+}
+
 type RawAccessProfile = Omit<AccessProfile, "permissions"> & {
   permissions?: unknown;
 };
@@ -57,6 +97,9 @@ export function normalizeAccessProfile(
     status: raw.status === "inactive" ? "inactive" : "active",
     tone: String(raw.tone ?? "cyan"),
     ui_hidden: raw.ui_hidden === true,
+    updatedAtMillis: updatedAtToMillis(
+      (data as { updated_at?: unknown }).updated_at,
+    ),
   };
 }
 
@@ -173,7 +216,7 @@ export type AccessProfileInput = AccessProfile & {
   actorRa?: string | null;
 };
 
-function accessProfileForFunction(profile: AccessProfile) {
+export function accessProfileForFunction(profile: AccessProfile) {
   return {
     description: profile.description,
     id: profile.id,
@@ -191,11 +234,59 @@ function accessProfileForFunction(profile: AccessProfile) {
   };
 }
 
+function callableCode(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+/**
+ * Re-throws a stale EDIT as `AccessProfileConcurrencyError`.
+ *
+ * The hardened writer answers `failed-precondition` when the stored
+ * `updated_at` no longer matches `expectedUpdatedAt`. The SDK surfaces it as
+ * `functions/failed-precondition`, so the prefix is stripped exactly like the
+ * K9 Edit adapter does. Every other failure passes through untouched, and
+ * nothing here retries.
+ */
+function mapSaveAccessProfileError(error: unknown): unknown {
+  const rawCode = callableCode(error);
+  const normalized = (rawCode ?? "").toLowerCase().replace(/^functions\//, "");
+  if (normalized !== "failed-precondition") return error;
+  return new AccessProfileConcurrencyError(
+    "O perfil foi alterado por outra pessoa desde que esta tela foi carregada. Recarregue o perfil e refaça as alterações antes de salvar.",
+    rawCode,
+  );
+}
+
+/**
+ * EDIT of an existing profile. The concurrency token comes from the loaded
+ * document and is mandatory: without a finite `updatedAtMillis` this fails
+ * closed locally and the callable is never invoked, because any invented
+ * timestamp would either be rejected or defeat the precondition it exists to
+ * enforce. Recovery is a deliberate reload by the operator, never a silent
+ * refetch or retry here.
+ */
 export async function saveAccessProfile(values: AccessProfileInput) {
-  await callAdminSaveAccessProfile({
-    id: values.id,
-    profile: accessProfileForFunction(values),
-  });
+  const expectedUpdatedAt = values.updatedAtMillis;
+  if (
+    typeof expectedUpdatedAt !== "number" ||
+    !Number.isFinite(expectedUpdatedAt)
+  ) {
+    throw new AccessProfileConcurrencyError(
+      "Não foi possível confirmar a versão atual do perfil de acesso. Recarregue a página antes de salvar.",
+    );
+  }
+
+  try {
+    await callAdminSaveAccessProfile({
+      expectedUpdatedAt,
+      id: values.id,
+      profile: accessProfileForFunction(values),
+    });
+  } catch (error) {
+    throw mapSaveAccessProfileError(error);
+  }
 }
 
 export async function duplicateAccessProfile(

@@ -145,6 +145,71 @@ export const callAdminPatchK9Identity = httpsCallable<
   { clearedFields?: string[]; id?: string; updatedFields?: string[] }
 >(functions, "adminPatchK9Identity");
 
+/**
+ * Human Edit V1 — patch administrativo estrito de PESSOAL.
+ *
+ * Contrato homologado em staging (gate 10H-HUMAN-EDIT-BACKEND.STAGING.
+ * HOMOLOGATION). Deliberadamente NÃO é o payload largo `profile` de
+ * `callAdminUpsertHuman`: só os 12 campos de pessoal podem aparecer em
+ * `patch`, e a limpeza é explícita via `clearFields`.
+ *
+ * `ra` é ALVO imutável — nunca entra em `patch` nem em `clearFields`.
+ * `fullName`/`callsign` são obrigatórios: patchaveis, jamais limpáveis.
+ *
+ * `expectedUpdatedAt` é MANDATÓRIO (pode ser `null` apenas quando o documento
+ * não tem nenhum dos dois espelhos de timestamp). O backend compara contra
+ * `max(updated_at, updatedAt)` e recusa com `failed-precondition` quando o
+ * token está obsoleto.
+ *
+ * O backend recusa (fail closed) qualquer chave de acesso, Auth, claims,
+ * treino, binômio, turno, foto, ciclo de vida ou metadado de servidor — por
+ * isso essas chaves não existem nos tipos abaixo.
+ */
+export type AdminPatchHumanPersonnelField =
+  | "fullName"
+  | "callsign"
+  | "cpf"
+  | "birthDate"
+  | "phone"
+  | "institutionalEmail"
+  | "rank"
+  | "cargo"
+  | "unit"
+  | "team"
+  | "admissionDate"
+  | "notes";
+
+export type AdminPatchHumanPersonnelClearableField =
+  | "cpf"
+  | "birthDate"
+  | "phone"
+  | "institutionalEmail"
+  | "rank"
+  | "cargo"
+  | "unit"
+  | "team"
+  | "admissionDate"
+  | "notes";
+
+export type AdminPatchHumanPersonnelRequest = {
+  clearFields?: AdminPatchHumanPersonnelClearableField[];
+  expectedUpdatedAt: number | null;
+  patch?: Partial<Record<AdminPatchHumanPersonnelField, string>>;
+  ra: string;
+};
+
+export type AdminPatchHumanPersonnelResult = {
+  clearedFields?: string[];
+  ra?: string;
+  updated?: boolean;
+  updatedFields?: string[];
+};
+
+export const callAdminPatchHumanPersonnel = httpsCallable<
+  AdminPatchHumanPersonnelRequest,
+  AdminPatchHumanPersonnelResult
+>(functions, "adminPatchHumanPersonnel");
+
 export const callAdminArchiveK9 = httpsCallable<
   { id: string; reason: string },
   Record<string, unknown>

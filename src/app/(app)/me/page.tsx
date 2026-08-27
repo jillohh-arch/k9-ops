@@ -167,12 +167,12 @@ export default function MePage() {
           <div className="grid gap-4 lg:grid-cols-2">
             {[
               ["Nome completo", fullName],
-              ["Função", humanText(user, "cargo", "role", "accessLevel")],
+              ["Função", humanText(user, "cargo", "função")],
               ["Lotação", humanText(user, "unit", "unidade", "lotação")],
               ["Equipe", humanText(user, "team", "equipe")],
               ["Perfil de acesso", humanText(user, "accessProfile")],
               ["Telefone", humanText(user, "telefone", "phone")],
-              ["E-mail", humanText(user, "institutional_email", "email")],
+              ["E-mail", humanText(user, "institutional_email", "institutionalEmail")],
               ["Jornada", humanText(user, "shift_label", "shiftLabel")],
             ].map(([label, value]) => (
               <div

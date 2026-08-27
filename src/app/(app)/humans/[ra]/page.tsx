@@ -221,7 +221,7 @@ export default function HumanProfilePage() {
                 ["RA", ra],
                 [
                   "Função",
-                  humanText(user, "cargo", "role", "accessLevel") ?? "--",
+                  humanText(user, "cargo", "função") ?? "--",
                 ],
                 ["Lotação", humanText(user, "unit", "unidade") ?? "--"],
                 ["Equipe", humanText(user, "team", "equipe") ?? "--"],
@@ -304,7 +304,7 @@ export default function HumanProfilePage() {
               ["Telefone", humanText(user, "telefone", "phone")],
               [
                 "E-mail institucional",
-                humanText(user, "institutional_email"),
+                humanText(user, "institutional_email", "institutionalEmail"),
               ],
               ["CPF / Documento", humanText(user, "cpf", "document")],
               ["Nascimento", humanText(user, "birth_date", "birthDate")],

@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -90,7 +97,36 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
+
+const SUCCESS_MESSAGE = "Alterações salvas com sucesso.";
+/** Must mirror SUCCESS_NAVIGATION_DELAY_MS in the component. */
+const DELAY_MS = 1000;
+
+/**
+ * Flush pending promise callbacks without RTL's `waitFor`: under Vitest fake
+ * timers `waitFor` cannot detect the fake clock (it probes the `jest` global),
+ * so it would stall on its own timer. Vitest does not fake microtasks, so an
+ * awaited `act` drains the save promise chain deterministically.
+ */
+async function flush() {
+  await act(async () => {});
+}
+
+async function advance(ms: number) {
+  await act(async () => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+function okResult(fields: string[] = ["cargo"]) {
+  return { ra: RA, noop: false, updatedFields: fields, clearedFields: [] };
+}
+
+function submitForm() {
+  fireEvent.submit(document.querySelector("form")!);
+}
 
 async function renderReady(
   overrides: Record<string, string> = {},
@@ -238,14 +274,19 @@ describe("C2 — save wiring", () => {
     fireEvent.change(document.getElementById("human-edit-cargo")!, {
       target: { value: "Condutor" },
     });
+    // R2: navigation is now deferred behind the success window, so the clock is
+    // faked from here on. The REQUEST semantics asserted below are unchanged.
+    vi.useFakeTimers();
     fireEvent.click(screen.getByText("Salvar alterações"));
-    await waitFor(() => expect(saveHumanEdit).toHaveBeenCalledTimes(1));
+    await flush();
+    expect(saveHumanEdit).toHaveBeenCalledTimes(1);
     const arg = saveHumanEdit.mock.calls[0][0];
     expect(arg.ra).toBe(RA);
     expect(arg.baseline.cargo).toBe("Adestrador");
     expect(arg.current.cargo).toBe("Condutor");
     expect(arg.versionToken).toBe(TOKEN);
-    await waitFor(() => expect(push).toHaveBeenCalledWith(`/humans/${RA}`));
+    await advance(DELAY_MS);
+    expect(push).toHaveBeenCalledWith(`/humans/${RA}`);
   });
 
   it("versionToken null is passed as null", async () => {
@@ -276,8 +317,14 @@ describe("C2 — save wiring", () => {
     fireEvent.change(document.getElementById("human-edit-cargo")!, {
       target: { value: "Condutor" },
     });
+    // R2: a C1 no-op is still a RESOLVED save, so it takes the same success
+    // window (message then deferred navigation) as a mutating save.
+    vi.useFakeTimers();
     fireEvent.click(screen.getByText("Salvar alterações"));
-    await waitFor(() => expect(push).toHaveBeenCalledWith(`/humans/${RA}`));
+    await flush();
+    expect(push).not.toHaveBeenCalled();
+    await advance(DELAY_MS);
+    expect(push).toHaveBeenCalledWith(`/humans/${RA}`);
   });
 
   it("rapid double submit causes exactly one save invocation", async () => {
@@ -480,5 +527,258 @@ describe("C2 — dirty exit", () => {
     fireEvent.click(screen.getByText("Cancelar"));
     fireEvent.click(screen.getByText("Descartar"));
     expect(push).toHaveBeenCalledWith(`/humans/${RA}`);
+  });
+});
+
+/**
+ * Gate 10H-HUMAN-EDIT-WEB.C2.R2 — explicit success acknowledgement.
+ *
+ * R2 changes ONLY the interval between a resolved C1 save and the existing
+ * `router.push(profilePath(ra))`. Request semantics, error mapping, conflict
+ * handling and the destination are untouched and are asserted as invariants.
+ */
+describe("C2.R2 — success acknowledgement", () => {
+  /** Dirty the form and submit with a resolving C1, under fake timers. */
+  async function saveSucceeds() {
+    await renderReady();
+    saveHumanEdit.mockResolvedValueOnce(okResult());
+    fireEvent.change(document.getElementById("human-edit-cargo")!, {
+      target: { value: "Condutor" },
+    });
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("Salvar alterações"));
+    await flush();
+  }
+
+  it("resolved save shows the status message and defers navigation past the delay", async () => {
+    await saveSucceeds();
+
+    const status = screen.getByText(SUCCESS_MESSAGE);
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    // message is up, navigation has NOT happened yet
+    expect(push).toHaveBeenCalledTimes(0);
+
+    // strictly inside the window: still no navigation
+    await advance(DELAY_MS - 1);
+    expect(push).toHaveBeenCalledTimes(0);
+
+    // reaching the delay navigates exactly once, to the unchanged destination
+    await advance(1);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith(`/humans/${RA}`);
+
+    // and no further navigation afterwards
+    await advance(DELAY_MS * 5);
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("the success copy appears exactly once", async () => {
+    await saveSucceeds();
+    expect(screen.getAllByText(SUCCESS_MESSAGE)).toHaveLength(1);
+    await advance(DELAY_MS - 1);
+    expect(screen.getAllByText(SUCCESS_MESSAGE)).toHaveLength(1);
+  });
+
+  it("no success status before the save resolves", async () => {
+    await renderReady();
+    saveHumanEdit.mockReturnValueOnce(new Promise(() => {}));
+    fireEvent.change(document.getElementById("human-edit-cargo")!, {
+      target: { value: "Condutor" },
+    });
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("Salvar alterações"));
+    await flush();
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+    await advance(DELAY_MS * 3);
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+    expect(push).toHaveBeenCalledTimes(0);
+  });
+
+  it("initial ready load shows no success status", async () => {
+    await renderReady();
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+  });
+
+  it("rejected save produces no success status and no delayed navigation", async () => {
+    await renderReady();
+    saveHumanEdit.mockRejectedValueOnce(
+      new HumanEditSaveError("UNKNOWN", "falhou"),
+    );
+    fireEvent.change(document.getElementById("human-edit-cargo")!, {
+      target: { value: "Condutor" },
+    });
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("Salvar alterações"));
+    await flush();
+
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+    await advance(DELAY_MS * 3);
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+    expect(push).toHaveBeenCalledTimes(0);
+  });
+
+  it("PERMISSION_DENIED produces no success status", async () => {
+    await renderReady();
+    saveHumanEdit.mockRejectedValueOnce(
+      new HumanEditSaveError("PERMISSION_DENIED", "negado"),
+    );
+    fireEvent.change(document.getElementById("human-edit-cargo")!, {
+      target: { value: "Condutor" },
+    });
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("Salvar alterações"));
+    await flush();
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+    await advance(DELAY_MS * 3);
+    expect(push).toHaveBeenCalledTimes(0);
+  });
+
+  it("local validation block produces no success status (no C1 call)", async () => {
+    await renderReady();
+    vi.useFakeTimers();
+    fireEvent.change(document.getElementById("human-edit-fullName")!, {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByText("Salvar alterações"));
+    await flush();
+    expect(saveHumanEdit).not.toHaveBeenCalled();
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+    await advance(DELAY_MS * 3);
+    expect(push).toHaveBeenCalledTimes(0);
+  });
+
+  it("PRECONDITION_FAILED conflict keeps its UI and produces no success status", async () => {
+    await renderReady({}, { token: TOKEN });
+    saveHumanEdit.mockRejectedValueOnce(
+      new HumanEditSaveError("PRECONDITION_FAILED", "stale"),
+    );
+    loadHumanForEdit.mockResolvedValueOnce({
+      ra: RA,
+      baseline: baseline({ cargo: "SERVIDOR MUDOU" }),
+      versionToken: 9999,
+      archived: false,
+    });
+    fireEvent.change(document.getElementById("human-edit-cargo")!, {
+      target: { value: "Meu rascunho" },
+    });
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("Salvar alterações"));
+    await flush();
+
+    // conflict UI unchanged, draft preserved
+    expect(
+      screen.getByText(
+        "Este cadastro foi alterado enquanto você estava editando.",
+      ),
+    ).toBeTruthy();
+    expect(
+      (document.getElementById("human-edit-cargo") as HTMLInputElement).value,
+    ).toBe("Meu rascunho");
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+
+    await advance(DELAY_MS * 3);
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+    expect(push).toHaveBeenCalledTimes(0);
+  });
+
+  it("archived re-read after conflict produces no success status", async () => {
+    await renderReady({}, { token: TOKEN });
+    saveHumanEdit.mockRejectedValueOnce(
+      new HumanEditSaveError("PRECONDITION_FAILED", "stale"),
+    );
+    loadHumanForEdit.mockResolvedValueOnce({
+      ra: RA,
+      baseline: baseline(),
+      versionToken: 9999,
+      archived: true,
+    });
+    fireEvent.change(document.getElementById("human-edit-cargo")!, {
+      target: { value: "Meu rascunho" },
+    });
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("Salvar alterações"));
+    await flush();
+    expect(screen.getByText("Integrante arquivado")).toBeTruthy();
+    expect(screen.queryByText(SUCCESS_MESSAGE)).toBeNull();
+    await advance(DELAY_MS * 3);
+    expect(push).toHaveBeenCalledTimes(0);
+  });
+
+  it("second submit inside the success window does not re-save or re-navigate", async () => {
+    await saveSucceeds();
+
+    // The submit button is inert during the success transition, so drive the
+    // form directly — that proves the GUARD, not merely the disabled attribute.
+    submitForm();
+    submitForm();
+    await flush();
+
+    expect(saveHumanEdit).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText(SUCCESS_MESSAGE)).toHaveLength(1);
+    expect(push).toHaveBeenCalledTimes(0);
+
+    await advance(DELAY_MS);
+    expect(saveHumanEdit).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith(`/humans/${RA}`);
+  });
+
+  it("submit button is disabled during the success window", async () => {
+    await saveSucceeds();
+    expect(
+      (screen.getByText("Salvar alterações") as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it("Cancel inside the success window opens no discard flow and adds no navigation", async () => {
+    await saveSucceeds();
+
+    const cancel = screen.getByText("Cancelar") as HTMLButtonElement;
+    expect(cancel.disabled).toBe(true);
+    // click through the disabled affordance to prove the handler guard too
+    fireEvent.click(cancel);
+    await flush();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(push).toHaveBeenCalledTimes(0);
+
+    await advance(DELAY_MS);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith(`/humans/${RA}`);
+  });
+
+  it("unmount before the delay expires performs no navigation", async () => {
+    await renderReady();
+    saveHumanEdit.mockResolvedValueOnce(okResult());
+    fireEvent.change(document.getElementById("human-edit-cargo")!, {
+      target: { value: "Condutor" },
+    });
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("Salvar alterações"));
+    await flush();
+    expect(screen.getByText(SUCCESS_MESSAGE)).toBeTruthy();
+
+    cleanup();
+    await advance(DELAY_MS * 3);
+    expect(push).toHaveBeenCalledTimes(0);
+  });
+
+  it("dirty save success suppresses the unsaved-changes warning", async () => {
+    await saveSucceeds();
+    // Post-success the draft still differs from the loaded baseline, but the
+    // save is confirmed: beforeunload must not claim unsaved changes.
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("dirty editing without a save still warns on unload", async () => {
+    await renderReady();
+    fireEvent.change(document.getElementById("human-edit-cargo")!, {
+      target: { value: "Condutor" },
+    });
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
   });
 });

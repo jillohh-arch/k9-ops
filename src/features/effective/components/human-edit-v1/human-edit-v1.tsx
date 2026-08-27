@@ -51,6 +51,13 @@ type LoadState =
   | "error"
   | "denied";
 
+/**
+ * Janela em que o sucesso confirmado fica visível antes da navegação para o
+ * perfil. Curta o suficiente para não parecer travamento, longa o suficiente
+ * para ser lida e anunciada por leitor de tela.
+ */
+const SUCCESS_NAVIGATION_DELAY_MS = 1000;
+
 function profilePath(ra: string) {
   return `${paths.humans}/${encodeURIComponent(ra)}`;
 }
@@ -75,9 +82,21 @@ export function HumanEditV1({ ra }: { ra: string }) {
   const [errors, setErrors] = useState<HumanEditFieldErrors>({});
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
+  /**
+   * Transição de SUCESSO CONFIRMADO: só vira `true` depois que C1 resolveu sem
+   * erro. Nunca em load, validação, conflito ou qualquer categoria de falha.
+   */
+  const [saved, setSaved] = useState(false);
   const [showDirtyConfirm, setShowDirtyConfirm] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const savingRef = useRef(false);
+  /**
+   * Trava de submit. Cobre DOIS intervalos contíguos: o save em voo E a janela
+   * de sucesso até a navegação. Nunca é liberada no caminho de sucesso, de modo
+   * que a proteção contra duplo submit não abre uma brecha de ~1s.
+   */
+  const submitLockRef = useRef(false);
+  /** Um único timer governa a navegação de sucesso. */
+  const successTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -128,14 +147,28 @@ export function HumanEditV1({ ra }: { ra: string }) {
 
   useEffect(() => {
     function handleBeforeUnload(event: BeforeUnloadEvent) {
-      if (isDirty) {
+      // Após um save CONFIRMADO o rascunho segue "sujo" contra o baseline lido
+      // (o baseline não é reescrito localmente), então avisar "não salvo" na
+      // janela de sucesso seria enganoso. A proteção normal de edição continua
+      // intacta: só o pós-sucesso é suprimido.
+      if (isDirty && !saved) {
         event.preventDefault();
         event.returnValue = "";
       }
     }
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty]);
+  }, [isDirty, saved]);
+
+  /** Timer de sucesso não sobrevive ao unmount — nem navega, nem seta estado. */
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current !== null) {
+        window.clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const setField = useCallback((key: HumanEditField, value: string) => {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
@@ -148,6 +181,9 @@ export function HumanEditV1({ ra }: { ra: string }) {
    * e permanecem uma limitação herdada da arquitetura.
    */
   function handleCancel() {
+    // Durante a janela de sucesso, Cancelar não pode criar uma segunda
+    // navegação nem um fluxo de descarte contraditório.
+    if (submitLockRef.current) return;
     if (!isDirty) {
       router.push(profilePath(ra));
       return;
@@ -186,7 +222,7 @@ export function HumanEditV1({ ra }: { ra: string }) {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (savingRef.current) return;
+    if (submitLockRef.current) return;
     if (!canEditHuman) {
       setErrors({ form: "Seu perfil não permite editar este integrante." });
       return;
@@ -197,19 +233,37 @@ export function HumanEditV1({ ra }: { ra: string }) {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    savingRef.current = true;
+    submitLockRef.current = true;
     setSaving(true);
     setConflict(false);
     try {
       // C1 decide no-op × payload; a UI não monta request nem chama B1.
       await saveHumanEdit({ ra, baseline, current: draft, versionToken });
-      router.push(profilePath(ra));
-    } catch (error) {
-      await handleSaveError(error);
-    } finally {
-      savingRef.current = false;
+      // Sucesso CONFIRMADO. A trava de submit NÃO é liberada aqui: ela segue
+      // valendo por toda a janela de sucesso até a navegação, então nenhum
+      // segundo save cabe entre a resolução e o `router.push`.
       setSaving(false);
+      setSaved(true);
+      scheduleSuccessNavigation();
+    } catch (error) {
+      // Somente falha devolve o formulário ao usuário.
+      submitLockRef.current = false;
+      setSaving(false);
+      await handleSaveError(error);
     }
+  }
+
+  /**
+   * Agenda a navegação pós-sucesso. Idempotente por construção: só é chamada no
+   * caminho de sucesso, que é alcançável uma única vez por causa da trava de
+   * submit, e ainda assim recusa agendar um segundo timer.
+   */
+  function scheduleSuccessNavigation() {
+    if (successTimerRef.current !== null) return;
+    successTimerRef.current = window.setTimeout(() => {
+      successTimerRef.current = null;
+      router.push(profilePath(ra));
+    }, SUCCESS_NAVIGATION_DELAY_MS);
   }
 
   /**
@@ -360,6 +414,16 @@ export function HumanEditV1({ ra }: { ra: string }) {
           </div>
         </header>
 
+        {saved ? (
+          <div
+            aria-live="polite"
+            className="rounded-2xl border border-green-400/25 bg-green-400/10 px-4 py-3 text-sm text-green-200"
+            role="status"
+          >
+            Alterações salvas com sucesso.
+          </div>
+        ) : null}
+
         {conflict ? (
           <HumanEditConflictNotice onReload={handleConflictReload} />
         ) : null}
@@ -413,7 +477,8 @@ export function HumanEditV1({ ra }: { ra: string }) {
 
         <div className="flex flex-wrap gap-3">
           <button
-            className="rounded-xl border border-slate-400/20 bg-slate-400/[0.08] px-5 py-2.5 text-xs font-bold text-slate-300 transition hover:bg-slate-400/[0.15]"
+            className="rounded-xl border border-slate-400/20 bg-slate-400/[0.08] px-5 py-2.5 text-xs font-bold text-slate-300 transition hover:bg-slate-400/[0.15] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={saved}
             onClick={handleCancel}
             type="button"
           >
@@ -421,7 +486,7 @@ export function HumanEditV1({ ra }: { ra: string }) {
           </button>
           <button
             className="rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-5 py-2.5 text-xs font-bold text-cyan-100 transition hover:bg-cyan-300/[0.16] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={saving || !isDirty}
+            disabled={saving || saved || !isDirty}
             type="submit"
           >
             {saving ? "Salvando…" : "Salvar alterações"}

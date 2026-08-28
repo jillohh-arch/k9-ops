@@ -123,7 +123,7 @@ export default function HumanHistoryPage() {
             <StatusPill label={`RA ${ra}`} tone="blue" />
           </div>
           <p className="mt-2 text-sm text-slate-400">
-            {humanText(data.user, "cargo", "accessLevel") ?? "Função não informada"}
+            {humanText(data.user, "cargo", "função") ?? "Função não informada"}
             {" · "}
             {humanText(data.user, "unit") ?? "Lotação não informada"}
           </p>

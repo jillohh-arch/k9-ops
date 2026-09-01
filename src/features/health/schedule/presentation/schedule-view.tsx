@@ -42,6 +42,7 @@
  * - No coverage recomputation; visible row count is NOT institutional truth.
  */
 
+import { Badge } from "@/components/ui/badge";
 import type { ReadStateError } from "../../domain/read-states";
 import { SCHEDULE_STATUS_LABELS } from "../../domain/read-states";
 import {
@@ -53,12 +54,58 @@ import {
 import type { ComposedScheduleEntry } from "../composition/schedule-composition";
 import type { ScheduleScopeCoverage } from "../data/schedule-scope-loader";
 import { useSchedule } from "../hooks/use-schedule";
+import type { ScheduleType } from "../types";
 
 /** Shown when the item's own date/time cannot be rendered truthfully. */
 const UNAVAILABLE_DATETIME = "Data/hora indisponível";
 
 /** Shown when RD-I2 could not derive a temporal status for the item. */
 const UNAVAILABLE_STATUS = "Status indisponível";
+
+/**
+ * PRESENTATION-ONLY pt-BR labels for the canonical schedule type.
+ *
+ * The persisted/canonical values (`vaccination`, `deworming`, …) are unchanged
+ * and remain the domain authority — this maps them for display only, so the
+ * Agenda does not show English enum values inside a pt-BR interface.
+ *
+ * `satisfies Record<ScheduleType, string>` is load-bearing: if Front20 ever
+ * widens the canonical union, this map fails to compile instead of silently
+ * falling back to a raw value.
+ */
+const SCHEDULE_TYPE_LABELS = {
+  dose: "Dose",
+  vaccination: "Vacinação",
+  exam: "Exame",
+  consultation: "Consulta",
+  weighing: "Pesagem",
+  reevaluation: "Reavaliação",
+  deworming: "Vermifugação",
+  bath: "Banho",
+  general: "Geral",
+} satisfies Record<ScheduleType, string>;
+
+/**
+ * Semantic badge tone per temporal status, reusing the shared `Badge` tones
+ * rather than introducing a Schedule-only palette.
+ *
+ * Attention hierarchy: overdue demands action, pending is elevated, today is
+ * the active present, upcoming/scheduled are neutral-active, and terminal
+ * states recede so they never compete with actionable work. The textual label
+ * is always rendered, so colour is additive and never the sole carrier.
+ */
+const STATUS_TONES = {
+  overdue: "red",
+  pending: "yellow",
+  today: "cyan",
+  upcoming: "green",
+  scheduled: "slate",
+  completed: "slate",
+  cancelled: "slate",
+} as const satisfies Record<keyof typeof SCHEDULE_STATUS_LABELS, string>;
+
+/** Terminal statuses are additionally dimmed so they visibly recede. */
+const TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
 
 /**
  * Formats the item's scheduled instant IN THE ITEM'S OWN TIMEZONE.
@@ -103,6 +150,39 @@ function statusLabel(entry: ComposedScheduleEntry): string {
   const status = entry.temporal.temporalStatus;
   if (!status) return UNAVAILABLE_STATUS;
   return SCHEDULE_STATUS_LABELS[status];
+}
+
+/**
+ * Status badge.
+ *
+ * A `null` temporal status is a neutral TECHNICAL unavailability — it must not
+ * borrow an actionable tone, and must never be dressed as a real status.
+ */
+function ScheduleStatusBadge({ entry }: { entry: ComposedScheduleEntry }) {
+  const status = entry.temporal.temporalStatus;
+  const tone = status ? STATUS_TONES[status] : "slate";
+  const isTerminal = !!status && TERMINAL_STATUSES.has(status);
+
+  return (
+    <Badge
+      tone={tone}
+      className={isTerminal ? "opacity-70" : undefined}
+      data-testid="schedule-row-status"
+      data-status={status ?? "unavailable"}
+    >
+      {statusLabel(entry)}
+    </Badge>
+  );
+}
+
+/** Presentation label for the canonical schedule type. */
+function scheduleTypeLabel(scheduleType: string): string {
+  return (
+    SCHEDULE_TYPE_LABELS[scheduleType as ScheduleType] ??
+    // Defensive: an unmapped canonical value is shown verbatim rather than
+    // hidden. The `satisfies` check above makes this unreachable today.
+    scheduleType
+  );
 }
 
 /**
@@ -213,32 +293,31 @@ function ScheduleRow({ composed }: { composed: ComposedScheduleEntry }) {
       className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border/60 bg-card/40 px-4 py-3"
       data-testid="schedule-row"
     >
+      {/* Hierarchy: WHAT (title) -> WHEN (datetime) -> WHO/TYPE (metadata).
+          `title` stays the FIRST <p>, which the source-order killer relies on. */}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold leading-snug text-foreground">
           {item.title ?? "Sem título"}
+        </p>
+        <p
+          className="mt-1 text-sm font-medium text-foreground/90"
+          data-testid="schedule-row-datetime"
+        >
+          {formatScheduledFor(item.scheduledFor, item.timezone)}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           <span data-testid="schedule-row-dog">{composed.entry.dog.name}</span>
           {item.scheduleType && (
             <>
               {" · "}
-              <span data-testid="schedule-row-type">{item.scheduleType}</span>
+              <span data-testid="schedule-row-type">
+                {scheduleTypeLabel(item.scheduleType)}
+              </span>
             </>
           )}
         </p>
-        <p
-          className="mt-1 text-xs text-muted-foreground"
-          data-testid="schedule-row-datetime"
-        >
-          {formatScheduledFor(item.scheduledFor, item.timezone)}
-        </p>
       </div>
-      <span
-        className="shrink-0 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1 text-[11px] font-semibold text-foreground"
-        data-testid="schedule-row-status"
-      >
-        {statusLabel(composed)}
-      </span>
+      <ScheduleStatusBadge entry={composed} />
     </li>
   );
 }

@@ -549,3 +549,154 @@ describe("presentation boundaries", () => {
     expect(screen.queryByText(/^Pendentes$/i)).toBeNull();
   });
 });
+
+/**
+ * ── H1-C1 CORRECTION KILLERS ───────────────────────────────────────────────
+ * Added after the H1 visual review confirmed three presentation defects. These
+ * pin the corrections; they do not relax any RD-I6 semantic contract.
+ */
+
+describe("K10 — schedule type is localized for presentation", () => {
+  // The canonical persisted values stay English; only the DISPLAY is pt-BR.
+  it.each([
+    ["dose", "Dose"],
+    ["vaccination", "Vacinação"],
+    ["exam", "Exame"],
+    ["consultation", "Consulta"],
+    ["weighing", "Pesagem"],
+    ["reevaluation", "Reavaliação"],
+    ["deworming", "Vermifugação"],
+    ["bath", "Banho"],
+    ["general", "Geral"],
+  ])("canonical %s renders as %s", (canonical, label) => {
+    mountWith({
+      status: "success",
+      data: [composed("s1", { scheduleType: canonical })],
+      fetchedAt: new Date(),
+    });
+
+    expect(screen.getByTestId("schedule-row-type").textContent).toBe(label);
+  });
+
+  it("never presents the raw English canonical values", () => {
+    // The four whose raw form is most obviously wrong in a pt-BR interface.
+    mountWith({
+      status: "success",
+      data: [
+        composed("s1", { scheduleType: "vaccination" }),
+        composed("s2", { scheduleType: "consultation" }),
+        composed("s3", { scheduleType: "deworming" }),
+        composed("s4", { scheduleType: "reevaluation" }),
+      ],
+      fetchedAt: new Date(),
+    });
+
+    const types = screen
+      .getAllByTestId("schedule-row-type")
+      .map((el) => el.textContent ?? "");
+
+    expect(types).toEqual(["Vacinação", "Consulta", "Vermifugação", "Reavaliação"]);
+    // This is the killer: a regression to raw enum rendering fails here.
+    for (const raw of ["vaccination", "consultation", "deworming", "reevaluation"]) {
+      expect(types).not.toContain(raw);
+    }
+  });
+});
+
+describe("K11 — status treatments are visually differentiated", () => {
+  it("Atrasado and Concluído do not share the same treatment", () => {
+    mountWith({
+      status: "success",
+      data: [
+        composed("s-late", { temporalStatus: "overdue" }),
+        composed("s-done", { temporalStatus: "completed" }),
+      ],
+      fetchedAt: new Date(),
+    });
+
+    const [overdue, completed] = screen.getAllByTestId("schedule-row-status");
+
+    // Labels remain the primary carrier of meaning (colour is additive only).
+    expect(overdue.textContent).toBe("Atrasado");
+    expect(completed.textContent).toBe("Concluído");
+
+    // The load-bearing assertion: an operator must be able to tell them apart
+    // without reading. Compared structurally, never against literal colours.
+    expect(overdue.className).not.toBe(completed.className);
+  });
+
+  it("actionable statuses differ from terminal ones", () => {
+    mountWith({
+      status: "success",
+      data: [
+        composed("s1", { temporalStatus: "overdue" }),
+        composed("s2", { temporalStatus: "pending" }),
+        composed("s3", { temporalStatus: "today" }),
+        composed("s4", { temporalStatus: "completed" }),
+        composed("s5", { temporalStatus: "cancelled" }),
+      ],
+      fetchedAt: new Date(),
+    });
+
+    const badges = screen.getAllByTestId("schedule-row-status");
+    const [overdue, pending, today, completed, cancelled] = badges;
+
+    // Three distinct actionable treatments.
+    expect(new Set([overdue.className, pending.className, today.className]).size).toBe(3);
+    // Terminal states recede and are distinct from every actionable one.
+    for (const terminal of [completed, cancelled]) {
+      expect(terminal.className).not.toBe(overdue.className);
+      expect(terminal.className).not.toBe(pending.className);
+      expect(terminal.className).not.toBe(today.className);
+    }
+  });
+
+  it("an unavailable status stays neutral and is not dressed as a real status", () => {
+    mountWith({
+      status: "success",
+      data: [
+        composed("s-unavail", { temporalStatus: null }),
+        composed("s-late", { temporalStatus: "overdue" }),
+      ],
+      fetchedAt: new Date(),
+    });
+
+    const [unavailable, overdue] = screen.getAllByTestId("schedule-row-status");
+
+    expect(unavailable.textContent).toBe("Status indisponível");
+    // It must not borrow the attention treatment of actionable work.
+    expect(unavailable.className).not.toBe(overdue.className);
+  });
+});
+
+describe("K12 — datetime remains the timezone-safe string after promotion", () => {
+  it("keeps the testid on the element carrying the formatted datetime", () => {
+    mountWith({
+      status: "success",
+      data: [
+        composed("s1", {
+          scheduledFor: new Date("2026-09-10T02:30:00Z"),
+          timezone: "America/Sao_Paulo",
+        }),
+      ],
+      fetchedAt: new Date(),
+    });
+
+    // Promoting datetime in the hierarchy must not detach K5/K6's anchor.
+    const el = screen.getByTestId("schedule-row-datetime");
+    expect(el.textContent).toContain("09/09/2026");
+    expect(el.textContent).toContain("23:30");
+  });
+
+  it("title is still the first paragraph in the row", () => {
+    // The source-order killer locates titles via the row's first <p>.
+    mountWith({
+      status: "success",
+      data: [composed("s1", { title: "Título âncora" })],
+      fetchedAt: new Date(),
+    });
+
+    const row = screen.getByTestId("schedule-row");
+    expect(row.querySelector("p")?.textContent).toBe("Título âncora");
+  });
+});

@@ -17,6 +17,15 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "rewrites": [
+      {
+        "source": "/v/**",
+        "function": {
+          "functionId": "verifyOccurrence",
+          "region": "southamerica-east1"
+        }
+      }
+    ],
     "frameworksBackend": {
       "region": "southamerica-east1"
     }

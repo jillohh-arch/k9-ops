@@ -702,4 +702,36 @@ describe("NUT-WEB-5B — cockpit view -> Nutrition binding", () => {
     expect(screen.getByTestId("cockpit-not-found")).toBeDefined();
     expect(screen.queryByTestId("cockpit-to-nutrition-link")).toBeNull();
   });
+
+  it("36. forbidden status renders ForbiddenState with health.read requirement", () => {
+    mockCockpitState.mockReturnValue({
+      status: "forbidden" as const,
+      cockpit: null,
+      restrictionsCoverageComplete: true,
+      errorMessage: null,
+      refetch: () => undefined,
+    });
+    render(<HealthCockpitView dogId="k9-bono" />);
+
+    expect(screen.getByTestId("cockpit-forbidden")).toBeDefined();
+    expect(screen.getByText("Acesso proibido")).toBeDefined();
+    expect(screen.getByText(/Leitura do cockpit de prontidão não autorizada/i)).toBeDefined();
+    expect(screen.getByText(/Capacidade requerida: health.read/i)).toBeDefined();
+    expect(screen.queryByTestId("health-cockpit")).toBeNull();
+  });
+
+  it("37. forbidden cockpit provides link to return to workforce readiness", () => {
+    mockCockpitState.mockReturnValue({
+      status: "forbidden" as const,
+      cockpit: null,
+      restrictionsCoverageComplete: true,
+      errorMessage: null,
+      refetch: () => undefined,
+    });
+    render(<HealthCockpitView dogId="k9-bono" />);
+
+    const link = screen.getByRole("link", { name: /Voltar à prontidão do efetivo/i });
+    expect(link).toHaveAttribute("href", "/health/readiness");
+  });
 });
+

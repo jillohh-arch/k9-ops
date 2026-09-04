@@ -31,6 +31,7 @@ import {
   HealthReadinessEmpty,
   HealthReadinessError,
 } from "@/features/health/presentation/components";
+import { ForbiddenState } from "@/features/health/presentation/components/health-technical-states";
 import { useHealthReadiness } from "@/features/health/presentation/hooks/use-health-readiness";
 
 /** Relative label for the most recent canonical readiness projection in scope. */
@@ -99,6 +100,13 @@ export default function HealthReadinessPage() {
       hideModuleHeading
     >
       <div className="flex flex-col gap-6" data-testid="health-readiness-container">
+        {status === "forbidden" && (
+          <ForbiddenState
+            requiredCapability="health.read"
+            message="Leitura da prontidão não autorizada para o perfil de acesso atual."
+          />
+        )}
+
         {status === "loading" && <HealthReadinessSkeleton />}
 
         {status === "empty" && <HealthReadinessEmpty />}

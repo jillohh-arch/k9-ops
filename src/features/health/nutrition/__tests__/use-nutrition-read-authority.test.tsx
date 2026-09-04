@@ -85,6 +85,8 @@ import {
 import { NutritionLandingView } from "../presentation/nutrition-landing-view";
 import { NutritionDogView } from "../presentation/nutrition-dog-view";
 import { loadReadinessScope } from "../../presentation/hooks/load-readiness-scope";
+import { aggregateReadinessListItem } from "../../domain/readiness-aggregator";
+import type { DogIdentityReadModel } from "../../domain/readiness-types";
 
 function activeProfile(
   health: Record<string, unknown> | null,
@@ -343,6 +345,7 @@ describe("useNutritionReadAuthority", () => {
         activeRestrictions: [],
         isPartial: false,
         restrictionsCoverageComplete: true,
+        scopeEmpty: true,
       });
 
       accessState.current = {
@@ -360,20 +363,29 @@ describe("useNutritionReadAuthority", () => {
 
     it("transition allowed -> forbidden immediately resets state and renders ForbiddenState", async () => {
       vi.clearAllMocks();
+      const testDog: DogIdentityReadModel = {
+        id: "k9-1",
+        name: "Rex",
+        registrationNumber: "R1",
+        photoUrl: null,
+        breed: null,
+        sex: null,
+        dateOfBirth: null,
+        conductor: null,
+        specialties: [],
+      };
+      const testItem = aggregateReadinessListItem({
+        dog: testDog,
+        summary: null,
+        restrictions: [],
+      });
+
       vi.mocked(loadReadinessScope).mockResolvedValueOnce({
-        items: [
-          {
-            dog: { id: "k9-1", name: "Rex", microchip: "123", registrationNumber: "R1" },
-            summary: null,
-            readinessStatus: "not_evaluated",
-            dataQuality: "missing",
-            activeRestrictionsCount: 0,
-            hasConflict: false,
-          },
-        ],
+        items: [testItem],
         activeRestrictions: [],
         isPartial: false,
         restrictionsCoverageComplete: true,
+        scopeEmpty: false,
       });
 
       accessState.current = {

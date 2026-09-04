@@ -46,6 +46,8 @@ import {
 } from "../hooks/use-health-overview-read-authority";
 import { useHealthOverview } from "../hooks/use-health-overview";
 import { loadReadinessScope } from "../hooks/load-readiness-scope";
+import { aggregateReadinessListItem } from "../../domain/readiness-aggregator";
+import type { DogIdentityReadModel } from "../../domain/readiness-types";
 
 function withAccess(value: MockAccess) {
   accessState.current = value;
@@ -292,6 +294,7 @@ describe("useHealthOverviewReadAuthority", () => {
         activeRestrictions: [],
         isPartial: false,
         restrictionsCoverageComplete: true,
+        scopeEmpty: true,
       });
 
       accessState.current = {
@@ -308,20 +311,29 @@ describe("useHealthOverviewReadAuthority", () => {
 
     it("transition allowed -> forbidden immediately clears items and activeRestrictions", async () => {
       vi.clearAllMocks();
+      const testDog: DogIdentityReadModel = {
+        id: "k9-1",
+        name: "Rex",
+        registrationNumber: "R1",
+        photoUrl: null,
+        breed: null,
+        sex: null,
+        dateOfBirth: null,
+        conductor: null,
+        specialties: [],
+      };
+      const testItem = aggregateReadinessListItem({
+        dog: testDog,
+        summary: null,
+        restrictions: [],
+      });
+
       vi.mocked(loadReadinessScope).mockResolvedValueOnce({
-        items: [
-          {
-            dog: { id: "k9-1", name: "Rex", microchip: "123", registrationNumber: "R1" },
-            summary: null,
-            readinessStatus: "not_evaluated",
-            dataQuality: "missing",
-            activeRestrictionsCount: 0,
-            hasConflict: false,
-          },
-        ],
+        items: [testItem],
         activeRestrictions: [],
         isPartial: false,
         restrictionsCoverageComplete: true,
+        scopeEmpty: false,
       });
 
       // 1. Mount allowed

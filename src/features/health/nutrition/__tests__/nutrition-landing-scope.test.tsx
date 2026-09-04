@@ -41,8 +41,19 @@ vi.mock("firebase/app", () => ({
   getApp: vi.fn(),
 }));
 vi.mock("firebase/auth", () => ({ getAuth: vi.fn() }));
-vi.mock("firebase/storage", () => ({ getStorage: vi.fn() }));
 vi.mock("@/lib/firebase/client", () => ({ db: {}, auth: {}, storage: {} }));
+
+vi.mock("@/features/access/providers/access-control-provider", () => ({
+  useAccessControl: () => ({
+    status: "ready",
+    profile: {
+      status: "active",
+      permissions: { health: { read: true } },
+      scope: "own_records",
+    },
+    can: () => false,
+  }),
+}));
 
 vi.mock("next/link", () => ({
   default: ({

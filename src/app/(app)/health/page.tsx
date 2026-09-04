@@ -31,6 +31,7 @@ import {
   HealthOverviewSkeleton,
   HealthOverviewEmpty,
   HealthOverviewError,
+  ForbiddenState,
 } from "@/features/health/presentation/components";
 import type { ReadinessStatus } from "@/features/health/domain/readiness-types";
 
@@ -78,6 +79,13 @@ export default function HealthOverviewPage() {
         {status === "loading" && <HealthOverviewSkeleton />}
 
         {status === "empty" && <HealthOverviewEmpty />}
+
+        {status === "forbidden" && (
+          <ForbiddenState
+            message="Leitura da visão geral de saúde não autorizada para o perfil de acesso atual."
+            requiredCapability="health.read"
+          />
+        )}
 
         {status === "error" && (
           <HealthOverviewError message={errorMessage ?? undefined} onRetry={refetch} />

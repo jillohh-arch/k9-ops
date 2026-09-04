@@ -37,27 +37,36 @@ import type { DogIdentityReadModel } from "../../domain/readiness-types";
 import {
   EmptyState,
   ErrorState,
+  ForbiddenState,
   LoadingState,
 } from "../../presentation/components/health-technical-states";
 import { loadReadinessScope } from "../../presentation/hooks/load-readiness-scope";
+import { useNutritionReadAuthority } from "../hooks/use-nutrition-read-authority";
 import {
   describeNutritionExclusions,
   selectVisibleNutritionDogs,
 } from "./nutrition-scope-visibility";
-
-type LandingStatus = "loading" | "success" | "empty" | "error";
 
 const dogCard = cn(
   "flex items-center justify-between gap-3 rounded-2xl border border-cyan-200/12 bg-[#0b1628]/82 px-4 py-3 text-left transition-colors",
   "hover:bg-[#0b1628] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 );
 
+const EMPTY_DOGS: DogIdentityReadModel[] = [];
+
 export function NutritionLandingView() {
-  const [status, setStatus] = useState<LandingStatus>("loading");
-  const [dogs, setDogs] = useState<DogIdentityReadModel[]>([]);
-  const [exclusionNotice, setExclusionNotice] = useState<string | null>(null);
+  const authority = useNutritionReadAuthority();
+  const [dataResult, setDataResult] = useState<{
+    dogs: DogIdentityReadModel[];
+    exclusionNotice: string | null;
+    status: "success" | "empty" | "error";
+  } | null>(null);
 
   useEffect(() => {
+    if (authority.status !== "allowed") {
+      return;
+    }
+
     let active = true;
 
     loadReadinessScope()
@@ -65,23 +74,49 @@ export function NutritionLandingView() {
         if (!active) return;
         // Only K9s the server itself authorized become navigable options.
         const visibility = selectVisibleNutritionDogs(scope.items);
-        setDogs(visibility.visibleDogs);
-        setExclusionNotice(describeNutritionExclusions(visibility));
-        setStatus(visibility.authorizedCount === 0 ? "empty" : "success");
+        setDataResult({
+          dogs: visibility.visibleDogs,
+          exclusionNotice: describeNutritionExclusions(visibility),
+          status: visibility.authorizedCount === 0 ? "empty" : "success",
+        });
       })
       .catch(() => {
         if (!active) return;
-        setStatus("error");
+        setDataResult({
+          dogs: EMPTY_DOGS,
+          exclusionNotice: null,
+          status: "error",
+        });
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [authority.status]);
 
-  if (status === "loading") {
+  if (authority.status === "loading") {
+    return <LoadingState message="Verificando permissões..." />;
+  }
+
+  if (authority.status === "forbidden") {
+    return (
+      <div
+        className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-border/60 bg-card/40 p-10 text-center shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
+        data-testid="nutrition-landing-forbidden"
+      >
+        <ForbiddenState
+          requiredCapability={authority.requiredCapability}
+          message="Leitura do módulo de nutrição não autorizada para o perfil de acesso atual."
+        />
+      </div>
+    );
+  }
+
+  if (!dataResult) {
     return <LoadingState message="Carregando efetivo..." />;
   }
+
+  const { dogs, exclusionNotice, status } = dataResult;
 
   if (status === "error") {
     return (

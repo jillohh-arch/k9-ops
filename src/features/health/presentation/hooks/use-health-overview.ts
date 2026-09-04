@@ -19,6 +19,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadReadinessScope } from "./load-readiness-scope";
 import {
+  useHealthOverviewReadAuthority,
+  type HealthOverviewReadAuthority,
+} from "./use-health-overview-read-authority";
+import {
   OFFICIAL_READINESS_STATUSES,
   READINESS_STATUS_LABELS,
   READINESS_STATUS_PRIORITY,
@@ -64,7 +68,8 @@ export interface PendenciesSummary {
 }
 
 export interface HealthOverviewState {
-  status: "loading" | "success" | "empty" | "error" | "partial";
+  status: "loading" | "success" | "empty" | "error" | "partial" | "forbidden";
+  authority: HealthOverviewReadAuthority;
   items: ReadinessListItem[];
   statusCounts: StatusCounts;
   donutData: DonutSegment[];
@@ -88,43 +93,65 @@ const STATUS_COLORS: Record<ReadinessStatus, string> = {
   not_evaluated: "#64748b", // Slate 500
 };
 
+interface ScopeLoadedResult {
+  cycleKey: string;
+  items: ReadinessListItem[];
+  activeRestrictions: OperationalRestrictionReadModel[];
+  isPartial: boolean;
+  restrictionsCoverageComplete: boolean;
+  error: string | null;
+}
+
+const EMPTY_ITEMS: ReadinessListItem[] = [];
+const EMPTY_RESTRICTIONS: OperationalRestrictionReadModel[] = [];
+
 export function useHealthOverview(): HealthOverviewState {
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [items, setItems] = useState<ReadinessListItem[]>([]);
-  const [activeRestrictions, setActiveRestrictions] = useState<OperationalRestrictionReadModel[]>([]);
-  const [isPartial, setIsPartial] = useState<boolean>(false);
-  /**
-   * False when at least one restrictions read failed, so "no active restrictions"
-   * cannot be affirmed for the whole scope.
-   */
-  const [restrictionsCoverageComplete, setRestrictionsCoverageComplete] = useState<boolean>(true);
+  const authority = useHealthOverviewReadAuthority();
+  const [dataResult, setDataResult] = useState<ScopeLoadedResult | null>(null);
   const [reloadTrigger, setReloadTrigger] = useState<number>(0);
 
   const refetch = useCallback(async () => {
     setReloadTrigger((prev) => prev + 1);
   }, []);
 
+  const cycleKey = `${authority.status}#${reloadTrigger}`;
+
   useEffect(() => {
+    if (authority.status !== "allowed") {
+      return;
+    }
+
     let isSubscribed = true;
 
     async function loadOverview() {
       try {
-        // Single shared canonical composition path (see load-readiness-scope.ts).
         const scope = await loadReadinessScope();
-
         if (!isSubscribed) return;
 
-        setItems(scope.items);
-        setActiveRestrictions(scope.activeRestrictions);
-        setIsPartial(scope.isPartial);
-        setRestrictionsCoverageComplete(scope.restrictionsCoverageComplete);
-        setLoading(false);
+        setDataResult({
+          cycleKey,
+          items: scope.items,
+          activeRestrictions: scope.activeRestrictions,
+          isPartial: scope.isPartial,
+          restrictionsCoverageComplete: scope.restrictionsCoverageComplete,
+          error: null,
+        });
       } catch (err: unknown) {
         if (!isSubscribed) return;
-        const msg = err instanceof Error ? err.message : "Erro desconhecido ao carregar prontidão canônica";
-        setError(msg);
-        setLoading(false);
+
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Falha ao carregar visão geral de saúde";
+
+        setDataResult({
+          cycleKey,
+          items: [],
+          activeRestrictions: [],
+          isPartial: false,
+          restrictionsCoverageComplete: false,
+          error: message,
+        });
       }
     }
 
@@ -133,7 +160,20 @@ export function useHealthOverview(): HealthOverviewState {
     return () => {
       isSubscribed = false;
     };
-  }, [reloadTrigger]);
+  }, [authority.status, cycleKey]);
+
+  const hasValidData =
+    authority.status === "allowed" && dataResult?.cycleKey === cycleKey;
+
+  const items = hasValidData && dataResult ? dataResult.items : EMPTY_ITEMS;
+  const activeRestrictions =
+    hasValidData && dataResult ? dataResult.activeRestrictions : EMPTY_RESTRICTIONS;
+  const isPartial =
+    hasValidData && dataResult ? dataResult.isPartial : false;
+  const restrictionsCoverageComplete =
+    hasValidData && dataResult ? dataResult.restrictionsCoverageComplete : true;
+  const error =
+    hasValidData && dataResult ? dataResult.error : null;
 
   // 3. Compute 5 status card counts (STRICT MANDATE §10)
   const statusCounts = useMemo<StatusCounts>(() => {
@@ -234,8 +274,12 @@ export function useHealthOverview(): HealthOverviewState {
     statusCounts.fit_with_restrictions +
     statusCounts.temporarily_unfit;
 
-  let overallStatus: HealthOverviewState["status"] = "success";
-  if (loading) {
+  let overallStatus: HealthOverviewState["status"] = "loading";
+  if (authority.status === "loading") {
+    overallStatus = "loading";
+  } else if (authority.status === "forbidden") {
+    overallStatus = "forbidden";
+  } else if (!dataResult || dataResult.cycleKey !== cycleKey) {
     overallStatus = "loading";
   } else if (error) {
     overallStatus = "error";
@@ -243,10 +287,13 @@ export function useHealthOverview(): HealthOverviewState {
     overallStatus = "empty";
   } else if (isPartial) {
     overallStatus = "partial";
+  } else {
+    overallStatus = "success";
   }
 
   return {
     status: overallStatus,
+    authority,
     items,
     statusCounts,
     donutData,

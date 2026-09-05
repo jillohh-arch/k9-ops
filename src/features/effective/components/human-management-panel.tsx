@@ -15,11 +15,17 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
+import { useAuth } from "@/features/auth/providers/auth-provider";
 import {
-  deactivateUser,
+  deactivateHumanLifecycle,
+  isHumanLifecycleActive,
+  LIFECYCLE_MIN_REASON_LENGTH,
+  reactivateHumanLifecycle,
+  type HumanLifecycleError,
+  type HumanLifecycleRecord,
+} from "@/features/effective/data/human-lifecycle-service";
+import {
   getUserRoles,
-  getUserStatus,
-  reactivateUser,
   resetHumanPassword,
   toggleInstructorRole,
 } from "@/features/effective/data/human-management-service";
@@ -30,12 +36,24 @@ import {
 
 type HumanManagementPanelProps = {
   ra: string;
+  /**
+   * Documento canonico de `users/{ra}` observado pela pagina via onSnapshot.
+   *
+   * E a MESMA versao que alimenta o estado exibido e o `expectedUpdatedAt` da
+   * mutation, o que elimina a segunda autoridade de `active` que o painel
+   * mantinha via `getUserStatus`. Sem leitura propria: o painel nao consulta
+   * Firestore.
+   */
+  record?: HumanLifecycleRecord;
   userName?: string;
 };
 
 // ---------------------------------------------------------------------------
 // Feedback banner
 // ---------------------------------------------------------------------------
+
+/** Liga a explicacao do early self-guard ao botao via aria-describedby. */
+const SELF_GUARD_HINT_ID = "human-lifecycle-self-guard-hint";
 
 type FeedbackType = "success" | "error" | "info";
 
@@ -69,15 +87,51 @@ function Feedback({
 // Main Component
 // ---------------------------------------------------------------------------
 
-export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps) {
+export function HumanManagementPanel({
+  ra,
+  record,
+  userName,
+}: HumanManagementPanelProps) {
   const { can } = useAccessControl();
+  const { profile } = useAuth();
+
+  /**
+   * Autoridades SEPARADAS (contrato A1 + W1).
+   *
+   * O painel antes usava um unico gate `access.edit` para tudo, o que era amplo
+   * demais para lifecycle e, pior, excluia o `gestor` — que possui
+   * `humans.archive` e nao conseguia desativar ninguem. Agora cada secao
+   * respeita a sua propria capability.
+   */
+  const canManageLifecycle = can("humans", "archive");
   const canManageAccess = can("access", "edit");
+
+  /**
+   * Estado de lifecycle derivado do snapshot recebido — nao de uma leitura
+   * propria. Botao exibido e token de OCC vem da mesma versao do documento.
+   */
+  const userActive = isHumanLifecycleActive(record);
+
+  /**
+   * Early guard de auto-desativacao. O backend permanece a autoridade
+   * (`SELF_DEACTIVATION_FORBIDDEN`); isto apenas evita uma ida de rede com erro
+   * previsivel. Quando o RA do usuario logado nao pode ser resolvido, NAO
+   * adivinhamos: a acao segue habilitada e o servidor decide.
+   */
+  const currentRa = typeof profile?.ra === "string" ? profile.ra.trim() : "";
+  const isSelf = currentRa.length > 0 && currentRa === ra.trim();
 
   // State
   const [isInstructor, setIsInstructor] = useState(false);
-  const [userActive, setUserActive] = useState(true);
   const [deactivateReason, setDeactivateReason] = useState("");
-  const [loading, setLoading] = useState(true);
+  /**
+   * Carregamento das roles de instrutor (dominio de ACESSO).
+   *
+   * Inicia `true` somente quando ha algo a carregar. Quem tem apenas
+   * `humans.archive` nunca dispara esse fetch e nao deve ver spinner: o estado
+   * de lifecycle vem do snapshot, nao de leitura propria.
+   */
+  const [rolesLoading, setRolesLoading] = useState(canManageAccess);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     message: string;
@@ -86,6 +140,7 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
 
   // Dialogs
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
+  const [reactivateDialogOpen, setReactivateDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   // Nova senha temporária gerada pelo reset
@@ -100,35 +155,41 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
     }
   }, []);
 
-  // Load user data
+  /**
+   * Carrega SOMENTE o que pertence ao dominio de acesso (roles de instrutor).
+   *
+   * O status de lifecycle deixou de ser lido aqui: vem do snapshot da pagina.
+   * Sem `access.edit` nao ha nada a carregar, porque a unica secao que usa este
+   * dado e a de Permissoes e Roles.
+   */
   useEffect(() => {
+    // Sem `access.edit` nao ha carregamento a fazer. O early return e
+    // deliberado: `react-hooks/set-state-in-effect` e ERROR neste repo, entao o
+    // estado de carregamento e DERIVADO (ver `loading` abaixo), nunca setado
+    // sincronamente no corpo do efeito.
     if (!ra || !canManageAccess) return;
 
     async function load() {
-      setLoading(true);
+      setRolesLoading(true);
       try {
-        const [roles, status] = await Promise.all([
-          getUserRoles(ra),
-          getUserStatus(ra),
-        ]);
+        const roles = await getUserRoles(ra);
         setIsInstructor(
           roles.includes("instrutor_k9") ||
             roles.includes("instrutor") ||
             roles.includes("adestrador"),
         );
-        setUserActive(status.active);
       } catch {
         showFeedback("Falha ao carregar dados do usuário.", "error");
       } finally {
-        setLoading(false);
+        setRolesLoading(false);
       }
     }
 
     load();
   }, [ra, canManageAccess, showFeedback]);
 
-  // Guard: only show for users with permission
-  if (!canManageAccess) return null;
+  /** Sem nenhuma das duas autoridades o painel inteiro nao existe. */
+  if (!canManageLifecycle && !canManageAccess) return null;
 
   // ----- Handlers -----
 
@@ -152,32 +213,133 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
     }
   }
 
+  /**
+   * Feedback de erro de lifecycle.
+   *
+   * A categoria vem de `details.reason`, e a distincao mais importante e entre
+   * "nada aconteceu" e "o acesso FOI suspenso, mas a auditoria falhou". Dizer
+   * "nao foi possivel desativar" no segundo caso levaria o operador a acreditar
+   * que a pessoa continua com acesso.
+   */
+  function showLifecycleError(error: HumanLifecycleError) {
+    switch (error.category) {
+      case "ALREADY_IN_STATE":
+        // Estado global (Personnel + Auth) ja convergido: informativo.
+        showFeedback(
+          "O estado deste agente já está atualizado. Nenhuma alteração era necessária.",
+          "info",
+        );
+        return;
+      case "ACTIVE_SHIFT":
+        showFeedback(
+          "Não é possível desativar este agente enquanto houver turno ativo. Regularize o turno primeiro.",
+          "error",
+        );
+        return;
+      case "STALE_WRITE":
+        showFeedback(
+          "Este cadastro foi alterado por outra sessão. Nada foi sobrescrito — revise os dados atualizados antes de tentar novamente.",
+          "error",
+        );
+        return;
+      case "SELF_DEACTIVATION_FORBIDDEN":
+        showFeedback(
+          "Não é possível desativar o seu próprio cadastro.",
+          "error",
+        );
+        return;
+      case "PERMISSION_DENIED":
+        showFeedback(
+          "Seu perfil não permite alterar o estado de agentes.",
+          "error",
+        );
+        return;
+      case "NOT_FOUND":
+        showFeedback("Cadastro não encontrado.", "error");
+        return;
+      case "AUTH_IDENTITY_BROKEN":
+        showFeedback(
+          "O vínculo com a conta de acesso deste agente está inconsistente. Regularize o provisionamento antes de alterar o estado.",
+          "error",
+        );
+        return;
+      case "AUTH_APPLIED_AUDIT_FAILED":
+        // O acesso FOI suspenso. NAO dizer que a desativacao falhou.
+        showFeedback(
+          "O acesso do agente foi suspenso, mas não foi possível registrar a auditoria. Confira os dados atualizados antes de nova ação.",
+          "error",
+        );
+        return;
+      case "AUTH_ENABLE_REVERTED_AUDIT_FAILED":
+        showFeedback(
+          "Não foi possível concluir a reativação do acesso. A alteração foi revertida e a conta permanece bloqueada. Confira os dados atualizados.",
+          "error",
+        );
+        return;
+      case "COMPENSATION_FAILED":
+        // Estado potencialmente divergente: nao presumir nada.
+        showFeedback(
+          "A operação não pôde ser concluída com segurança e o estado pode estar inconsistente. Confira os dados atualizados antes de qualquer nova ação.",
+          "error",
+        );
+        return;
+      case "INVALID_INPUT":
+        showFeedback(error.message, "error");
+        return;
+      default:
+        showFeedback("Falha ao alterar o estado do agente.", "error");
+    }
+  }
+
   async function handleDeactivate() {
-    if (deactivateReason.trim().length < 5) return;
+    if (deactivateReason.trim().length < LIFECYCLE_MIN_REASON_LENGTH) return;
+    if (actionLoading) return;
     setActionLoading("deactivate");
     setFeedback(null);
     try {
-      await deactivateUser(ra, deactivateReason.trim());
-      setUserActive(false);
+      // O backend escreve o lifecycle canonico (active/status/deleted_*) e
+      // audita no servidor. O painel nao escreve Firestore e nao sintetiza
+      // estado: o onSnapshot da pagina refletira a mudanca.
+      const result = await deactivateHumanLifecycle({
+        ra,
+        reason: deactivateReason,
+        record,
+      });
       setDeactivateDialogOpen(false);
       setDeactivateReason("");
-      showFeedback("Agente desativado com sucesso.", "success");
-    } catch {
-      showFeedback("Falha ao desativar agente.", "error");
+      showFeedback(
+        result.authState === "not_provisioned"
+          ? "Agente desativado. Não havia conta de acesso provisionada para suspender."
+          : result.reconciliationOnly
+            ? "Acesso do agente suspenso. O cadastro já estava inativo."
+            : "Agente desativado com sucesso.",
+        "success",
+      );
+    } catch (error) {
+      showLifecycleError(error as HumanLifecycleError);
     } finally {
       setActionLoading(null);
     }
   }
 
   async function handleReactivate() {
+    if (actionLoading) return;
     setActionLoading("reactivate");
     setFeedback(null);
     try {
-      await reactivateUser(ra);
-      setUserActive(true);
-      showFeedback("Agente reativado com sucesso.", "success");
-    } catch {
-      showFeedback("Falha ao reativar agente.", "error");
+      // `reason` e OMITIDO no V1 — nunca enviado como string vazia.
+      const result = await reactivateHumanLifecycle({ ra, record });
+      setReactivateDialogOpen(false);
+      showFeedback(
+        result.authState === "not_provisioned"
+          ? "Agente reativado. Não há conta de acesso provisionada — o acesso depende de provisionamento."
+          : result.reconciliationOnly
+            ? "Acesso do agente restabelecido. O cadastro já estava ativo."
+            : "Agente reativado com sucesso.",
+        "success",
+      );
+    } catch (error) {
+      showLifecycleError(error as HumanLifecycleError);
     } finally {
       setActionLoading(null);
     }
@@ -209,7 +371,11 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
     setTimeout(() => setCopied(false), 2500);
   }
 
-  if (loading) {
+  /*
+    Spinner apenas enquanto as roles de ACESSO carregam. Quem tem somente
+    `humans.archive` nao espera nada: o estado de lifecycle ja veio no snapshot.
+  */
+  if (rolesLoading) {
     return (
       <section className="rounded-3xl border border-cyan-200/12 bg-[#0b1628]/82 p-5">
         <h2 className="text-sm font-black text-white">Gestão de Acesso</h2>
@@ -234,7 +400,8 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
         </div>
       ) : null}
 
-      {/* ------ Permissões e Roles ------ */}
+      {/* ------ Permissões e Roles ------ (autoridade: access.edit) */}
+      {canManageAccess ? (
       <div className="mt-5 space-y-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
           Permissões e Roles
@@ -272,8 +439,10 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
           </button>
         </div>
       </div>
+      ) : null}
 
-      {/* ------ Desativar / Reativar ------ */}
+      {/* ------ Desativar / Reativar ------ (autoridade: humans.archive) */}
+      {canManageLifecycle ? (
       <div className="mt-5 space-y-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
           Status do Agente
@@ -287,15 +456,43 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
                 <p className="text-sm font-semibold text-slate-100">
                   Agente ativo
                 </p>
-                <p className="text-xs text-slate-500">
-                  O agente possui acesso normal ao sistema
+                {/*
+                  Early guard de auto-desativacao: a acao permanece VISIVEL e
+                  apenas desabilitada, e a razao e TEXTO PERCEPTIVEL — nao
+                  apenas `title`, que e invisivel para teclado e touch.
+                  O backend continua sendo a autoridade.
+
+                  A subcopy permanente descreve APENAS o estado de LIFECYCLE.
+                  Ela nao pode afirmar nada sobre acesso: `active` nao prova
+                  que exista conta de autenticacao ou perfil provisionado — um
+                  Personnel sem Auth e sem `access_profile_id` e ativo e nao
+                  possui acesso algum. Quem fala de acesso e o banner especifico
+                  da operacao, que le `authState` do backend.
+                */}
+                <p
+                  className={
+                    isSelf
+                      ? "text-xs text-amber-200/85"
+                      : "text-xs text-slate-500"
+                  }
+                  id={isSelf ? SELF_GUARD_HINT_ID : undefined}
+                >
+                  {isSelf
+                    ? "Você não pode desativar seu próprio cadastro."
+                    : "O agente está ativo no cadastro operacional."}
                 </p>
               </div>
             </div>
             <button
+              aria-describedby={isSelf ? SELF_GUARD_HINT_ID : undefined}
               className="rounded-lg border border-red-400/20 bg-red-400/[0.06] px-3 py-2 text-sm font-medium text-red-300 transition hover:bg-red-400/[0.12] disabled:opacity-50"
-              disabled={!!actionLoading}
+              disabled={!!actionLoading || isSelf}
               onClick={() => setDeactivateDialogOpen(true)}
+              title={
+                isSelf
+                  ? "Você não pode desativar seu próprio cadastro."
+                  : undefined
+              }
               type="button"
             >
               <span className="flex items-center gap-2">
@@ -312,15 +509,17 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
                 <p className="text-sm font-semibold text-red-200">
                   Agente desativado
                 </p>
+                {/* Mesma regra da subcopy ativa: lifecycle, nunca acesso. */}
                 <p className="text-xs text-slate-500">
-                  O acesso ao sistema está suspenso
+                  O agente está desativado no cadastro operacional.
                 </p>
               </div>
             </div>
+            {/* Reativar passa por confirmacao explicita (W1); sem motivo. */}
             <button
               className="rounded-lg border border-green-400/20 bg-green-400/[0.06] px-3 py-2 text-sm font-medium text-green-300 transition hover:bg-green-400/[0.12] disabled:opacity-50"
-              disabled={actionLoading === "reactivate"}
-              onClick={handleReactivate}
+              disabled={!!actionLoading}
+              onClick={() => setReactivateDialogOpen(true)}
               type="button"
             >
               <span className="flex items-center gap-2">
@@ -335,8 +534,10 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
           </div>
         )}
       </div>
+      ) : null}
 
-      {/* ------ Reset de Senha ------ */}
+      {/* ------ Reset de Senha ------ (autoridade: access.edit) */}
+      {canManageAccess ? (
       <div className="mt-5 space-y-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
           Credenciais
@@ -367,15 +568,26 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
           </button>
         </div>
       </div>
+      ) : null}
 
       {/* ------ Dialog: Desativar ------ */}
       {deactivateDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1b2a] p-6 shadow-2xl">
             <h3 className="text-lg font-bold text-white">Desativar agente</h3>
+            {/*
+              Mesma fronteira da subcopy permanente: a DESATIVACAO e certa, a
+              suspensao de acesso e CONDICIONAL. Espelha o modal de Reativar —
+              um Personnel sem conta provisionada nao tem acesso a suspender, e
+              prometer isso seria falso justamente no caso do fixture 990011.
+              A condicional e textual: o painel NAO consulta Auth nem
+              `access_profile_id` para decidir a copy.
+            */}
             <p className="mt-2 text-sm text-slate-400">
-              Esta ação suspende o acesso do agente{userName ? ` ${userName}` : ""} (RA: {ra}) ao sistema.
-              Informe o motivo da desativação.
+              Esta ação desativa o agente{userName ? ` ${userName}` : ""} (RA:{" "}
+              {ra}) no cadastro operacional. Caso exista conta de acesso
+              provisionada, o acesso ao sistema será suspenso. Informe o motivo
+              da desativação.
             </p>
             <label className="mt-4 block text-xs font-semibold text-slate-300" htmlFor="deactivate-reason">
               Motivo (mínimo 5 caracteres)
@@ -401,8 +613,9 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
               <button
                 className="flex-1 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-200 hover:bg-red-400/[0.18] disabled:opacity-50"
                 disabled={
-                  deactivateReason.trim().length < 5 ||
-                  actionLoading === "deactivate"
+                  deactivateReason.trim().length <
+                    LIFECYCLE_MIN_REASON_LENGTH ||
+                  !!actionLoading
                 }
                 onClick={handleDeactivate}
                 type="button"
@@ -410,6 +623,42 @@ export function HumanManagementPanel({ ra, userName }: HumanManagementPanelProps
                 {actionLoading === "deactivate"
                   ? "Desativando..."
                   : "Desativar agente"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ------ Dialog: Reativar ------ */}
+      {reactivateDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1b2a] p-6 shadow-2xl">
+            <UserCheck className="h-7 w-7 text-green-400" />
+            <h3 className="mt-3 text-lg font-bold text-white">
+              Reativar agente
+            </h3>
+            <p className="mt-2 text-sm text-slate-400">
+              Esta ação devolve o agente{userName ? ` ${userName}` : ""} (RA:{" "}
+              {ra}) ao estado ativo. Caso exista conta de acesso provisionada, o
+              acesso ao sistema será restabelecido.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                className="flex-1 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
+                onClick={() => setReactivateDialogOpen(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="flex-1 rounded-xl border border-green-400/25 bg-green-400/10 px-4 py-3 text-sm font-bold text-green-200 hover:bg-green-400/[0.18] disabled:opacity-50"
+                disabled={!!actionLoading}
+                onClick={handleReactivate}
+                type="button"
+              >
+                {actionLoading === "reactivate"
+                  ? "Reativando..."
+                  : "Reativar agente"}
               </button>
             </div>
           </div>

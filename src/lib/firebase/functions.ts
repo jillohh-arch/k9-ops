@@ -235,6 +235,82 @@ export const callAdminArchiveHuman = httpsCallable<
   Record<string, unknown>
 >(functions, "adminArchiveHuman");
 
+/**
+ * Human Lifecycle V1 — autoridade congelada em
+ * `ba5284388023ff04cf42e7aa30f29a9fca78508f` (repo canilGcmMobile).
+ *
+ * Os dois payloads sao FECHADOS no backend: qualquer chave desconhecida e
+ * recusada. Nao existe campo de ator, timestamp, `active`, `status`, roles ou
+ * acesso — tudo isso e soberania do servidor. `expectedUpdatedAt` e obrigatorio
+ * nas duas operacoes (epoch millis, ou `null` quando o documento nao tem nenhum
+ * espelho de timestamp) e e comparado contra `max(updated_at, updatedAt)`.
+ *
+ * `adminArchiveHuman` acima e o writer LEGADO pre-V1; permanece exportado e
+ * nao deve ser usado por lifecycle novo.
+ */
+export type AdminDeactivateHumanRequest = {
+  expectedUpdatedAt: number | null;
+  ra: string;
+  reason: string;
+};
+
+/** Reactivate nao envia `reason` no V1 (o backend o aceita como opcional). */
+export type AdminReactivateHumanRequest = {
+  expectedUpdatedAt: number | null;
+  ra: string;
+};
+
+/**
+ * Como a conta de Auth participou da operacao:
+ *   - `updated`           : `disabled` foi efetivamente alterado;
+ *   - `not_provisioned`   : Personnel legitimo sem conta (A1.S1 CASE 1);
+ *   - `already_converged` : havia conta e ela ja estava no estado alvo.
+ */
+export type HumanLifecycleAuthState =
+  | "already_converged"
+  | "not_provisioned"
+  | "updated";
+
+/**
+ * Os DOIS results espelham literalmente o freeze
+ * (`admin_human_lifecycle.ts`: `DeactivateHumanResult`/`ReactivateHumanResult`).
+ *
+ * Todos os cinco campos sao OBRIGATORIOS: os cinco caminhos de sucesso do
+ * backend os retornam incondicionalmente. Tipa-los como opcionais seria mais
+ * frouxo que o contrato congelado e esconderia uma degradacao futura.
+ *
+ * `active`/`status` sao LITERAIS FIXOS por operacao, nunca unions: um result
+ * compartilhado com `active: boolean` admitiria `{active: true, status:
+ * "Inativo"}`, combinacao que o backend nunca produz.
+ */
+export type AdminDeactivateHumanResult = {
+  active: false;
+  authState: HumanLifecycleAuthState;
+  ra: string;
+  /** true quando SOMENTE o Auth divergente foi corrigido (Personnel ja inativo). */
+  reconciliationOnly: boolean;
+  status: "Inativo";
+};
+
+export type AdminReactivateHumanResult = {
+  active: true;
+  authState: HumanLifecycleAuthState;
+  ra: string;
+  /** true quando SOMENTE o Auth divergente foi corrigido (Personnel ja ativo). */
+  reconciliationOnly: boolean;
+  status: "Ativo";
+};
+
+export const callAdminDeactivateHuman = httpsCallable<
+  AdminDeactivateHumanRequest,
+  AdminDeactivateHumanResult
+>(functions, "adminDeactivateHuman");
+
+export const callAdminReactivateHuman = httpsCallable<
+  AdminReactivateHumanRequest,
+  AdminReactivateHumanResult
+>(functions, "adminReactivateHuman");
+
 export const callAdminResetHumanPassword = httpsCallable<
   { ra: string },
   { temporary_password: string }

@@ -515,7 +515,13 @@ export default function HumanProfilePage() {
         </div>
       </Panel>
 
-      <HumanManagementPanel ra={ra} userName={callsign} />
+      {/*
+        `user` e o documento canonico de `users/{ra}` ja observado por
+        `useHumanProfileData` via onSnapshot. Passa-lo como prop evita um
+        segundo read e garante que o estado exibido no painel e o
+        `expectedUpdatedAt` da mutation venham da MESMA versao do documento.
+      */}
+      <HumanManagementPanel ra={ra} record={user} userName={callsign} />
 
       {dialog === "certification" || dialog === "document" ? (
         <HumanRecordDialog

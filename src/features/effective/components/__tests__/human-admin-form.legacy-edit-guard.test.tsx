@@ -200,4 +200,51 @@ describe("H3-W3 — HumanAdminForm guarda de Edit legado", () => {
     expect(mode).toBe("edit");
     expect(values.accessProfileId).toBe("gestor");
   });
+
+  it("perfil legado instrutor_k9 NUNCA aparece no select de perfil de acesso", async () => {
+    loadHumanForEdit.mockResolvedValue(unprovisionedRecord());
+
+    render(<HumanAdminForm mode="create" />);
+
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const optionValues = Array.from(select.options).map((opt) => opt.value);
+    const optionLabels = Array.from(select.options).map((opt) => opt.textContent);
+
+    expect(optionValues).not.toContain("instrutor_k9");
+    expect(optionLabels).not.toContain("Instrutor K9");
+    expect(optionValues).toContain("operador_k9");
+    expect(optionValues).toContain("gestor");
+    expect(optionValues).toContain("almoxarifado");
+    expect(optionValues).toContain("administrador");
+  });
+
+  it("toggle funcional de Instrutor K9 é independente da seleção de perfil", async () => {
+    loadHumanForEdit.mockResolvedValue(provisionedRecord());
+
+    render(<HumanAdminForm mode="edit" ra="1003" />);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Acesso não provisionado"),
+      ).not.toBeInTheDocument(),
+    );
+
+    // O botão de toggle de Instrutor K9 existe e opera independentemente do select
+    const instructorToggle = screen.getByRole("button", {
+      name: /Instrutor K9/i,
+    });
+    expect(instructorToggle).toBeInTheDocument();
+
+    // Toggle para ligar
+    fireEvent.click(instructorToggle);
+
+    const saveButton = screen.getByRole("button", { name: /Salvar efetivo/ });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(saveHuman).toHaveBeenCalledTimes(1));
+    const [, values] = saveHuman.mock.calls[0];
+    // Perfil permanece gestor e isK9Instructor foi alternado para true
+    expect(values.accessProfileId).toBe("gestor");
+    expect(values.isK9Instructor).toBe(true);
+  });
 });

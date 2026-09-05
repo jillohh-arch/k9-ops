@@ -118,9 +118,23 @@ export const canonicalAccessProfileOrder = [
   "administrador",
 ] as const;
 
+export const DEPRECATED_ACCESS_PROFILE_IDS = ["instrutor_k9"] as const;
+
+export function isDeprecatedAccessProfileId(
+  id: string | null | undefined,
+): boolean {
+  if (!id) return false;
+  return DEPRECATED_ACCESS_PROFILE_IDS.includes(
+    id.trim().toLowerCase() as (typeof DEPRECATED_ACCESS_PROFILE_IDS)[number],
+  );
+}
+
 export function isVisibleAccessProfile(
   profile: Pick<AccessProfile, "id" | "ui_hidden">,
 ) {
+  if (!profile?.id || isDeprecatedAccessProfileId(profile.id)) {
+    return false;
+  }
   return (
     profile.ui_hidden !== true &&
     canonicalAccessProfileOrder.includes(

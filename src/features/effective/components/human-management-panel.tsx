@@ -461,6 +461,13 @@ export function HumanManagementPanel({
                   apenas desabilitada, e a razao e TEXTO PERCEPTIVEL — nao
                   apenas `title`, que e invisivel para teclado e touch.
                   O backend continua sendo a autoridade.
+
+                  A subcopy permanente descreve APENAS o estado de LIFECYCLE.
+                  Ela nao pode afirmar nada sobre acesso: `active` nao prova
+                  que exista conta de autenticacao ou perfil provisionado — um
+                  Personnel sem Auth e sem `access_profile_id` e ativo e nao
+                  possui acesso algum. Quem fala de acesso e o banner especifico
+                  da operacao, que le `authState` do backend.
                 */}
                 <p
                   className={
@@ -472,7 +479,7 @@ export function HumanManagementPanel({
                 >
                   {isSelf
                     ? "Você não pode desativar seu próprio cadastro."
-                    : "O agente possui acesso normal ao sistema"}
+                    : "O agente está ativo no cadastro operacional."}
                 </p>
               </div>
             </div>
@@ -502,8 +509,9 @@ export function HumanManagementPanel({
                 <p className="text-sm font-semibold text-red-200">
                   Agente desativado
                 </p>
+                {/* Mesma regra da subcopy ativa: lifecycle, nunca acesso. */}
                 <p className="text-xs text-slate-500">
-                  O acesso ao sistema está suspenso
+                  O agente está desativado no cadastro operacional.
                 </p>
               </div>
             </div>

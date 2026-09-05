@@ -223,6 +223,71 @@ describe("W1 — estado vem do snapshot, nao de leitura propria", () => {
 });
 
 // ---------------------------------------------------------------------------
+// B.1 SUBCOPY PERMANENTE DE STATUS — LIFECYCLE, NUNCA ACESSO (I8)
+// ---------------------------------------------------------------------------
+
+/**
+ * O bloco permanente de status: o `<div>` que embrulha o titulo
+ * ("Agente ativo"/"Agente desativado") e a subcopy logo abaixo.
+ *
+ * O escopo importa. O painel TAMBEM exibe banners de operacao que falam de
+ * acesso legitimamente (`authState` vem do backend), entao asserir sobre o
+ * container inteiro confundiria as duas camadas e a regressao passaria batida.
+ */
+function statusBlockText(title: string) {
+  const block = screen.getByText(title).parentElement;
+  if (!block) throw new Error(`bloco de status ausente para "${title}"`);
+  return block.textContent ?? "";
+}
+
+describe("I8 — subcopy permanente de status nao afirma nada sobre acesso", () => {
+  it("ativo: descreve o cadastro operacional, nao 'acesso normal'", async () => {
+    grant({ archive: true });
+    renderPanel(activeRecord());
+    await screen.findByRole("button", { name: /desativar/i });
+
+    const text = statusBlockText("Agente ativo");
+    expect(text).toContain("O agente está ativo no cadastro operacional.");
+    expect(text).not.toMatch(/acesso normal/i);
+    expect(text).not.toMatch(/acesso/i);
+  });
+
+  it("inativo: descreve o cadastro operacional, nao 'acesso suspenso'", async () => {
+    grant({ archive: true });
+    renderPanel(inactiveRecord());
+    await screen.findByRole("button", { name: /reativar/i });
+
+    const text = statusBlockText("Agente desativado");
+    expect(text).toContain("O agente está desativado no cadastro operacional.");
+    expect(text).not.toMatch(/acesso.*suspenso/i);
+    expect(text).not.toMatch(/acesso/i);
+  });
+
+  it("Personnel sem Auth: banner fala de acesso, subcopy permanente NAO", async () => {
+    // A prova do I7: 990011 nao tem conta de acesso alguma. O banner da
+    // operacao PRECISA dizer isso; a subcopy permanente nao pode dizer nada.
+    grant({ archive: true });
+    deactivateHumanLifecycle.mockResolvedValueOnce({
+      active: false,
+      authState: "not_provisioned",
+      ra: RA,
+      reconciliationOnly: false,
+      status: "Inativo",
+    });
+    renderPanel(activeRecord());
+    await openDeactivateWithReason();
+    fireEvent.click(screen.getByRole("button", { name: /desativar agente/i }));
+
+    expect(
+      await screen.findByText(/não havia conta de acesso provisionada/i),
+    ).toBeTruthy();
+    // O record e prop: sem novo snapshot o painel segue no ramo ativo, e a
+    // subcopy permanente continua muda sobre acesso.
+    expect(statusBlockText("Agente ativo")).not.toMatch(/acesso/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // C. DESATIVACAO
 // ---------------------------------------------------------------------------
 

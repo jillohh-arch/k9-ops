@@ -575,9 +575,19 @@ export function HumanManagementPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1b2a] p-6 shadow-2xl">
             <h3 className="text-lg font-bold text-white">Desativar agente</h3>
+            {/*
+              Mesma fronteira da subcopy permanente: a DESATIVACAO e certa, a
+              suspensao de acesso e CONDICIONAL. Espelha o modal de Reativar —
+              um Personnel sem conta provisionada nao tem acesso a suspender, e
+              prometer isso seria falso justamente no caso do fixture 990011.
+              A condicional e textual: o painel NAO consulta Auth nem
+              `access_profile_id` para decidir a copy.
+            */}
             <p className="mt-2 text-sm text-slate-400">
-              Esta ação suspende o acesso do agente{userName ? ` ${userName}` : ""} (RA: {ra}) ao sistema.
-              Informe o motivo da desativação.
+              Esta ação desativa o agente{userName ? ` ${userName}` : ""} (RA:{" "}
+              {ra}) no cadastro operacional. Caso exista conta de acesso
+              provisionada, o acesso ao sistema será suspenso. Informe o motivo
+              da desativação.
             </p>
             <label className="mt-4 block text-xs font-semibold text-slate-300" htmlFor="deactivate-reason">
               Motivo (mínimo 5 caracteres)

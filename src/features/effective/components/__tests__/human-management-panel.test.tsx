@@ -288,6 +288,55 @@ describe("I8 — subcopy permanente de status nao afirma nada sobre acesso", () 
 });
 
 // ---------------------------------------------------------------------------
+// B.2 COPY DOS MODAIS — LIFECYCLE CERTO, ACESSO CONDICIONAL (I9)
+// ---------------------------------------------------------------------------
+
+/**
+ * Texto do card do modal, alcancado pelo HEADING.
+ *
+ * Nao usar `getByText("Desativar agente")`: o botao de confirmacao carrega o
+ * mesmo texto e a query ficaria ambigua. O role heading desambigua.
+ */
+function modalCardText(heading: RegExp) {
+  const card = screen.getByRole("heading", { name: heading }).parentElement;
+  if (!card) throw new Error(`card do modal ausente para ${heading}`);
+  return (card.textContent ?? "").replace(/\s+/g, " ");
+}
+
+describe("I9 — modais separam desativacao de suspensao de acesso", () => {
+  it("Desativar: acao no cadastro operacional + acesso CONDICIONAL", async () => {
+    grant({ archive: true });
+    renderPanel(activeRecord());
+    fireEvent.click(await screen.findByRole("button", { name: /desativar/i }));
+
+    const text = modalCardText(/desativar agente/i);
+    // A desativacao e certa e identifica o alvo.
+    expect(text).toContain("desativa o agente");
+    expect(text).toContain("no cadastro operacional");
+    expect(text).toContain(RA);
+    // A suspensao de acesso e condicional, nunca prometida.
+    expect(text).toMatch(
+      /Caso exista conta de acesso provisionada, o acesso ao sistema será suspenso/,
+    );
+    // A afirmacao incondicional antiga nao pode voltar.
+    expect(text).not.toMatch(/suspende o acesso do agente/i);
+    expect(text).toContain("Informe o motivo da desativação");
+  });
+
+  it("Reativar: mantem a copy condicional de acesso ja correta", async () => {
+    grant({ archive: true });
+    renderPanel(inactiveRecord());
+    fireEvent.click(await screen.findByRole("button", { name: /reativar/i }));
+
+    const text = modalCardText(/reativar agente/i);
+    expect(text).toContain("ao estado ativo");
+    expect(text).toMatch(
+      /Caso exista conta de acesso provisionada, o acesso ao sistema será restabelecido/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // C. DESATIVACAO
 // ---------------------------------------------------------------------------
 

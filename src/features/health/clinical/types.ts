@@ -187,3 +187,195 @@ export interface ClinicalCaseWireDoc {
   schema_version?: unknown;
   [key: string]: unknown;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ClinicalEvent & ClinicalAmendment Contracts (F20.1 Frozen Authority)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Canonical event_type enum (HEALTH_V1_FIRESTORE_SCHEMA §2.2 / F20.1) */
+export const CLINICAL_EVENT_TYPES = [
+  "consultation",
+  "incident",
+  "vaccination",
+  "exam_request",
+  "exam_collection",
+  "exam_result",
+  "exam_interpretation",
+  "treatment_start",
+  "treatment_note",
+  "dose_note",
+  "reevaluation",
+  "discharge",
+  "reopen",
+  "restriction_issued",
+  "restriction_ended",
+  "surgical_note",
+  "general_note",
+  "observation",
+] as const;
+
+export type ClinicalEventType = (typeof CLINICAL_EVENT_TYPES)[number];
+
+/** Canonical status enum for clinical events */
+export const CLINICAL_EVENT_STATUSES = [
+  "draft",
+  "final",
+  "cancelled",
+] as const;
+
+export type ClinicalEventStatus = (typeof CLINICAL_EVENT_STATUSES)[number];
+
+/** Canonical amendment type enum (schema §2.3 / ADR-002) */
+export const CLINICAL_AMENDMENT_TYPES = [
+  "correction",
+  "addendum",
+  "complement",
+] as const;
+
+export type ClinicalAmendmentType = (typeof CLINICAL_AMENDMENT_TYPES)[number];
+
+/**
+ * Professional identity representation in an event or case.
+ * Preserves external clinical professional attribution, distinctly separated
+ * from the internal authenticated user who recorded the event (recorded_by).
+ */
+export interface ClinicalProfessionalReadModel {
+  name: string | null;
+  registrationType: string | null;
+  registrationNumber: string | null;
+  clinic: string | null;
+  formattedRegistration?: string | null;
+  rawMap?: Record<string, unknown>;
+}
+
+/**
+ * Canonical read projection of ClinicalAmendment.
+ * Subcollection:
+ * dogs/{dogId}/clinical_cases/{caseId}/clinical_events/{eventId}/clinical_amendments/{amendmentId}
+ */
+export interface ClinicalAmendmentReadModel {
+  id: string; // DocumentSnapshot.id
+  eventId: string;
+  caseId: string;
+  dogId: string;
+  type: ClinicalAmendmentType | null;
+  rawType: string | null;
+  reason: string;
+  payloadType: string | null;
+  payloadVersion: number | null;
+  content: Record<string, unknown>;
+  recordedBy: RecordedByReadModel | null;
+  recordedAt: Date | null;
+  schemaVersion: number | null;
+  ordinal?: number;
+  dataQualityIssues: string[];
+  rawDoc: Record<string, unknown>;
+}
+
+/**
+ * Canonical read projection of ClinicalEvent.
+ * Subcollection:
+ * dogs/{dogId}/clinical_cases/{caseId}/clinical_events/{eventId}
+ *
+ * UNKNOWN POLICY (Mandatory Rule 7.1 / F20.1):
+ * - hasAmendments: null means UNKNOWN / not informed in stored document (NEVER defaulted to false).
+ * - amendmentCount: null means UNKNOWN / not informed (NEVER defaulted to 0).
+ * - attachmentRefs: null means UNKNOWN / not informed (NEVER defaulted to []).
+ * - occurredAt: clinical occurrence time (distinct from recordedAt!).
+ */
+export interface ClinicalEventReadModel {
+  id: string; // DocumentSnapshot.id (authoritative identity)
+  caseId: string;
+  dogId: string;
+  type: ClinicalEventType | null;
+  rawType: string | null;
+  status: ClinicalEventStatus | null;
+  rawStatus: string | null;
+  occurredAt: Date | null;
+  recordedAt: Date | null;
+  updatedAt: Date | null;
+  recordedBy: RecordedByReadModel | null;
+  payloadType: string | null;
+  payloadVersion: number | null;
+  schemaVersion: number | null;
+  revision: number | null;
+  content: Record<string, unknown>;
+  attachmentRefs: string[] | null;
+  hasAmendments: boolean | null;
+  amendmentCount: number | null;
+  lastAmendedAt: Date | null;
+  finalizedAt: Date | null;
+  cancelReason: string | null;
+  cancelledAt: Date | null;
+  cancelledBy: RecordedByReadModel | null;
+  professional: ClinicalProfessionalReadModel | null;
+  examId: string | null;
+  dataQualityIssues: string[];
+  rawDoc: Record<string, unknown>;
+}
+
+/**
+ * Raw wire shapes for ClinicalEvent and ClinicalAmendment
+ */
+export interface ClinicalEventWireDoc {
+  dog_id?: unknown;
+  case_id?: unknown;
+  event_id?: unknown;
+  entity_kind?: unknown;
+  event_type?: unknown;
+  type?: unknown;
+  status?: unknown;
+  occurred_at?: unknown;
+  occurredAt?: unknown;
+  recorded_at?: unknown;
+  recordedAt?: unknown;
+  updated_at?: unknown;
+  updatedAt?: unknown;
+  recorded_by?: unknown;
+  recordedBy?: unknown;
+  payload_type?: unknown;
+  payloadType?: unknown;
+  payload_version?: unknown;
+  payloadVersion?: unknown;
+  schema_version?: unknown;
+  schemaVersion?: unknown;
+  revision?: unknown;
+  content?: unknown;
+  attachment_refs?: unknown;
+  attachmentRefs?: unknown;
+  has_amendments?: unknown;
+  hasAmendments?: unknown;
+  amendment_count?: unknown;
+  amendmentCount?: unknown;
+  last_amended_at?: unknown;
+  lastAmendedAt?: unknown;
+  finalized_at?: unknown;
+  finalizedAt?: unknown;
+  cancel_reason?: unknown;
+  cancelReason?: unknown;
+  cancelled_at?: unknown;
+  cancelledAt?: unknown;
+  cancelled_by?: unknown;
+  cancelledBy?: unknown;
+  professional?: unknown;
+  exam_id?: unknown;
+  examId?: unknown;
+  [key: string]: unknown;
+}
+
+export interface ClinicalAmendmentWireDoc {
+  type?: unknown;
+  reason?: unknown;
+  payload_type?: unknown;
+  payloadType?: unknown;
+  payload_version?: unknown;
+  payloadVersion?: unknown;
+  schema_version?: unknown;
+  schemaVersion?: unknown;
+  content?: unknown;
+  recorded_by?: unknown;
+  recordedBy?: unknown;
+  recorded_at?: unknown;
+  recordedAt?: unknown;
+  [key: string]: unknown;
+}

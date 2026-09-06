@@ -169,17 +169,32 @@ describe("hasAccessPermission", () => {
 });
 
 describe("isVisibleAccessProfile", () => {
-  it("returns true for canonical profiles", () => {
+  it("returns true for canonical active modern profiles", () => {
     expect(isVisibleAccessProfile({ id: "operador_k9", ui_hidden: undefined })).toBe(true);
+    expect(isVisibleAccessProfile({ id: "gestor", ui_hidden: undefined })).toBe(true);
+    expect(isVisibleAccessProfile({ id: "almoxarifado", ui_hidden: undefined })).toBe(true);
     expect(isVisibleAccessProfile({ id: "administrador", ui_hidden: undefined })).toBe(true);
   });
 
-  it("returns false for hidden profiles", () => {
+  it("returns false for canonical profiles when explicitly ui_hidden: true", () => {
+    expect(isVisibleAccessProfile({ id: "operador_k9", ui_hidden: true })).toBe(false);
+    expect(isVisibleAccessProfile({ id: "gestor", ui_hidden: true })).toBe(false);
+  });
+
+  it("returns false for legacy instrutor_k9 regardless of ui_hidden value", () => {
+    // 1. Hidden when ui_hidden: true
     expect(isVisibleAccessProfile({ id: "instrutor_k9", ui_hidden: true })).toBe(false);
+    // 2. Hidden even if stale metadata provides ui_hidden: false
+    expect(isVisibleAccessProfile({ id: "instrutor_k9", ui_hidden: false })).toBe(false);
+    // 3. Hidden when ui_hidden is absent / undefined
+    expect(isVisibleAccessProfile({ id: "instrutor_k9", ui_hidden: undefined })).toBe(false);
+    // 4. Case-insensitive / whitespace-tolerant rejection
+    expect(isVisibleAccessProfile({ id: "INSTRUTOR_K9", ui_hidden: false })).toBe(false);
   });
 
   it("returns false for non-canonical profiles", () => {
     expect(isVisibleAccessProfile({ id: "random_profile", ui_hidden: undefined })).toBe(false);
+    expect(isVisibleAccessProfile({ id: "", ui_hidden: undefined })).toBe(false);
   });
 });
 
@@ -198,12 +213,24 @@ describe("sortAccessProfiles", () => {
 });
 
 describe("visibleAccessProfiles", () => {
-  it("excludes hidden profiles and sorts", () => {
+  it("excludes hidden and deprecated profiles and sorts canonical ones", () => {
     const visible = visibleAccessProfiles(defaultAccessProfiles);
     const ids = visible.map((p) => p.id);
     expect(ids).not.toContain("instrutor_k9");
-    expect(ids).toContain("operador_k9");
-    expect(ids).toContain("administrador");
+    expect(ids).toEqual(["operador_k9", "gestor", "almoxarifado", "administrador"]);
+  });
+
+  it("excludes instrutor_k9 even if injected from remote with ui_hidden: false", () => {
+    const corruptedRemote = [
+      ...defaultAccessProfiles,
+      {
+        ...defaultAccessProfiles.find((p) => p.id === "instrutor_k9")!,
+        ui_hidden: false,
+      },
+    ];
+    const visible = visibleAccessProfiles(corruptedRemote);
+    const ids = visible.map((p) => p.id);
+    expect(ids).not.toContain("instrutor_k9");
   });
 });
 

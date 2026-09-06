@@ -151,6 +151,20 @@ export async function getUserStatus(ra: string) {
 // 3. Password Reset
 // ---------------------------------------------------------------------------
 
+function callableCode(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+function callableReason(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const details = (error as { details?: unknown }).details;
+  if (typeof details !== "object" || details === null) return null;
+  const reason = (details as { reason?: unknown }).reason;
+  return typeof reason === "string" && reason.length > 0 ? reason : null;
+}
+
 export async function resetHumanPassword(
   ra: string,
 ): Promise<{ success: boolean; message: string; temporaryPassword?: string }> {
@@ -158,28 +172,31 @@ export async function resetHumanPassword(
     const result = await callAdminResetHumanPassword({ ra });
     const temporaryPassword = result.data.temporary_password;
 
-    const actor = currentActorInfo();
-    await appendAuditTrail(ra, {
-      action: "password_reset",
-      actor_ra: actor.ra,
-      actor_name: actor.name,
-      details: {},
-    });
-
     return {
       success: true,
       message: "Nova senha temporária gerada com sucesso.",
       temporaryPassword,
     };
   } catch (error) {
-    const code =
-      typeof error === "object" && error !== null && "code" in error
-        ? String((error as { code: unknown }).code)
-        : "";
-    const message =
-      code === "functions/not-found" || code === "functions/unimplemented"
-        ? "Função de reset ainda não disponível no servidor."
-        : "Falha ao gerar nova senha. Tente novamente.";
+    const code = callableCode(error) ?? "";
+    const reason = callableReason(error);
+
+    let message = "Falha ao gerar nova senha. Tente novamente.";
+
+    if (reason === "AUTH_IDENTITY_NOT_FOUND") {
+      message = "Conta de acesso não encontrada para este agente no provedor de autenticação.";
+    } else if (code.endsWith("permission-denied") || reason === "PERMISSION_DENIED") {
+      message = "Você não tem permissão para redefinir a senha deste agente.";
+    } else if (code.endsWith("unauthenticated") || reason === "UNAUTHENTICATED") {
+      message = "Sessão expirada ou não autenticada. Faça login novamente.";
+    } else if (code.endsWith("invalid-argument") || reason === "INVALID_ARGUMENT") {
+      message = "Identificador de agente inválido.";
+    } else if (reason === "NOT_FOUND") {
+      message = "Cadastro do agente não encontrado.";
+    } else if (code === "functions/not-found" || code === "functions/unimplemented") {
+      message = "Função de reset ainda não disponível no servidor.";
+    }
+
     return { success: false, message };
   }
 }

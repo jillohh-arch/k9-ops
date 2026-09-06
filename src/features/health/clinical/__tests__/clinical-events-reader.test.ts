@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Clinical Events & Amendments Reader Unit Tests
  */
 
@@ -87,7 +87,7 @@ describe("ClinicalEventsReader (Front 30)", () => {
           status: "final",
           occurred_at: "2026-09-02T10:00:00.000Z",
           recorded_at: "2026-09-02T10:05:00.000Z",
-          recorded_by: { uid: "u1", name: "Vet", internal_role: "vet" },
+          recorded_by: { uid: "u1", name: "Sgt. Silva", internal_role: "condutor_k9" },
           payload_type: "consultation",
           payload_version: 1,
           schema_version: 1,
@@ -155,7 +155,7 @@ describe("ClinicalEventsReader (Front 30)", () => {
           status: "final",
           occurred_at: "2026-09-02T10:00:00.000Z",
           recorded_at: "2026-09-02T10:05:00.000Z",
-          recorded_by: { uid: "u1", name: "Vet", internal_role: "vet" },
+          recorded_by: { uid: "u1", name: "Sgt. Silva", internal_role: "condutor_k9" },
           payload_type: "consultation",
           payload_version: 1,
           schema_version: 1,
@@ -165,7 +165,7 @@ describe("ClinicalEventsReader (Front 30)", () => {
           // missing event_type and status
           occurred_at: "2026-09-01T10:00:00.000Z",
           recorded_at: "2026-09-01T10:05:00.000Z",
-          recorded_by: { uid: "u1", name: "Vet", internal_role: "vet" },
+          recorded_by: { uid: "u1", name: "Sgt. Silva", internal_role: "condutor_k9" },
           payload_type: "consultation",
           payload_version: 1,
           schema_version: 1,
@@ -195,7 +195,7 @@ describe("ClinicalEventsReader (Front 30)", () => {
           type: "addendum",
           reason: "Adição de observação pós-consulta",
           recorded_at: "2026-09-02T12:00:00.000Z",
-          recorded_by: { uid: "u1", name: "Vet", internal_role: "vet" },
+          recorded_by: { uid: "u1", name: "Sgt. Silva", internal_role: "condutor_k9" },
         }),
       ]);
 

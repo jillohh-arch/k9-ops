@@ -38,7 +38,6 @@ vi.mock("../data/clinical-events-reader", () => ({
   ) => readerMock.readAmendments(dogId, caseId, eventId),
 }));
 
-import type { ReadState } from "../../domain/read-states";
 import type {
   ClinicalEventReadModel,
   ClinicalAmendmentReadModel,
@@ -53,6 +52,11 @@ const allowedAccess: MockAccess = {
 const forbiddenAccess: MockAccess = {
   status: "ready",
   profile: { status: "active", permissions: { health: { view: true } } },
+};
+
+const inactiveAccess: MockAccess = {
+  status: "ready",
+  profile: { status: "inactive", permissions: { health: { read: true } } },
 };
 
 const loadingAccess: MockAccess = {
@@ -72,7 +76,7 @@ function createMockEvent(id: string): ClinicalEventReadModel {
     occurredAt: new Date("2026-09-01T10:00:00Z"),
     recordedAt: new Date("2026-09-01T10:05:00Z"),
     updatedAt: null,
-    recordedBy: { uid: "u1", name: "Dr. Silva", internalRole: "vet" },
+    recordedBy: { uid: "u1", name: "Sgt. Silva", internalRole: "condutor_k9" },
     payloadType: "consultation",
     payloadVersion: 1,
     schemaVersion: 1,
@@ -102,6 +106,18 @@ describe("useClinicalCaseEvents", () => {
 
   it("resolves to forbidden and NEVER reads events when permissions.health.read is missing", () => {
     accessState.current = forbiddenAccess;
+
+    const { result } = renderHook(() =>
+      useClinicalCaseEvents("k9-apollo", "case-1")
+    );
+
+    expect(result.current.authorityStatus).toBe("forbidden");
+    expect(result.current.state.status).toBe("forbidden");
+    expect(readerMock.readEvents).not.toHaveBeenCalled();
+  });
+
+  it("resolves to forbidden and NEVER reads events when profile is inactive, even if health.read is true", () => {
+    accessState.current = inactiveAccess;
 
     const { result } = renderHook(() =>
       useClinicalCaseEvents("k9-apollo", "case-1")
@@ -254,7 +270,7 @@ describe("useClinicalCaseEvents", () => {
         payloadType: null,
         payloadVersion: null,
         content: {},
-        recordedBy: { uid: "u1", name: "Dr. Silva", internalRole: "vet" },
+        recordedBy: { uid: "u1", name: "Sgt. Silva", internalRole: "condutor_k9" },
         recordedAt: new Date("2026-09-01T12:00:00Z"),
         schemaVersion: 1,
         dataQualityIssues: [],

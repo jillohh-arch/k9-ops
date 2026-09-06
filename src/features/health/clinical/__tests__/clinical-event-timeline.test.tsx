@@ -1,6 +1,7 @@
-﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
+import type { ReadState } from "../../domain/read-states";
 import type {
   ClinicalEventReadModel,
   ClinicalAmendmentReadModel,
@@ -8,11 +9,11 @@ import type {
 import { ClinicalEventTimeline } from "../presentation/clinical-event-timeline";
 
 const hookMock = vi.hoisted(() => ({
-  state: { status: "loading" } as any,
-  authorityStatus: "allowed",
+  state: { status: "loading" } as ReadState<ClinicalEventReadModel[]>,
+  authorityStatus: "allowed" as const,
   refresh: vi.fn(),
   loadAmendmentsForEvent: vi.fn(),
-  amendmentsState: {} as Record<string, any>,
+  amendmentsState: {} as Record<string, ReadState<ClinicalAmendmentReadModel[]> | undefined>,
 }));
 
 vi.mock("../hooks/use-clinical-case-events", () => ({
@@ -37,7 +38,7 @@ function mockEvent(overrides: Partial<ClinicalEventReadModel> = {}): ClinicalEve
     occurredAt: new Date("2026-09-02T10:00:00Z"),
     recordedAt: new Date("2026-09-02T10:05:00Z"),
     updatedAt: null,
-    recordedBy: { uid: "u1", name: "Dr. João Silva", internalRole: "veterinarian" },
+    recordedBy: { uid: "u1", name: "Sgt. Silva", internalRole: "condutor_k9" },
     payloadType: "consultation",
     payloadVersion: 1,
     schemaVersion: 1,
@@ -121,6 +122,7 @@ describe("ClinicalEventTimeline (Front 30 Presentation)", () => {
   it("renders error state with retry button", () => {
     hookMock.state = {
       status: "error",
+      code: "FIRESTORE_ERROR",
       message: "Erro de conexão",
       retryable: true,
     };
@@ -154,7 +156,7 @@ describe("ClinicalEventTimeline (Front 30 Presentation)", () => {
       "Dr. Roberto (CRMV-SP 12345) — Clínica Vet"
     );
     expect(screen.getByTestId("clinical-event-recorder")).toHaveTextContent(
-      "Dr. João Silva (veterinarian)"
+      "Sgt. Silva (condutor_k9)"
     );
     expect(screen.getByTestId("clinical-event-attachments")).toHaveTextContent(
       "1 anexo(s)"
@@ -242,7 +244,7 @@ describe("ClinicalEventTimeline (Front 30 Presentation)", () => {
       payloadType: null,
       payloadVersion: null,
       content: { dose: "500mg" },
-      recordedBy: { uid: "u1", name: "Dr. Silva", internalRole: "vet" },
+      recordedBy: { uid: "u1", name: "Sgt. Silva", internalRole: "condutor_k9" },
       recordedAt: new Date("2026-09-02T12:00:00Z"),
       schemaVersion: 1,
       ordinal: 1,

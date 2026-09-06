@@ -1,4 +1,4 @@
-﻿/**
+/**
  * K9 Ops Web — Health Web v1 HW-6B / F20.1 Intake
  * Clinical Events & Amendments Firestore Reader
  *
@@ -7,6 +7,7 @@
  * - Amendments: dogs/{dogId}/clinical_cases/{caseId}/clinical_events/{eventId}/clinical_amendments
  *
  * Front 20 Clinical Read authority:
+ * - Authoritative runtime contract: F20.1 frozen runtime @ 288c2e0
  * - Requires explicit `health.read` capability with NO admin bypass.
  * - DogId and CaseId are structural path segments.
  *

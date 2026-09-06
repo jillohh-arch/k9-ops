@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   parseClinicalEventWireDoc,
   parseClinicalAmendmentWireDoc,
@@ -20,9 +20,9 @@ describe("ClinicalEventDocumentParser (Front 30 Web Intake)", () => {
       recorded_at: "2026-09-01T10:05:00.000Z",
       updated_at: "2026-09-01T10:05:00.000Z",
       recorded_by: {
-        uid: "vet-user-1",
-        name: "Dr. João Silva",
-        internal_role: "veterinarian",
+        uid: "user-1",
+        name: "Sgt. Silva",
+        internal_role: "condutor_k9",
       },
       payload_type: "clinical_consultation",
       payload_version: 1,
@@ -54,9 +54,9 @@ describe("ClinicalEventDocumentParser (Front 30 Web Intake)", () => {
     expect(parsed.occurredAt?.toISOString()).toBe("2026-09-01T10:00:00.000Z");
     expect(parsed.recordedAt?.toISOString()).toBe("2026-09-01T10:05:00.000Z");
     expect(parsed.recordedBy).toEqual({
-      uid: "vet-user-1",
-      name: "Dr. João Silva",
-      internalRole: "veterinarian",
+      uid: "user-1",
+      name: "Sgt. Silva",
+      internalRole: "condutor_k9",
     });
     expect(parsed.content).toEqual({
       anamnesis: "Paciente sem queixas.",
@@ -223,7 +223,7 @@ describe("ClinicalEventDocumentParser (Front 30 Web Intake)", () => {
       status: "cancelled",
       occurred_at: "2026-09-01T10:00:00.000Z",
       recorded_at: "2026-09-01T10:05:00.000Z",
-      recorded_by: { uid: "u1", name: "User", internal_role: "vet" },
+      recorded_by: { uid: "u1", name: "User", internal_role: "condutor_k9" },
       payload_type: "note",
       payload_version: 1,
       schema_version: 1,
@@ -248,7 +248,7 @@ describe("ClinicalEventDocumentParser (Front 30 Web Intake)", () => {
       status: "cancelled",
       occurred_at: "2026-09-01T10:00:00.000Z",
       recorded_at: "2026-09-01T10:05:00.000Z",
-      recorded_by: { uid: "u1", name: "User", internal_role: "vet" },
+      recorded_by: { uid: "u1", name: "User", internal_role: "condutor_k9" },
       payload_type: "note",
       payload_version: 1,
       schema_version: 1,
@@ -270,7 +270,7 @@ describe("ClinicalEventDocumentParser (Front 30 Web Intake)", () => {
       status: "final",
       occurred_at: "2026-09-01T10:00:00.000Z",
       recorded_at: "2026-09-01T10:05:00.000Z",
-      recorded_by: { uid: "u1", name: "User", internal_role: "vet" },
+      recorded_by: { uid: "u1", name: "User", internal_role: "condutor_k9" },
       payload_type: "note",
       payload_version: 1,
       schema_version: 1,
@@ -309,9 +309,9 @@ describe("ClinicalAmendmentDocumentParser (Front 30 Web Intake)", () => {
       reason: "Correção na posologia do antibiótico",
       recorded_at: "2026-09-01T12:00:00.000Z",
       recorded_by: {
-        uid: "vet-user-2",
-        name: "Dra. Maria",
-        internal_role: "veterinarian",
+        uid: "user-2",
+        name: "Cabo Souza",
+        internal_role: "operador",
       },
       payload_type: "posology_correction",
       payload_version: 1,
@@ -336,7 +336,7 @@ describe("ClinicalAmendmentDocumentParser (Front 30 Web Intake)", () => {
     expect(parsed.rawType).toBe("correction");
     expect(parsed.reason).toBe("Correção na posologia do antibiótico");
     expect(parsed.recordedAt?.toISOString()).toBe("2026-09-01T12:00:00.000Z");
-    expect(parsed.recordedBy?.name).toBe("Dra. Maria");
+    expect(parsed.recordedBy?.name).toBe("Cabo Souza");
     expect(parsed.content).toEqual({ dosage: "250mg 2x/dia" });
     expect(parsed.ordinal).toBe(1);
     expect(parsed.dataQualityIssues).toEqual([]);
@@ -347,7 +347,7 @@ describe("ClinicalAmendmentDocumentParser (Front 30 Web Intake)", () => {
       type: "custom_type",
       reason: "",
       recorded_at: "2026-09-01T12:00:00.000Z",
-      recorded_by: { uid: "u1", name: "User", internal_role: "vet" },
+      recorded_by: { uid: "u1", name: "Sgt. Silva", internal_role: "condutor_k9" },
     };
 
     const parsed = parseClinicalAmendmentWireDoc(

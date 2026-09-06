@@ -26,7 +26,7 @@
  * reused rather than reimplemented.
  */
 
-import React, { Suspense } from "react";
+import React from "react";
 import { Dog } from "lucide-react";
 
 import { Dialog } from "@/components/ui/dialog";

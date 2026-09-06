@@ -1,11 +1,13 @@
-﻿/**
+/**
  * K9 Ops Web — Health Web v1 HW-6B / F20.1 Intake
  * ClinicalEvent and ClinicalAmendment Fail-Safe Parsers
  *
- * Canonical authority:
+ * Authoritative runtime read contract:
+ * - F20.1 frozen runtime read contract @ 288c2e0 (authoritative)
+ *
+ * Background references (historical schema):
  * - HEALTH_V1_FIRESTORE_SCHEMA.md §2.2 (`clinical_events/{eventId}`)
  * - HEALTH_V1_FIRESTORE_SCHEMA.md §2.3 (`clinical_amendments/{amendmentId}`)
- * - F20.1 frozen runtime read contract @ 288c2e0
  *
  * Invariants:
  * 1. Does NOT throw fatal exceptions on individual malformed documents.
@@ -55,18 +57,14 @@ function parseActor(
   const rawRole = map.internal_role ?? map.internalRole ?? map.role;
   const internalRole = typeof rawRole === "string" ? rawRole.trim() : "";
 
-  let degraded = false;
   if (!uid) {
     issues.push(`${prefix}_missing_uid`);
-    degraded = true;
   }
   if (!name) {
     issues.push(`${prefix}_missing_name`);
-    degraded = true;
   }
   if (!internalRole) {
     issues.push(`${prefix}_missing_internal_role`);
-    degraded = true;
   }
 
   if (!uid && !name && !internalRole) {

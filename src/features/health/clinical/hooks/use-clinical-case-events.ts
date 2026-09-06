@@ -1,30 +1,33 @@
-﻿"use client";
+"use client";
 
 /**
  * K9 Ops Web — Health Web v1 HW-6B
  * Clinical Case Events Hook — Authority-gated, race-safe, lazy-amendment capable.
  *
  * Responsibilities:
- * - Coordinates strict authority boundary (`profile.permissions.health.read === true`) before querying events.
+ * - Coordinates canonical authority boundary (`useClinicalReadAuthority`: active profile + `health.read === true`) before querying events.
  * - Guarantees NO Firestore read starts if authority is loading or forbidden.
  * - Handles switching selected case cleanly without leaking previous state.
  * - Provides on-demand lazy amendment loading per event without N+1 fanout on open.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useAccessControl } from "@/features/access/providers/access-control-provider";
+import { useCallback, useEffect, useState } from "react";
 import type { ReadState } from "../../domain/read-states";
 import {
   CLINICAL_READ_CAPABILITY,
   readClinicalEventsForCase,
   readClinicalAmendmentsForEvent,
 } from "../data/clinical-events-reader";
+import {
+  useClinicalReadAuthority,
+  type ClinicalReadAuthorityStatus,
+} from "./use-clinical-read-authority";
 import type {
   ClinicalEventReadModel,
   ClinicalAmendmentReadModel,
 } from "../types";
 
-export type ClinicalReadAuthorityStatus = "loading" | "allowed" | "forbidden";
+export type { ClinicalReadAuthorityStatus };
 
 export interface UseClinicalCaseEventsResult {
   state: ReadState<ClinicalEventReadModel[]>;
@@ -43,35 +46,27 @@ const FORBIDDEN_STATE: ReadState<ClinicalEventReadModel[]> = {
 const LOADING_STATE: ReadState<ClinicalEventReadModel[]> = { status: "loading" };
 const IDLE_STATE: ReadState<ClinicalEventReadModel[]> = { status: "idle" };
 
+interface EventCycleResult {
+  cycleKey: string;
+  state: ReadState<ClinicalEventReadModel[]>;
+}
+
 export function useClinicalCaseEvents(
   dogId: string | null | undefined,
   caseId: string | null | undefined
 ): UseClinicalCaseEventsResult {
-  const { profile, status: accessStatus } = useAccessControl();
-
-  const authorityStatus: ClinicalReadAuthorityStatus =
-    accessStatus === "loading"
-      ? "loading"
-      : (profile?.permissions as Record<string, unknown> | undefined)?.health &&
-        typeof (profile?.permissions as Record<string, unknown>).health === "object" &&
-        ((profile?.permissions as Record<string, unknown>).health as Record<string, unknown>).read === true
-      ? "allowed"
-      : "forbidden";
+  const { status: authorityStatus, canRead } = useClinicalReadAuthority();
 
   const [nonce, setNonce] = useState(0);
+  const [cycleResult, setCycleResult] = useState<EventCycleResult | null>(null);
 
-  const [publishedState, setPublishedState] = useState<ReadState<ClinicalEventReadModel[]>>(
-    () => (dogId && caseId ? LOADING_STATE : IDLE_STATE)
-  );
+  const [amendmentsState, setAmendmentsState] = useState<{
+    targetKey: string;
+    map: Record<string, ReadState<ClinicalAmendmentReadModel[]> | undefined>;
+  }>({ targetKey: "", map: {} });
 
-  const [amendmentsState, setAmendmentsState] = useState<
-    Record<string, ReadState<ClinicalAmendmentReadModel[]> | undefined>
-  >({});
-
-  // Cycle tracking to reject stale async resolutions
-  const cycleRef = useRef<string>("");
-  const currentCycleKey = `${authorityStatus}#${dogId ?? ""}#${caseId ?? ""}#${nonce}`;
-  cycleRef.current = currentCycleKey;
+  const currentTargetKey = dogId && caseId ? `${dogId}#${caseId}` : "";
+  const cycleKey = `${authorityStatus}#${currentTargetKey}#${nonce}`;
 
   const refresh = useCallback(() => {
     if (authorityStatus === "allowed") {
@@ -79,79 +74,73 @@ export function useClinicalCaseEvents(
     }
   }, [authorityStatus]);
 
-  // Clean reset when dogId or caseId changes
   useEffect(() => {
-    setAmendmentsState({});
-  }, [dogId, caseId]);
-
-  useEffect(() => {
-    if (!dogId || !caseId) {
-      setPublishedState(IDLE_STATE);
+    if (!dogId || !caseId || !canRead) {
       return;
     }
 
-    if (authorityStatus === "loading") {
-      setPublishedState(LOADING_STATE);
-      return;
-    }
-
-    if (authorityStatus === "forbidden") {
-      setPublishedState(FORBIDDEN_STATE);
-      return;
-    }
-
-    let isMounted = true;
-    const requestCycle = currentCycleKey;
-
-    setPublishedState(LOADING_STATE);
+    let isCurrent = true;
 
     readClinicalEventsForCase(dogId, caseId).then((res) => {
-      if (!isMounted) return;
-      if (cycleRef.current !== requestCycle) return;
-      setPublishedState(res);
+      if (!isCurrent) return;
+      setCycleResult({ cycleKey, state: res });
     });
 
     return () => {
-      isMounted = false;
+      isCurrent = false;
     };
-  }, [dogId, caseId, authorityStatus, nonce, currentCycleKey]);
+  }, [dogId, caseId, canRead, cycleKey]);
 
   const loadAmendmentsForEvent = useCallback(
     async (eventId: string) => {
       if (!dogId || !caseId || !eventId) return;
       if (authorityStatus !== "allowed") return;
 
-      // Mark event amendment as loading
+      const target = `${dogId}#${caseId}`;
+
       setAmendmentsState((prev) => ({
-        ...prev,
-        [eventId]: { status: "loading" },
+        targetKey: target,
+        map: {
+          ...(prev.targetKey === target ? prev.map : {}),
+          [eventId]: { status: "loading" },
+        },
       }));
 
       const res = await readClinicalAmendmentsForEvent(dogId, caseId, eventId);
 
       setAmendmentsState((prev) => ({
-        ...prev,
-        [eventId]: res,
+        targetKey: target,
+        map: {
+          ...(prev.targetKey === target ? prev.map : {}),
+          [eventId]: res,
+        },
       }));
     },
     [dogId, caseId, authorityStatus]
   );
 
   // Derive final technical state
-  let effectiveState: ReadState<ClinicalEventReadModel[]> = publishedState;
+  let effectiveState: ReadState<ClinicalEventReadModel[]>;
   if (!dogId || !caseId) {
     effectiveState = IDLE_STATE;
   } else if (authorityStatus === "loading") {
     effectiveState = LOADING_STATE;
-  } else if (authorityStatus === "forbidden") {
+  } else if (!canRead) {
     effectiveState = FORBIDDEN_STATE;
+  } else if (cycleResult && cycleResult.cycleKey === cycleKey) {
+    effectiveState = cycleResult.state;
+  } else {
+    effectiveState = LOADING_STATE;
   }
+
+  const effectiveAmendments =
+    amendmentsState.targetKey === currentTargetKey ? amendmentsState.map : {};
 
   return {
     state: effectiveState,
     authorityStatus,
     refresh,
     loadAmendmentsForEvent,
-    amendmentsState,
+    amendmentsState: effectiveAmendments,
   };
 }

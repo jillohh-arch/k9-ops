@@ -110,3 +110,39 @@ export const CLINICAL_ABSENT_TITLE_LABEL = "Sem título informado";
 export const CLINICAL_NO_LATER_ACTIVITY_LABEL = "Sem atividade posterior";
 export const CLINICAL_UNRECOGNIZED_STATUS_LABEL = "Status não reconhecido";
 export const CLINICAL_UNAVAILABLE_LABEL = "Indisponível";
+
+/** Labels for ClinicalEventType presentation */
+export const CLINICAL_EVENT_TYPE_LABELS: Record<string, string> = {
+  consultation: "Consulta",
+  incident: "Incidente",
+  vaccination: "Vacinação",
+  exam_request: "Solicitação de Exame",
+  exam_collection: "Coleta de Exame",
+  exam_result: "Resultado de Exame",
+  exam_interpretation: "Interpretação de Exame",
+  treatment_start: "Início de Tratamento",
+  treatment_note: "Nota de Tratamento",
+  dose_note: "Aplicação de Dose",
+  reevaluation: "Reavaliação",
+  discharge: "Alta Clínica",
+  reopen: "Reabertura de Caso",
+  restriction_issued: "Restrição Emitida",
+  restriction_ended: "Fim de Restrição",
+  surgical_note: "Nota Cirúrgica",
+  general_note: "Nota Geral",
+  observation: "Observação",
+};
+
+/** Labels for ClinicalEventStatus presentation */
+export const CLINICAL_EVENT_STATUS_LABELS: Record<string, string> = {
+  draft: "Rascunho",
+  final: "Finalizado",
+  cancelled: "Cancelado",
+};
+
+/** Labels for ClinicalAmendmentType presentation */
+export const CLINICAL_AMENDMENT_TYPE_LABELS: Record<string, string> = {
+  correction: "Correção",
+  addendum: "Adendo",
+  complement: "Complemento",
+};

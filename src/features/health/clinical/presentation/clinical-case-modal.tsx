@@ -26,6 +26,7 @@
  * reused rather than reimplemented.
  */
 
+import React from "react";
 import { Dog } from "lucide-react";
 
 import { Dialog } from "@/components/ui/dialog";
@@ -41,6 +42,12 @@ import {
   CLINICAL_ABSENT_TITLE_LABEL,
   CLINICAL_NO_LATER_ACTIVITY_LABEL,
 } from "./types";
+
+const ClinicalEventTimeline = React.lazy(() =>
+  import("./clinical-event-timeline").then((m) => ({
+    default: m.ClinicalEventTimeline,
+  }))
+);
 
 /** A titled block of label/value pairs. */
 function Section({
@@ -249,6 +256,20 @@ export function ClinicalCaseModal({
           />
         </Section>
 
+        {/* EVENTOS CLÍNICOS TIMELINE — Read-only timeline of case events */}
+        <React.Suspense
+          fallback={
+            <div
+              className="flex items-center justify-center p-6 text-xs text-slate-400"
+              data-testid="clinical-timeline-suspense-fallback"
+            >
+              Carregando eventos clínicos...
+            </div>
+          }
+        >
+          <ClinicalEventTimeline dogId={item.dogId} caseId={item.caseId} />
+        </React.Suspense>
+
         {/*
           The scope statement. It is here so the reader knows the modal is a
           SUMMARY of an authorized read — not a truncated view of something richer
@@ -259,8 +280,7 @@ export function ClinicalCaseModal({
           data-testid="clinical-modal-scope-note"
         >
           Resumo baseado apenas nos dados já disponíveis na leitura autorizada
-          deste caso. Histórico de eventos, documentos e edição clínica não fazem
-          parte desta visualização.
+          deste caso. Documentos e edição clínica não fazem parte desta visualização.
         </p>
       </div>
     </Dialog>

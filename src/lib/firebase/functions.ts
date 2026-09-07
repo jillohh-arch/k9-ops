@@ -36,6 +36,16 @@ export const callAdminAssignAccessProfile = httpsCallable<
   { profileId?: string; profileName?: string; ra?: string }
 >(functions, "adminAssignAccessProfile");
 
+export const callAdminUnassignAccessProfile = httpsCallable<
+  { ra: string },
+  {
+    previousProfileId?: string | null;
+    previousProfileName?: string | null;
+    ra?: string;
+    unassigned?: boolean;
+  }
+>(functions, "adminUnassignAccessProfile");
+
 export const callAdminSeedAccessProfiles = httpsCallable<
   { profiles: Array<Record<string, unknown>>; reconcile?: boolean },
   { archived?: string[]; created?: string[]; updated?: string[] }

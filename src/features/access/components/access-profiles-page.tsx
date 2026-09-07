@@ -21,10 +21,12 @@ import { Button } from "@/components/ui/button";
 import {
   assignUserAccessProfile,
   seedDefaultAccessProfiles,
+  unassignUserAccessProfile,
   type AccessUser,
 } from "@/features/access/data/access-profile-service";
 import { useAccessProfiles } from "@/features/access/hooks/use-access-profiles";
 import { useAccessUsers } from "@/features/access/hooks/use-access-users";
+import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAuth } from "@/features/auth/providers/auth-provider";
 import {
   accessActions,
@@ -112,9 +114,7 @@ function rawUserProfileId(user: AccessUser) {
 }
 
 function visibleUserProfileId(user: AccessUser) {
-  const profileId = rawUserProfileId(user);
-  if (profileId === "instrutor_k9") return "operador_k9";
-  return profileId;
+  return rawUserProfileId(user);
 }
 
 function hasNumericRa(user: AccessUser) {
@@ -343,12 +343,16 @@ function UserRow({
 }
 
 export function AccessProfilesPage() {
+  const { can } = useAccessControl();
+  const canManageAccess = can("access", "edit");
   const { profile: authProfile } = useAuth();
   const { profiles, loading: profilesLoading } = useAccessProfiles();
   const { users, loading: usersLoading } = useAccessUsers();
   const [selectedProfileId, setSelectedProfileId] = useState("operador_k9");
   const [searchQuery, setSearchQuery] = useState("");
   const [assigningRa, setAssigningRa] = useState<string | null>(null);
+  const [unassignTargetUser, setUnassignTargetUser] = useState<AccessUser | null>(null);
+  const [unassigningRa, setUnassigningRa] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -440,6 +444,27 @@ export function AccessProfilesPage() {
       );
     } finally {
       setAssigningRa(null);
+    }
+  }
+
+  async function handleUnassignUser(user: AccessUser) {
+    setUnassigningRa(user.ra);
+    setErrorMessage(null);
+    setStatusMessage(null);
+    try {
+      await unassignUserAccessProfile(user.ra, authProfile?.ra ?? null);
+      setStatusMessage(
+        `Perfil ${selectedProfile?.name ?? ""} desvinculado com sucesso de ${user.callsign || user.ra}. O acesso base agora está Não provisionado.`,
+      );
+      setUnassignTargetUser(null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível desvincular o perfil de acesso.",
+      );
+    } finally {
+      setUnassigningRa(null);
     }
   }
 
@@ -636,7 +661,26 @@ export function AccessProfilesPage() {
           >
             <div className="space-y-3">
               {selectedProfileUsers.slice(0, 6).map((user) => (
-                <UserRow key={user.ra} selected user={user} />
+                <div className="flex items-center gap-2" key={user.ra}>
+                  <div className="min-w-0 flex-1">
+                    <UserRow selected user={user} />
+                  </div>
+                  {canManageAccess ? (
+                    <button
+                      className="shrink-0 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-400/[0.14] disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={!user.active || assigningRa === user.ra || unassigningRa === user.ra}
+                      onClick={() => setUnassignTargetUser(user)}
+                      title={
+                        !user.active
+                          ? "Reative o integrante antes de alterar o perfil de acesso."
+                          : "Desvincular usuário deste perfil"
+                      }
+                      type="button"
+                    >
+                      Desvincular
+                    </button>
+                  ) : null}
+                </div>
               ))}
               {!selectedProfileUsers.length ? (
                 <p className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">
@@ -691,6 +735,69 @@ export function AccessProfilesPage() {
           </SectionCard>
         </aside>
       </div>
+
+      {unassignTargetUser ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1b2a] p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">
+              Desvincular perfil de acesso
+            </h3>
+            <p className="mt-2 text-sm text-slate-300">
+              Confirma a desvinculação de{" "}
+              <strong className="text-white">
+                {unassignTargetUser.callsign || unassignTargetUser.fullName || unassignTargetUser.ra}
+              </strong>{" "}
+              (RA {unassignTargetUser.ra}) do perfil{" "}
+              <strong className="text-cyan-200">{selectedProfile?.name}</strong>?
+            </p>
+
+            <div className="mt-4 space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3 text-xs text-slate-400">
+              <p>
+                <strong className="text-slate-300">• Acesso base:</strong> Passará para{" "}
+                <span className="font-semibold text-cyan-200">Não provisionado</span>.
+              </p>
+              <p>
+                <strong className="text-slate-300">• Integrante (Lifecycle):</strong> O cadastro no efetivo{" "}
+                <span className="text-slate-200">não é desativado</span>.
+              </p>
+              <p>
+                <strong className="text-slate-300">• Instrutor K9:</strong> A qualificação funcional{" "}
+                <span className="text-slate-200">permanece inalterada</span> independentemente.
+              </p>
+              <p>
+                <strong className="text-slate-300">• Autenticação (Auth):</strong> A conta de acesso{" "}
+                <span className="text-slate-200">não é removida</span>.
+              </p>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5"
+                disabled={unassigningRa === unassignTargetUser.ra}
+                onClick={() => setUnassignTargetUser(null)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+                disabled={unassigningRa === unassignTargetUser.ra}
+                onClick={() => handleUnassignUser(unassignTargetUser)}
+                type="button"
+              >
+                {unassigningRa === unassignTargetUser.ra ? (
+                  <span className="flex items-center gap-2">
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Desvinculando...
+                  </span>
+                ) : (
+                  "Confirmar desvinculação"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

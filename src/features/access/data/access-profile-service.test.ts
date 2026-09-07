@@ -7,11 +7,13 @@ vi.mock("@/lib/firebase/functions", () => ({
   callAdminSaveAccessProfile: vi.fn(),
   callAdminSeedAccessProfiles: vi.fn(),
   callAdminSetAccessProfileStatus: vi.fn(),
+  callAdminUnassignAccessProfile: vi.fn(),
 }));
 
 import {
   callAdminDuplicateAccessProfile,
   callAdminSaveAccessProfile,
+  callAdminUnassignAccessProfile,
 } from "@/lib/firebase/functions";
 import { getDefaultAccessProfile } from "@/lib/permissions/access-control";
 import {
@@ -20,6 +22,7 @@ import {
   duplicateAccessProfile,
   normalizeAccessProfile,
   saveAccessProfile,
+  unassignUserAccessProfile,
 } from "./access-profile-service";
 
 /**
@@ -221,5 +224,43 @@ describe("access profile save path", () => {
         }),
       }),
     });
+  });
+});
+
+describe("unassignUserAccessProfile", () => {
+  beforeEach(() => {
+    vi.mocked(callAdminUnassignAccessProfile).mockReset();
+  });
+
+  it("invokes callAdminUnassignAccessProfile with target RA", async () => {
+    vi.mocked(callAdminUnassignAccessProfile).mockResolvedValue({
+      data: {
+        previousProfileId: "operador_k9",
+        previousProfileName: "Operador",
+        ra: "990011",
+        unassigned: true,
+      },
+    } as never);
+
+    const result = await unassignUserAccessProfile("990011", "990001");
+
+    expect(callAdminUnassignAccessProfile).toHaveBeenCalledTimes(1);
+    expect(callAdminUnassignAccessProfile).toHaveBeenCalledWith({ ra: "990011" });
+    expect(result).toEqual({
+      previousProfileId: "operador_k9",
+      previousProfileName: "Operador",
+      ra: "990011",
+      unassigned: true,
+    });
+  });
+
+  it("propagates error when backend callable rejects", async () => {
+    vi.mocked(callAdminUnassignAccessProfile).mockRejectedValue(
+      new Error("Cadastro inativo nao pode receber ou trocar perfil de acesso."),
+    );
+
+    await expect(unassignUserAccessProfile("990011")).rejects.toThrow(
+      "Cadastro inativo nao pode receber ou trocar perfil de acesso.",
+    );
   });
 });

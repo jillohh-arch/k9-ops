@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * K9 Ops Web — Health Web v1 HW-6B
@@ -19,6 +19,16 @@ import type {
   ClinicalAmendmentReadModel,
 } from "../types";
 import { cn } from "@/lib/utils";
+
+export function formatOpenPayloadValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "Não informado";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
 
 export function ClinicalEventItem({
   event,
@@ -138,18 +148,24 @@ export function ClinicalEventItem({
       {/* Event Content / Details */}
       {contentEntries.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg bg-slate-950/40 p-3 text-xs" data-testid="clinical-event-content">
-          {contentEntries.map(([key, value]) => (
-            <div key={key} className="flex flex-col sm:flex-row sm:gap-2">
-              <span className="font-semibold text-slate-400 capitalize sm:min-w-[140px]">
-                {key.replace(/_/g, " ")}:
-              </span>
-              <span className="break-words text-slate-200">
-                {typeof value === "object" && value !== null
-                  ? JSON.stringify(value)
-                  : String(value)}
-              </span>
-            </div>
-          ))}
+          {contentEntries.map(([key, value]) => {
+            const isNullish = value === null || value === undefined;
+            return (
+              <div key={key} className="flex flex-col sm:flex-row sm:gap-2">
+                <span className="font-semibold text-slate-400 capitalize sm:min-w-[140px]">
+                  {key.replace(/_/g, " ")}:
+                </span>
+                <span
+                  className={cn(
+                    "break-words",
+                    isNullish ? "italic text-slate-400" : "text-slate-200"
+                  )}
+                >
+                  {formatOpenPayloadValue(value)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 

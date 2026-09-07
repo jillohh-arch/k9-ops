@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * K9 Ops Web — Health Web v1 HW-6B
@@ -7,8 +7,10 @@
 
 import React from "react";
 import { formatClinicalDate } from "./clinical-case-card";
+import { formatOpenPayloadValue } from "./clinical-event-item";
 import { CLINICAL_AMENDMENT_TYPE_LABELS } from "./types";
 import type { ClinicalAmendmentReadModel } from "../types";
+import { cn } from "@/lib/utils";
 
 export function ClinicalAmendmentItem({
   amendment,
@@ -65,16 +67,23 @@ export function ClinicalAmendmentItem({
         <div className="mt-1 flex flex-col gap-1">
           <span className="font-semibold text-slate-400">Conteúdo retificado:</span>
           <div className="flex flex-col gap-1 rounded bg-slate-950/40 p-2 font-mono text-[11px] text-slate-300">
-            {contentKeys.map((k) => (
-              <div key={k} className="flex gap-2">
-                <span className="text-cyan-400">{k}:</span>
-                <span className="break-all text-slate-300">
-                  {typeof amendment.content[k] === "object"
-                    ? JSON.stringify(amendment.content[k])
-                    : String(amendment.content[k])}
-                </span>
-              </div>
-            ))}
+            {contentKeys.map((k) => {
+              const val = amendment.content[k];
+              const isNullish = val === null || val === undefined;
+              return (
+                <div key={k} className="flex gap-2">
+                  <span className="text-cyan-400">{k}:</span>
+                  <span
+                    className={cn(
+                      "break-all",
+                      isNullish ? "italic text-slate-400" : "text-slate-300"
+                    )}
+                  >
+                    {formatOpenPayloadValue(val)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -12,10 +12,17 @@ import {
   UserX,
   UserCheck,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
+import { useAccessProfiles } from "@/features/access/hooks/use-access-profiles";
+import { unassignUserAccessProfile } from "@/features/access/data/access-profile-service";
 import { useAuth } from "@/features/auth/providers/auth-provider";
+import { resolveHumanAccessReadModel } from "@/features/effective/lib/human-access-read-model";
+import { defaultAccessProfiles } from "@/lib/permissions/access-control";
+import { paths } from "@/lib/routes/paths";
+import { cn } from "@/lib/utils";
 import {
   deactivateHumanLifecycle,
   isHumanLifecycleActive,
@@ -121,6 +128,16 @@ export function HumanManagementPanel({
   const currentRa = typeof profile?.ra === "string" ? profile.ra.trim() : "";
   const isSelf = currentRa.length > 0 && currentRa === ra.trim();
 
+  const { profiles: availableProfiles } = useAccessProfiles();
+  const accessModel = useMemo(
+    () =>
+      resolveHumanAccessReadModel(
+        record,
+        availableProfiles.length ? availableProfiles : defaultAccessProfiles,
+      ),
+    [record, availableProfiles],
+  );
+
   // State
   const [isInstructor, setIsInstructor] = useState(false);
   const [deactivateReason, setDeactivateReason] = useState("");
@@ -142,6 +159,7 @@ export function HumanManagementPanel({
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
   const [reactivateDialogOpen, setReactivateDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [unassignDialogOpen, setUnassignDialogOpen] = useState(false);
 
   // Nova senha temporária gerada pelo reset
   const [newTemporaryPassword, setNewTemporaryPassword] = useState<string | null>(null);
@@ -208,6 +226,27 @@ export function HumanManagementPanel({
       );
     } catch {
       showFeedback("Falha ao alterar role de instrutor.", "error");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleUnassignProfile() {
+    setActionLoading("unassign");
+    setFeedback(null);
+    try {
+      await unassignUserAccessProfile(ra, profile?.ra ?? null);
+      setUnassignDialogOpen(false);
+      showFeedback(
+        "Perfil de acesso desvinculado com sucesso. O acesso base agora está Não provisionado.",
+        "success",
+      );
+    } catch (error) {
+      const msg =
+        error instanceof Error
+          ? error.message
+          : "Falha ao desvincular perfil de acesso.";
+      showFeedback(msg, "error");
     } finally {
       setActionLoading(null);
     }
@@ -437,6 +476,69 @@ export function HumanManagementPanel({
             )}
             {isInstructor ? "Ativo" : "Inativo"}
           </button>
+        </div>
+
+        {/* Perfil de Acesso */}
+        <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="h-4 w-4 text-cyan-300" />
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-slate-100">
+                  {accessModel.profileName ?? (accessModel.status === "unprovisioned" ? "Não provisionado" : accessModel.detail)}
+                </p>
+                <span
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                    accessModel.status === "configured"
+                      ? "border-green-400/20 bg-green-400/10 text-green-300"
+                      : accessModel.status === "incomplete"
+                        ? "border-amber-400/20 bg-amber-400/10 text-amber-300"
+                        : "border-slate-500/20 bg-slate-500/10 text-slate-400",
+                  )}
+                >
+                  {accessModel.statusLabel}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                {accessModel.status === "configured"
+                  ? "Autoridade base atribuída via perfil de acesso."
+                  : accessModel.status === "incomplete"
+                    ? "Referência de acesso inconsistente ou não localizada."
+                    : "Sem perfil base de acesso vinculado."}
+              </p>
+            </div>
+          </div>
+
+          {accessModel.hasAccess || accessModel.profileId ? (
+            <button
+              className="rounded-lg border border-red-400/20 bg-red-400/[0.06] px-3 py-2 text-sm font-medium text-red-300 transition hover:bg-red-400/[0.12] disabled:opacity-50"
+              disabled={!!actionLoading || !userActive}
+              onClick={() => setUnassignDialogOpen(true)}
+              title={
+                !userActive
+                  ? "Reative o integrante antes de alterar o perfil de acesso."
+                  : undefined
+              }
+              type="button"
+            >
+              <span className="flex items-center gap-2">
+                {actionLoading === "unassign" ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <UserX className="h-4 w-4" />
+                )}
+                Desvincular perfil
+              </span>
+            </button>
+          ) : (
+            <Link
+              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300/25 bg-cyan-300/[0.08] px-3 py-2 text-xs font-bold text-cyan-200 transition hover:bg-cyan-300/[0.16]"
+              href={paths.access}
+            >
+              Atribuir em Acessos
+            </Link>
+          )}
         </div>
       </div>
       ) : null}
@@ -747,6 +849,70 @@ export function HumanManagementPanel({
             >
               Fechar
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ------ Dialog: Desvincular Perfil ------ */}
+      {unassignDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1b2a] p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-white">
+              Desvincular perfil de acesso
+            </h3>
+            <p className="mt-2 text-sm text-slate-300">
+              Tem certeza de que deseja remover o perfil de acesso de{" "}
+              <strong className="text-white">{userName || `RA ${ra}`}</strong> (RA {ra})?
+            </p>
+
+            <div className="mt-4 space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3 text-xs text-slate-400">
+              <p>
+                <strong className="text-slate-300">• Perfil atual:</strong>{" "}
+                {accessModel.profileName ?? accessModel.detail}
+              </p>
+              <p>
+                <strong className="text-slate-300">• Acesso base:</strong> Passará para{" "}
+                <span className="font-semibold text-cyan-200">Não provisionado</span>.
+              </p>
+              <p>
+                <strong className="text-slate-300">• Integrante (Lifecycle):</strong> O cadastro no efetivo{" "}
+                <span className="text-slate-200">não é desativado</span>.
+              </p>
+              <p>
+                <strong className="text-slate-300">• Instrutor K9:</strong> A qualificação funcional{" "}
+                <span className="text-slate-200">permanece preservada</span> independentemente.
+              </p>
+              <p>
+                <strong className="text-slate-300">• Autenticação (Auth):</strong> A conta do usuário{" "}
+                <span className="text-slate-200">não é excluída</span>.
+              </p>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5"
+                disabled={actionLoading === "unassign"}
+                onClick={() => setUnassignDialogOpen(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+                disabled={actionLoading === "unassign"}
+                onClick={handleUnassignProfile}
+                type="button"
+              >
+                {actionLoading === "unassign" ? (
+                  <span className="flex items-center gap-2">
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Desvinculando...
+                  </span>
+                ) : (
+                  "Confirmar desvinculação"
+                )}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

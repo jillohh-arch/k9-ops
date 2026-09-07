@@ -59,6 +59,20 @@ vi.mock("@/features/effective/data/human-management-service", () => ({
   toggleInstructorRole,
 }));
 
+const unassignUserAccessProfile = vi.fn();
+
+vi.mock("@/features/access/data/access-profile-service", () => ({
+  unassignUserAccessProfile: (...args: unknown[]) => unassignUserAccessProfile(...args),
+}));
+
+vi.mock("@/features/access/hooks/use-access-profiles", () => ({
+  useAccessProfiles: () => ({
+    error: null,
+    loading: false,
+    profiles: [],
+  }),
+}));
+
 vi.mock("@/lib/firebase/functions", () => ({
   callAdminDeactivateHuman: vi.fn(),
   callAdminReactivateHuman: vi.fn(),
@@ -793,5 +807,94 @@ describe("W1 — writers diretos legados", () => {
     expect(deactivateUser).not.toHaveBeenCalled();
     expect(reactivateUser).not.toHaveBeenCalled();
     expect(getUserStatus).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// K. GESTÃO DE PERFIL DE ACESSO & DESVINCULAÇÃO (F10.AUTHORIZATION-UX.V1)
+// ---------------------------------------------------------------------------
+
+describe("F10.AUTHORIZATION-UX.V1 — perfil de acesso e desvinculação", () => {
+  beforeEach(() => {
+    unassignUserAccessProfile.mockReset();
+    getUserRoles.mockResolvedValue([]);
+  });
+
+  it("exibe perfil configurado e botão de desvincular quando usuário possui perfil", async () => {
+    grant({ access: true });
+    renderPanel(activeRecord({ access_profile_id: "operador_k9" }));
+
+    expect(await screen.findByText("Operador")).toBeDefined();
+    expect(screen.getByText("Perfil configurado")).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: /desvincular perfil/i }),
+    ).toBeDefined();
+  });
+
+  it("desabilita botão de desvincular perfil quando o integrante está inativo", async () => {
+    grant({ access: true });
+    renderPanel(
+      activeRecord({
+        access_profile_id: "operador_k9",
+        active: false,
+      }),
+    );
+
+    const button = await screen.findByRole("button", {
+      name: /desvincular perfil/i,
+    });
+    expect(button.getAttribute("disabled")).not.toBeNull();
+    expect(button.getAttribute("title")).toContain(
+      "Reative o integrante antes de alterar o perfil de acesso.",
+    );
+  });
+
+  it("abre modal com copy explicita de invariantes e invoca unassignUserAccessProfile ao confirmar", async () => {
+    grant({ access: true });
+    authProfile = { ra: "990001" };
+    unassignUserAccessProfile.mockResolvedValue({
+      previousProfileId: "operador_k9",
+      previousProfileName: "Operador",
+      ra: RA,
+      unassigned: true,
+    });
+
+    renderPanel(activeRecord({ access_profile_id: "operador_k9" }));
+
+    const unassignBtn = await screen.findByRole("button", {
+      name: /desvincular perfil/i,
+    });
+    fireEvent.click(unassignBtn);
+
+    // Modal dialog aberto com cópia fiel aos contratos
+    expect(screen.getByText(/Desvincular perfil de acesso/i)).toBeDefined();
+    expect(screen.getByText(/Não provisionado/i)).toBeDefined();
+    expect(screen.getByText(/não é desativado/i)).toBeDefined();
+    expect(screen.getByText(/permanece preservada/i)).toBeDefined();
+    expect(screen.getByText(/não é excluída/i)).toBeDefined();
+
+    // Confirmar
+    const confirmBtn = screen.getByRole("button", {
+      name: /confirmar desvinculação/i,
+    });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() =>
+      expect(unassignUserAccessProfile).toHaveBeenCalledWith(RA, "990001"),
+    );
+    expect(
+      await screen.findByText(
+        /Perfil de acesso desvinculado com sucesso. O acesso base agora está Não provisionado./i,
+      ),
+    ).toBeDefined();
+  });
+
+  it("exibe 'Não provisionado' e link para Acessos quando integrante não possui perfil atribuído", async () => {
+    grant({ access: true });
+    renderPanel(activeRecord({ access_profile_id: null }));
+
+    expect((await screen.findAllByText("Não provisionado")).length).toBeGreaterThanOrEqual(1);
+    const link = screen.getByRole("link", { name: /atribuir em acessos/i });
+    expect(link.getAttribute("href")).toBe("/access");
   });
 });

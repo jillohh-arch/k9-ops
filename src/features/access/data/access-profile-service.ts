@@ -16,6 +16,7 @@ import {
   callAdminSaveAccessProfile,
   callAdminSeedAccessProfiles,
   callAdminSetAccessProfileStatus,
+  callAdminUnassignAccessProfile,
 } from "@/lib/firebase/functions";
 import {
   defaultAccessProfiles,
@@ -326,6 +327,15 @@ export async function assignUserAccessProfile(
     profileId: profile.id,
     ra: user.ra,
   });
+}
+
+export async function unassignUserAccessProfile(
+  ra: string,
+  actorRa?: string | null,
+) {
+  void actorRa;
+  const response = await callAdminUnassignAccessProfile({ ra });
+  return response.data;
 }
 
 export async function seedDefaultAccessProfiles(actorRa?: string | null) {

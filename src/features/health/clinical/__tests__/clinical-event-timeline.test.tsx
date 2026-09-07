@@ -7,6 +7,7 @@ import type {
   ClinicalAmendmentReadModel,
 } from "../types";
 import { ClinicalEventTimeline } from "../presentation/clinical-event-timeline";
+import { formatOpenPayloadValue } from "../presentation/clinical-event-item";
 
 const hookMock = vi.hoisted(() => ({
   state: { status: "loading" } as ReadState<ClinicalEventReadModel[]>,
@@ -272,5 +273,110 @@ describe("ClinicalEventTimeline (Front 30 Presentation)", () => {
     expect(screen.getByTestId("clinical-amendment-reason")).toHaveTextContent(
       "Dose ajustada para 500mg"
     );
+  });
+
+  it("renders 'Não informado' for null/undefined content fields instead of literal 'null'/'undefined'", () => {
+    const evt = mockEvent({
+      content: {
+        if_lab_name: null,
+        notes: undefined,
+        active_status: false,
+        retry_count: 0,
+        empty_field: "",
+      },
+    });
+
+    hookMock.state = {
+      status: "success",
+      data: [evt],
+      fetchedAt: new Date(),
+    };
+
+    render(<ClinicalEventTimeline dogId="k9-apollo" caseId="case-1" />);
+
+    const contentBox = screen.getByTestId("clinical-event-content");
+    expect(contentBox).toBeInTheDocument();
+
+    // Verify null is presented as "Não informado" and NOT literal "null"
+    expect(contentBox).toHaveTextContent("if lab name:Não informado");
+    expect(contentBox).not.toHaveTextContent("if lab name:null");
+    expect(contentBox).not.toHaveTextContent("if lab name: null");
+
+    // Verify undefined is presented as "Não informado"
+    expect(contentBox).toHaveTextContent("notes:Não informado");
+    expect(contentBox).not.toHaveTextContent("notes:undefined");
+
+    // Verify false, 0, and "" are preserved and NOT converted to "Não informado"
+    expect(contentBox).toHaveTextContent("active status:false");
+    expect(contentBox).toHaveTextContent("retry count:0");
+  });
+
+  it("renders 'Não informado' for null values in amendment content", () => {
+    const evt = mockEvent({
+      hasAmendments: true,
+      amendmentCount: 1,
+    });
+
+    hookMock.state = {
+      status: "success",
+      data: [evt],
+      fetchedAt: new Date(),
+    };
+
+    const mockAmend: ClinicalAmendmentReadModel = {
+      id: "amend-2",
+      eventId: "evt-1",
+      caseId: "case-1",
+      dogId: "k9-apollo",
+      type: "correction",
+      rawType: "correction",
+      reason: "Retificação de laboratório",
+      payloadType: null,
+      payloadVersion: null,
+      content: { if_lab_name: null, confirmed: false },
+      recordedBy: { uid: "u1", name: "Sgt. Silva", internalRole: "condutor_k9" },
+      recordedAt: new Date("2026-09-02T12:00:00Z"),
+      schemaVersion: 1,
+      ordinal: 1,
+      dataQualityIssues: [],
+      rawDoc: {},
+    };
+
+    hookMock.amendmentsState = {
+      "evt-1": {
+        status: "success",
+        data: [mockAmend],
+        fetchedAt: new Date(),
+      },
+    };
+
+    render(<ClinicalEventTimeline dogId="k9-apollo" caseId="case-1" />);
+
+    const toggleBtn = screen.getByTestId("clinical-event-amendments-toggle");
+    fireEvent.click(toggleBtn);
+
+    const amendItem = screen.getByTestId("clinical-amendment-item-amend-2");
+    expect(amendItem).toHaveTextContent("if_lab_name:Não informado");
+    expect(amendItem).not.toHaveTextContent("if_lab_name:null");
+    expect(amendItem).toHaveTextContent("confirmed:false");
+  });
+
+  describe("formatOpenPayloadValue", () => {
+    it("renders 'Não informado' for null and undefined", () => {
+      expect(formatOpenPayloadValue(null)).toBe("Não informado");
+      expect(formatOpenPayloadValue(undefined)).toBe("Não informado");
+    });
+
+    it("preserves truthful values: false, 0, and empty string without converting to 'Não informado'", () => {
+      expect(formatOpenPayloadValue(false)).toBe("false");
+      expect(formatOpenPayloadValue(0)).toBe("0");
+      expect(formatOpenPayloadValue("")).toBe("");
+    });
+
+    it("formats objects and arrays as JSON strings and preserves plain strings", () => {
+      expect(formatOpenPayloadValue({ lab: "BioVet" })).toBe('{"lab":"BioVet"}');
+      expect(formatOpenPayloadValue([1, 2])).toBe("[1,2]");
+      expect(formatOpenPayloadValue("texto simples")).toBe("texto simples");
+    });
   });
 });

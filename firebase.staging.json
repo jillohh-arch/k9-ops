@@ -1,0 +1,15 @@
+{
+  "hosting": {
+    "site": "k9-ops-staging",
+    "source": ".",
+    "ignore": [
+      "firebase.json",
+      "firebase.staging.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "frameworksBackend": {
+      "region": "southamerica-east1"
+    }
+  }
+}

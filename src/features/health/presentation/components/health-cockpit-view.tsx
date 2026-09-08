@@ -12,6 +12,7 @@ import Link from "next/link";
 import { AlertOctagon, ArrowLeft, Dog as DogIcon, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useReadinessCockpit } from "../hooks/use-readiness-cockpit";
+import { ForbiddenState } from "./health-technical-states";
 import { HealthCockpitHeader } from "./health-cockpit-header";
 import {
   CockpitClinicalContext,
@@ -32,6 +33,24 @@ export function HealthCockpitView({ dogId }: { dogId: string }) {
 
   if (status === "loading") {
     return <CockpitSkeleton />;
+  }
+
+  if (status === "forbidden") {
+    return (
+      <div
+        className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-border/60 bg-card/40 p-10 text-center shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
+        data-testid="cockpit-forbidden"
+      >
+        <ForbiddenState
+          requiredCapability="health.read"
+          message="Leitura do cockpit de prontidão não autorizada para o perfil de acesso atual."
+        />
+        <Link href="/health/readiness" className={backLink}>
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Voltar à prontidão do efetivo</span>
+        </Link>
+      </div>
+    );
   }
 
   /*

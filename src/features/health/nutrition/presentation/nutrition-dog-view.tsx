@@ -20,8 +20,10 @@ import { paths } from "../../domain/paths";
 import { HealthModuleShell } from "../../presentation/components/health-module-shell";
 import {
   ErrorState,
+  ForbiddenState,
   LoadingState,
 } from "../../presentation/components/health-technical-states";
+import { useNutritionReadAuthority } from "../hooks/use-nutrition-read-authority";
 import { NutritionPlanPanel } from "./nutrition-plan-panel";
 import { useNutritionDogContext } from "./use-nutrition-dog-context";
 
@@ -43,7 +45,36 @@ const cockpitLink = cn(
 );
 
 export function NutritionDogView({ dogId }: { dogId: string }) {
-  const { status, dog, errorMessage } = useNutritionDogContext(dogId);
+  const authority = useNutritionReadAuthority();
+  const { status, dog, errorMessage } = useNutritionDogContext(dogId, authority.canRead);
+
+  if (authority.status === "loading") {
+    return (
+      <HealthModuleShell title="Nutrição" activeNavKey="nutrition">
+        <LoadingState message="Verificando permissões..." />
+      </HealthModuleShell>
+    );
+  }
+
+  if (authority.status === "forbidden") {
+    return (
+      <HealthModuleShell title="Nutrição" activeNavKey="nutrition">
+        <div
+          className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-border/60 bg-card/40 p-10 text-center shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
+          data-testid="nutrition-dog-forbidden"
+        >
+          <ForbiddenState
+            requiredCapability={authority.requiredCapability}
+            message="Leitura do módulo de nutrição não autorizada para o perfil de acesso atual."
+          />
+          <Link href="/health/nutrition" className={backLink}>
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Voltar à nutrição do efetivo</span>
+          </Link>
+        </div>
+      </HealthModuleShell>
+    );
+  }
 
   if (status === "loading") {
     return (

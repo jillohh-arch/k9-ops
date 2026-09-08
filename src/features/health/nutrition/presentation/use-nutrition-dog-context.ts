@@ -60,7 +60,7 @@ function initialStateFor(dogId: string): NutritionDogContextState {
   return { status: "loading", dog: null, errorMessage: null };
 }
 
-export function useNutritionDogContext(dogId: string): NutritionDogContextState {
+export function useNutritionDogContext(dogId: string, enabled = true): NutritionDogContextState {
   const [prevDogId, setPrevDogId] = useState(dogId);
   const [state, setState] = useState<NutritionDogContextState>(() =>
     initialStateFor(dogId),
@@ -75,6 +75,10 @@ export function useNutritionDogContext(dogId: string): NutritionDogContextState 
   }
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const trimmed = dogId.trim();
     /*
      * Guard BEFORE doc(): an invalid id must never reach the Firestore SDK.
@@ -114,7 +118,7 @@ export function useNutritionDogContext(dogId: string): NutritionDogContextState 
     return () => {
       active = false;
     };
-  }, [dogId]);
+  }, [dogId, enabled]);
 
   return state;
 }

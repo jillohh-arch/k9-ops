@@ -12,6 +12,7 @@
  * - Reuses the single canonical composition path (loadReadinessScope).
  * - All presentation rules live in readiness-view-model.ts (pure, unit-tested).
  * - INVARIANT: missing projection !== not_evaluated.
+ * - Gated by strict canonical read authority (useReadinessReadAuthority).
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -27,6 +28,7 @@ import {
   type ReadinessStatusCounts,
 } from "./readiness-view-model";
 import type { ReadinessListItem } from "../../domain/readiness-types";
+import { useReadinessReadAuthority } from "./use-readiness-read-authority";
 
 export type {
   ReadinessCoverage,
@@ -40,7 +42,7 @@ export type {
 export { DEFAULT_READINESS_FILTERS } from "./readiness-view-model";
 
 export interface HealthReadinessState {
-  status: "loading" | "success" | "empty" | "error" | "partial";
+  status: "loading" | "success" | "empty" | "error" | "partial" | "forbidden";
   /** All composed items in scope (unfiltered). */
   items: ReadinessListItem[];
   /** Items after filters + search, in the active sort order. */
@@ -57,12 +59,17 @@ export interface HealthReadinessState {
   refetch: () => Promise<void>;
 }
 
+interface ScopeLoadedResult {
+  cycleKey: string;
+  items: ReadinessListItem[];
+  isPartial: boolean;
+  scopeEmpty: boolean;
+  error: string | null;
+}
+
 export function useHealthReadiness(): HealthReadinessState {
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [items, setItems] = useState<ReadinessListItem[]>([]);
-  const [isPartial, setIsPartial] = useState<boolean>(false);
-  const [scopeEmpty, setScopeEmpty] = useState<boolean>(false);
+  const authority = useReadinessReadAuthority();
+  const [dataResult, setDataResult] = useState<ScopeLoadedResult | null>(null);
   const [reloadTrigger, setReloadTrigger] = useState<number>(0);
   const [filters, setFiltersState] = useState<ReadinessFilters>(DEFAULT_READINESS_FILTERS);
 
@@ -78,7 +85,14 @@ export function useHealthReadiness(): HealthReadinessState {
     setFiltersState(DEFAULT_READINESS_FILTERS);
   }, []);
 
+  const cycleKey = `${authority.status}#${reloadTrigger}`;
+
   useEffect(() => {
+    // While authority is unresolved or denied, no read is even attempted.
+    if (authority.status !== "allowed") {
+      return;
+    }
+
     let isSubscribed = true;
 
     async function loadReadiness() {
@@ -87,10 +101,13 @@ export function useHealthReadiness(): HealthReadinessState {
 
         if (!isSubscribed) return;
 
-        setItems(scope.items);
-        setIsPartial(scope.isPartial);
-        setScopeEmpty(scope.scopeEmpty);
-        setLoading(false);
+        setDataResult({
+          cycleKey,
+          items: scope.items,
+          isPartial: scope.isPartial,
+          scopeEmpty: scope.scopeEmpty,
+          error: null,
+        });
       } catch (err: unknown) {
         if (!isSubscribed) return;
         // Institutional dog list unavailable -> global controlled error.
@@ -98,8 +115,13 @@ export function useHealthReadiness(): HealthReadinessState {
           err instanceof Error
             ? err.message
             : "Erro desconhecido ao carregar a prontidão do efetivo";
-        setError(msg);
-        setLoading(false);
+        setDataResult({
+          cycleKey,
+          items: [],
+          isPartial: false,
+          scopeEmpty: false,
+          error: msg,
+        });
       }
     }
 
@@ -108,7 +130,20 @@ export function useHealthReadiness(): HealthReadinessState {
     return () => {
       isSubscribed = false;
     };
-  }, [reloadTrigger]);
+  }, [authority.status, cycleKey]);
+
+  // Derived, authority-first state:
+  // If authority is not allowed, or dataResult belongs to a superseded cycle,
+  // data is strictly neutralized to guarantee no stale leakage.
+  const hasValidData =
+    authority.status === "allowed" && dataResult?.cycleKey === cycleKey;
+  const items = useMemo(
+    () => (hasValidData && dataResult ? dataResult.items : []),
+    [hasValidData, dataResult],
+  );
+  const error = hasValidData ? dataResult.error : null;
+  const isPartial = hasValidData ? dataResult.isPartial : false;
+  const scopeEmpty = hasValidData ? dataResult.scopeEmpty : false;
 
   const statusCounts = useMemo(() => countReadinessStatuses(items), [items]);
   const coverage = useMemo(() => computeReadinessCoverage(items), [items]);
@@ -123,7 +158,9 @@ export function useHealthReadiness(): HealthReadinessState {
     statusCounts.temporarily_unfit;
 
   let overallStatus: HealthReadinessState["status"] = "success";
-  if (loading) {
+  if (authority.status === "forbidden") {
+    overallStatus = "forbidden";
+  } else if (authority.status === "loading" || !hasValidData) {
     overallStatus = "loading";
   } else if (error) {
     overallStatus = "error";

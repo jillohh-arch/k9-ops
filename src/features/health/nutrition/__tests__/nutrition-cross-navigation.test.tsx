@@ -38,7 +38,14 @@ vi.mock("@/lib/firebase/client", () => ({ db: {}, auth: {}, storage: {}, functio
  * capability — which is exactly the contract.
  */
 vi.mock("@/features/access/providers/access-control-provider", () => ({
-  useAccessControl: () => ({ can: () => false }),
+  useAccessControl: () => ({
+    can: () => false,
+    status: "ready",
+    profile: {
+      status: "active",
+      permissions: { health: { read: true } },
+    },
+  }),
 }));
 
 const mockDogContext = vi.fn();

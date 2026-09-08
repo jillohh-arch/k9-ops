@@ -51,7 +51,14 @@ vi.mock("firebase/storage", () => ({ getStorage: vi.fn() }));
 vi.mock("@/lib/firebase/client", () => ({ db: {}, auth: {}, storage: {}, functions: {} }));
 
 vi.mock("@/features/access/providers/access-control-provider", () => ({
-  useAccessControl: () => ({ can: () => false }),
+  useAccessControl: () => ({
+    can: () => false,
+    status: "ready",
+    profile: {
+      status: "active",
+      permissions: { health: { read: true } },
+    },
+  }),
 }));
 
 // The plan reader is irrelevant here: the K9 context must be decided before any

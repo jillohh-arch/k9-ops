@@ -10,8 +10,33 @@
  * A missing/invalid projection is a TECHNICAL read state.
  */
 
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, renderHook, waitFor } from "@testing-library/react";
+
+type MockAccess = {
+  profile: { status?: string; permissions?: Record<string, unknown>; scope?: string } | null;
+  status: "fallback" | "loading" | "ready";
+};
+
+const accessState = vi.hoisted(() => ({
+  current: {
+    status: "ready" as const,
+    profile: {
+      status: "active",
+      permissions: { health: { read: true } },
+      scope: "own_records",
+    },
+  } as MockAccess,
+}));
+
+vi.mock("@/features/access/providers/access-control-provider", () => ({
+  useAccessControl: () => accessState.current,
+}));
+
+vi.mock("../hooks/load-readiness-scope", () => ({
+  loadReadinessScope: vi.fn(),
+}));
+
 import { HealthReadinessTable } from "../components/health-readiness-table";
 import { HealthReadinessSummaryCards } from "../components/health-readiness-summary-cards";
 import { HealthReadinessFilters } from "../components/health-readiness-filters";
@@ -26,6 +51,8 @@ import {
   DEFAULT_READINESS_FILTERS,
   type ReadinessStatusCounts,
 } from "../hooks/readiness-view-model";
+import { useHealthReadiness } from "../hooks/use-health-readiness";
+import { loadReadinessScope } from "../hooks/load-readiness-scope";
 import type {
   CanonicalHealthSummaryDoc,
   CanonicalRestrictionDoc,
@@ -466,3 +493,123 @@ describe("HW-3C — technical states", () => {
     expect(onRetry).toHaveBeenCalled();
   });
 });
+
+describe("HW-5.WEB-READINESS.FIX1 — strict workforce authority & read ordering", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    accessState.current = {
+      status: "ready",
+      profile: {
+        status: "active",
+        permissions: { health: { read: true } },
+        scope: "own_records",
+      },
+    };
+  });
+
+  it("24. KILLER CASE — gestor (health.view=true, health.read absent) is forbidden and causes 0 loader calls", () => {
+    accessState.current = {
+      status: "ready",
+      profile: {
+        status: "active",
+        permissions: { health: { view: true } },
+        scope: "global",
+      },
+    };
+
+    const { result } = renderHook(() => useHealthReadiness());
+
+    expect(result.current.status).toBe("forbidden");
+    expect(result.current.items).toEqual([]);
+    expect(loadReadinessScope).toHaveBeenCalledTimes(0);
+  });
+
+  it("25. Inactive profile with health.read=true is forbidden and causes 0 loader calls", () => {
+    accessState.current = {
+      status: "ready",
+      profile: {
+        status: "inactive",
+        permissions: { health: { read: true } },
+      },
+    };
+
+    const { result } = renderHook(() => useHealthReadiness());
+
+    expect(result.current.status).toBe("forbidden");
+    expect(result.current.items).toEqual([]);
+    expect(loadReadinessScope).toHaveBeenCalledTimes(0);
+  });
+
+  it("26. Loading authority yields loading status and causes 0 loader calls", () => {
+    accessState.current = {
+      status: "loading",
+      profile: null,
+    };
+
+    const { result } = renderHook(() => useHealthReadiness());
+
+    expect(result.current.status).toBe("loading");
+    expect(result.current.items).toEqual([]);
+    expect(loadReadinessScope).toHaveBeenCalledTimes(0);
+  });
+
+  it("27. Canonical allowed user (health.read=true) initiates data load", async () => {
+    vi.mocked(loadReadinessScope).mockResolvedValueOnce({
+      items: [],
+      activeRestrictions: [],
+      restrictionsCoverageComplete: true,
+      isPartial: false,
+      scopeEmpty: true,
+    });
+
+    const { result } = renderHook(() => useHealthReadiness());
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("empty");
+    });
+
+    expect(loadReadinessScope).toHaveBeenCalledTimes(1);
+  });
+
+  it("28. Authority transition safety — switching to forbidden clears data and prevents stale exposure", async () => {
+    vi.mocked(loadReadinessScope).mockResolvedValueOnce({
+      items: [
+        aggregateReadinessListItem({
+          dog: dog("d1", "Thor", "GCM-001"),
+          summary: summary("d1", "operational", "Apto", new Date()),
+          restrictions: [],
+        }),
+      ],
+      activeRestrictions: [],
+      restrictionsCoverageComplete: true,
+      isPartial: false,
+      scopeEmpty: false,
+    });
+
+    const { result, rerender } = renderHook(() => useHealthReadiness());
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+      expect(result.current.items.length).toBe(1);
+    });
+
+    // Session switches to forbidden gestor
+    accessState.current = {
+      status: "ready",
+      profile: {
+        status: "active",
+        permissions: { health: { view: true } },
+        scope: "global",
+      },
+    };
+
+    rerender();
+
+    expect(result.current.status).toBe("forbidden");
+    expect(result.current.items).toEqual([]);
+    expect(result.current.visibleItems).toEqual([]);
+    // No new loader execution
+    expect(loadReadinessScope).toHaveBeenCalledTimes(1);
+  });
+});
+

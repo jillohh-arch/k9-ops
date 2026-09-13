@@ -479,9 +479,10 @@ describe("HealthReportsExportToolbar", () => {
   it("blocks export and displays lock warning when exportAuthority.canExport is false", () => {
     const authority: ReportExportAuthority = {
       canExport: false,
-      reason: "Exportação não permitida",
+      reason: "Exportação desabilitada: aguardando ratificação de política institucional (F10).",
       hasCanonicalRead: true,
-      hasExportCapability: false,
+      hasExportCapability: true,
+      isPolicyRatified: false,
     };
 
     render(
@@ -491,7 +492,7 @@ describe("HealthReportsExportToolbar", () => {
       />
     );
 
-    expect(screen.getByText(/Exportação restrita/i)).toBeDefined();
+    expect(screen.getByText(/Exportação desabilitada/i)).toBeDefined();
     expect(screen.queryByRole("button", { name: /CSV/i })).toBeNull();
   });
 
@@ -500,6 +501,7 @@ describe("HealthReportsExportToolbar", () => {
       canExport: true,
       hasCanonicalRead: true,
       hasExportCapability: true,
+      isPolicyRatified: true,
     };
 
     render(

@@ -18,12 +18,10 @@ import {
 } from "../../clinical/presentation/types";
 import type {
   ClinicalCaseListEntry,
-  ClinicalScopeCoverage,
   ClinicalScopeResult,
 } from "../../clinical/data/clinical-scope-loader";
 import type { ClinicalCaseStatus } from "../../domain/read-states";
 import type {
-  ReadinessListItem,
   ReadinessStatus,
 } from "../../domain/readiness-types";
 import type { ReadinessScope } from "../../presentation/hooks/load-readiness-scope";

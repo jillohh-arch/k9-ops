@@ -12,24 +12,17 @@
  * - Strictly read-only: no mutations, no synthetic data.
  */
 
-import type { ReadState } from "../../domain/read-states";
 import type {
-  ReadinessListItem,
   ReadinessStatus,
 } from "../../domain/readiness-types";
-import type { ReadinessScope } from "../../presentation/hooks/load-readiness-scope";
 import type { ClinicalCaseStatus } from "../../domain/read-states";
 import type {
   ClinicalCaseListEntry,
   ClinicalScopeCoverage,
-  ClinicalScopeResult,
 } from "../../clinical/data/clinical-scope-loader";
 import type {
-  ScheduleListEntry,
   ScheduleScopeCoverage,
-  ScheduleScopeResult,
 } from "../../schedule/data/schedule-scope-loader";
-import type { ScheduleTemporalStatus } from "../../schedule/temporal";
 import type { ScheduleType } from "../../schedule/types";
 import type { ComposedScheduleEntry } from "../../schedule/composition/schedule-composition";
 
@@ -183,6 +176,15 @@ export interface HealthReportsAggregate {
 }
 
 /**
+ * Institutional policy ratification gate (F10 Cross-Front).
+ *
+ * Candidate policy: `health.read === true && reports.export === true`.
+ * RATIFICATION STATUS: PENDING (F10 governance decision required).
+ * Until explicitly ratified by F10, Health export remains strictly FAIL-CLOSED.
+ */
+export const HEALTH_REPORTS_EXPORT_POLICY_RATIFIED = false;
+
+/**
  * Export authorization status.
  */
 export interface ReportExportAuthority {
@@ -190,6 +192,7 @@ export interface ReportExportAuthority {
   reason?: string;
   hasCanonicalRead: boolean;
   hasExportCapability: boolean;
+  isPolicyRatified: boolean;
 }
 
 /**

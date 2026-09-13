@@ -36,7 +36,7 @@ describe("HealthReportsPage (/health/reports)", () => {
     const hookResult: UseHealthReportsDataResult = {
       state: { status: "loading" },
       authorityStatus: "allowed",
-      exportAuthority: { canExport: true, hasCanonicalRead: true, hasExportCapability: true },
+      exportAuthority: { canExport: false, hasCanonicalRead: true, hasExportCapability: true, isPolicyRatified: false },
       period: "7d",
       setPeriod: vi.fn(),
       refresh: vi.fn(),

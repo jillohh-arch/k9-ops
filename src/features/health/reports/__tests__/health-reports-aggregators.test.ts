@@ -8,10 +8,11 @@ import {
   isScheduleItemInPeriod,
 } from "../domain/health-reports-aggregators";
 import type { ReadinessScope } from "../../presentation/hooks/load-readiness-scope";
+import type { ReadState } from "../../domain/read-states";
 import type {
-  ReadinessListItem,
   OperationalRestrictionReadModel,
   DogIdentityReadModel,
+  FreshnessEvaluationResult,
 } from "../../domain/readiness-types";
 import type {
   ClinicalCaseListEntry,
@@ -32,6 +33,25 @@ const baseDog: DogIdentityReadModel = {
   specialties: [],
 };
 
+const mockFreshness: FreshnessEvaluationResult = {
+  evaluatedAt: new Date(),
+  readinessUpdatedAt: new Date(),
+  lastEvaluatedAt: new Date(),
+  updatedAt: new Date(),
+  ageMs: 0,
+  maxAgeMs: 86400000,
+  isStale: false,
+  isFutureAnomaly: false,
+  hasValidTimestamp: true,
+  status: "fresh",
+};
+
+const mockDataQualitySuccess: ReadState<null> = {
+  status: "success",
+  data: null,
+  fetchedAt: new Date(),
+};
+
 describe("F30 Health Reports Pure Aggregators", () => {
   describe("aggregateReadiness", () => {
     it("aggregates canonical readiness statuses only from valid projections", () => {
@@ -45,8 +65,8 @@ describe("F30 Health Reports Pure Aggregators", () => {
             reason: null,
             activeRestrictionsSummary: [],
             updatedAt: new Date(),
-            freshness: {} as any,
-            dataQuality: { status: "success", data: null as any, fetchedAt: new Date() },
+            freshness: mockFreshness,
+            dataQuality: mockDataQualitySuccess,
             qualityLabel: "Atualizada",
             conflict: null,
             projectionMetadata: null,
@@ -60,8 +80,8 @@ describe("F30 Health Reports Pure Aggregators", () => {
             reason: "Tratamento",
             activeRestrictionsSummary: [],
             updatedAt: new Date(),
-            freshness: {} as any,
-            dataQuality: { status: "success", data: null as any, fetchedAt: new Date() },
+            freshness: mockFreshness,
+            dataQuality: mockDataQualitySuccess,
             qualityLabel: "Atualizada",
             conflict: null,
             projectionMetadata: null,
@@ -95,7 +115,7 @@ describe("F30 Health Reports Pure Aggregators", () => {
             reason: null,
             activeRestrictionsSummary: [],
             updatedAt: null,
-            freshness: {} as any,
+            freshness: mockFreshness,
             dataQuality: { status: "error", code: "NOT_FOUND", message: "Missing doc", retryable: false },
             qualityLabel: "Sem projeção válida",
             conflict: null,
@@ -149,8 +169,8 @@ describe("F30 Health Reports Pure Aggregators", () => {
             reason: null,
             activeRestrictionsSummary: [restriction],
             updatedAt: new Date(),
-            freshness: {} as any,
-            dataQuality: { status: "success", data: null as any, fetchedAt: new Date() },
+            freshness: mockFreshness,
+            dataQuality: mockDataQualitySuccess,
             qualityLabel: "Atualizada",
             conflict: null,
             projectionMetadata: null,

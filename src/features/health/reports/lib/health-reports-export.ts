@@ -16,7 +16,6 @@ import {
   CLINICAL_CASE_STATUS_LABELS,
   SCHEDULE_STATUS_LABELS,
 } from "../../domain/read-states";
-import { READINESS_STATUS_LABELS } from "../../domain/readiness-types";
 import type {
   HealthReportsAggregate,
   ReportExportAuthority,
@@ -305,7 +304,7 @@ export function executeHealthReportExport(
   if (!exportAuthority.canExport) {
     throw new Error(
       exportAuthority.reason ??
-        "Acesso negado: permissão de exportação (reports.export) não concedida ou pendente de ratificação."
+        "Acesso negado: exportação desabilitada aguardando ratificação de política institucional (F10)."
     );
   }
 

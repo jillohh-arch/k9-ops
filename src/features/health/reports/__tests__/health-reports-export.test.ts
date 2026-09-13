@@ -171,12 +171,13 @@ describe("F30 Health Reports Export Module", () => {
     expect(data.rows[0][2]).toBe("Em Tratamento");
   });
 
-  it("throws error and fails closed if canExport is false", () => {
-    const unauthorizedAuthority: ReportExportAuthority = {
+  it("throws error and fails closed if canExport is false (even with health.read + reports.export present)", () => {
+    const unratifiedAuthority: ReportExportAuthority = {
       canExport: false,
-      reason: "Permissão de exportação (reports.export) pendente de ratificação institucional.",
+      reason: "Exportação desabilitada: aguardando ratificação de política institucional (F10).",
       hasCanonicalRead: true,
-      hasExportCapability: false,
+      hasExportCapability: true,
+      isPolicyRatified: false,
     };
 
     expect(() =>
@@ -184,29 +185,30 @@ describe("F30 Health Reports Export Module", () => {
         "clinical",
         "csv",
         mockAggregate,
-        unauthorizedAuthority
+        unratifiedAuthority
       )
-    ).toThrowError(/pendente de ratificação/);
+    ).toThrowError(/ratificação de política institucional \(F10\)/);
 
     expect(exportToCsv).not.toHaveBeenCalled();
     expect(exportToXlsx).not.toHaveBeenCalled();
     expect(exportToPdf).not.toHaveBeenCalled();
   });
 
-  it("executes CSV, XLSX, and PDF exports when canExport is true", () => {
-    const authorizedAuthority: ReportExportAuthority = {
+  it("executes CSV, XLSX, and PDF exports when canExport is true (upon hypothetical future ratification)", () => {
+    const ratifiedAuthority: ReportExportAuthority = {
       canExport: true,
       hasCanonicalRead: true,
       hasExportCapability: true,
+      isPolicyRatified: true,
     };
 
-    executeHealthReportExport("clinical", "csv", mockAggregate, authorizedAuthority);
+    executeHealthReportExport("clinical", "csv", mockAggregate, ratifiedAuthority);
     expect(exportToCsv).toHaveBeenCalledTimes(1);
 
-    executeHealthReportExport("clinical", "xlsx", mockAggregate, authorizedAuthority);
+    executeHealthReportExport("clinical", "xlsx", mockAggregate, ratifiedAuthority);
     expect(exportToXlsx).toHaveBeenCalledTimes(1);
 
-    executeHealthReportExport("clinical", "pdf", mockAggregate, authorizedAuthority);
+    executeHealthReportExport("clinical", "pdf", mockAggregate, ratifiedAuthority);
     expect(exportToPdf).toHaveBeenCalledTimes(1);
   });
 });

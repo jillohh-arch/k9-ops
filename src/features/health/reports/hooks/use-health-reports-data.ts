@@ -37,10 +37,11 @@ import {
   type ComposedScheduleEntry,
 } from "../../schedule/composition/schedule-composition";
 import { aggregateHealthReports } from "../domain/health-reports-aggregators";
-import type {
-  HealthReportsAggregate,
-  ReportExportAuthority,
-  ReportPeriod,
+import {
+  HEALTH_REPORTS_EXPORT_POLICY_RATIFIED,
+  type HealthReportsAggregate,
+  type ReportExportAuthority,
+  type ReportPeriod,
 } from "../domain/health-reports-types";
 
 export type HealthReportsAuthorityStatus = "loading" | "allowed" | "forbidden";
@@ -93,7 +94,6 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const [loadedData, setLoadedData] = useState<LoadedCycleData | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
   const refresh = useCallback(() => {
     setReloadTrigger((prev) => prev + 1);
@@ -112,6 +112,7 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
           reason: "Verificando perfil de acesso...",
           hasCanonicalRead: false,
           hasExportCapability: false,
+          isPolicyRatified: HEALTH_REPORTS_EXPORT_POLICY_RATIFIED,
         },
       };
     }
@@ -120,8 +121,13 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
     const health = rawHealthPermissions(profile?.permissions);
     const reports = rawReportsPermissions(profile?.permissions);
 
+    // CANONICAL HEALTH REPORTS READ RULE:
+    // Read authority is strictly governed by `health.read === true`.
+    // `reports.view` belongs to the generic reports surface and is NOT
+    // required or evaluated for reading canonical Health Reports.
     const hasCanonicalRead = health?.read === true;
     const hasExportCapability = reports?.export === true;
+    const isPolicyRatified = HEALTH_REPORTS_EXPORT_POLICY_RATIFIED;
 
     if (!profileActive || !hasCanonicalRead) {
       return {
@@ -131,14 +137,24 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
           reason: "Acesso de leitura a saúde (health.read) não autorizado.",
           hasCanonicalRead: false,
           hasExportCapability,
+          isPolicyRatified,
         },
       };
     }
 
-    const canExport = hasCanonicalRead && hasExportCapability;
-    const exportReason = canExport
-      ? undefined
-      : "Permissão de exportação (reports.export) pendente de ratificação institucional.";
+    // CANDIDATE EXPORT POLICY GATE (F10 CROSS-FRONT):
+    // Candidate policy requires: health.read === true && reports.export === true.
+    // However, F10 governance has NOT ratified this policy yet.
+    // Therefore, Health export remains FAIL-CLOSED (canExport: false) pending F10 ratification.
+    const candidateEligible = hasCanonicalRead && hasExportCapability;
+    const canExport = candidateEligible && isPolicyRatified;
+
+    let exportReason: string | undefined;
+    if (!hasExportCapability) {
+      exportReason = "Permissão de exportação (reports.export) não atribuída.";
+    } else if (!isPolicyRatified) {
+      exportReason = "Exportação desabilitada: aguardando ratificação de política institucional (F10).";
+    }
 
     return {
       authorityStatus: "allowed",
@@ -147,6 +163,7 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
         reason: exportReason,
         hasCanonicalRead,
         hasExportCapability,
+        isPolicyRatified,
       },
     };
   }, [accessStatus, profile]);
@@ -155,13 +172,10 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
 
   useEffect(() => {
     if (authorityStatus !== "allowed") {
-      setIsLoading(false);
       return;
     }
 
     let active = true;
-    setIsLoading(true);
-    setLoadError(null);
 
     const runCycle = async () => {
       try {
@@ -197,11 +211,10 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
           composedScheduleEntries,
           loadedAt: now,
         });
-        setIsLoading(false);
+        setLoadError(null);
       } catch (err) {
         if (!active) return;
         setLoadError(err instanceof Error ? err : new Error(String(err)));
-        setIsLoading(false);
       }
     };
 
@@ -224,10 +237,6 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
         requiredCapability: "health.read",
         message: "Acesso ao módulo de relatórios de saúde não autorizado para este perfil.",
       };
-    }
-
-    if (isLoading && !loadedData) {
-      return { status: "loading" };
     }
 
     if (loadError) {
@@ -295,7 +304,7 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
       data: aggregate,
       fetchedAt: now,
     };
-  }, [authorityStatus, isLoading, loadError, loadedData, cycleKey, period]);
+  }, [authorityStatus, loadError, loadedData, cycleKey, period]);
 
   return {
     state,

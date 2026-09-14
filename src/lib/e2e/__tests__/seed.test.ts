@@ -418,26 +418,26 @@ describe("HW-ACCESS-SEED-3A — V6 health.read frozen target set", () => {
     return profilesById.get(id)?.permissions?.health;
   }
 
-  const READ_TARGET_SET = ["operador_k9", "gestor"] as const;
-  const READ_EXCLUDED_SET = ["instrutor_k9", "administrador", "almoxarifado"] as const;
+  const ALL_PROFILES = [
+    "operador_k9",
+    "gestor",
+    "instrutor_k9",
+    "administrador",
+    "almoxarifado",
+  ] as const;
 
   it("keeps the policy pinned at version 6 (no V7)", () => {
     expect(accessPolicy.version).toBe(6);
   });
 
-  it("grants canonical health.read to EXACTLY operador_k9 and gestor", () => {
+  it("grants NO canonical health.read to any default profile under CT3.AUTH-HEALTH-01", () => {
     const withRead = (accessPolicy.profiles as Array<{ id: string; permissions?: Record<string, string[]> }>)
       .filter((profile) => (profile.permissions?.health ?? []).includes("read"))
-      .map((profile) => profile.id)
-      .sort();
-    expect(withRead).toEqual([...READ_TARGET_SET].sort());
+      .map((profile) => profile.id);
+    expect(withRead).toEqual([]);
   });
 
-  it.each(READ_TARGET_SET)("includes health.read for %s", (id) => {
-    expect(healthGrants(id)).toContain("read");
-  });
-
-  it.each(READ_EXCLUDED_SET)("does NOT grant health.read to %s", (id) => {
+  it.each(ALL_PROFILES)("does NOT grant health.read to %s", (id) => {
     expect(healthGrants(id) ?? []).not.toContain("read");
   });
 

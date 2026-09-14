@@ -11,6 +11,7 @@ import {
   normalizePermissionMap,
   sortAccessProfiles,
   visibleAccessProfiles,
+  type AccessAction,
 } from "../permissions/access-control";
 
 describe("getDefaultAccessProfile", () => {
@@ -99,14 +100,13 @@ describe("hasAccessPermission", () => {
     ).toBe(true);
   });
 
-  // Frozen CLIN-AUTH-BE-4B authority: canonical health.read belongs ONLY to
-  // operador_k9 and gestor. The V6 correction is subtractive pre-sync, so
-  // instrutor_k9 and administrador carry NO explicit health.read.
+  // CT3.AUTH-HEALTH-01: F10 persisted authorization uses health.view == true.
+  // There is NO persisted health.read in canonical default profiles.
   it.each([
     ["administrador", false, true],
-    ["gestor", true, true],
+    ["gestor", false, true],
     ["instrutor_k9", false, false],
-    ["operador_k9", true, false],
+    ["operador_k9", false, false],
     ["almoxarifado", false, false],
   ])(
     "defaults %s health.read=%s and manage_nutrition_plan=%s",
@@ -248,5 +248,58 @@ describe("mergeAccessProfilesWithDefaults", () => {
   it("keeps all default profiles present", () => {
     const merged = mergeAccessProfilesWithDefaults([]);
     expect(merged.length).toBe(defaultAccessProfiles.length);
+  });
+});
+
+describe("CT3.AUTH-HEALTH-01 — F10 Health Read Seed Drift Closure (Gate CT3.F10.HEALTH-READ-SEED-DRIFT-CLOSURE-R1)", () => {
+  it("1. canonical operador_k9 has health.view", () => {
+    const profile = getDefaultAccessProfile("operador_k9")!;
+    expect(profile).toBeDefined();
+    expect(profile.permissions.health?.view).toBe(true);
+    expect(hasAccessPermission(profile, "health", "view")).toBe(true);
+  });
+
+  it("2. canonical operador_k9 does not have health.read", () => {
+    const profile = getDefaultAccessProfile("operador_k9")!;
+    expect(profile).toBeDefined();
+    expect(profile.permissions.health?.read).toBeUndefined();
+    expect(hasAccessPermission(profile, "health", "read")).toBe(false);
+  });
+
+  it("3. every action in default profile definitions belongs to AccessAction", () => {
+    const validActions: AccessAction[] = [
+      "archive",
+      "approve",
+      "audit",
+      "create",
+      "edit",
+      "export",
+      "manage_nutrition_plan",
+      "read",
+      "view",
+    ];
+    const validSet = new Set<string>(validActions);
+
+    for (const profile of defaultAccessProfiles) {
+      for (const [moduleId, actions] of Object.entries(profile.permissions)) {
+        for (const action of Object.keys(actions ?? {})) {
+          expect(
+            validSet.has(action),
+            `Profile "${profile.id}" module "${moduleId}" action "${action}" must belong to AccessAction`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("4. CT3.AUTH-HEALTH-01 does not require profile migration", () => {
+    const operador = getDefaultAccessProfile("operador_k9")!;
+    expect(operador.permissions.health).toEqual({
+      view: true,
+      create: true,
+      edit: true,
+    });
+    expect("read" in (operador.permissions.health ?? {})).toBe(false);
+    expect(hasAccessPermission(operador, "health", "view")).toBe(true);
   });
 });

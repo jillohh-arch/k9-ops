@@ -23,7 +23,6 @@ describe("Health permission editor", () => {
     const changed = togglePermission(gestor, "health", "audit");
 
     expect(changed.permissions.health?.view).toBe(true);
-    expect(changed.permissions.health?.read).toBe(true);
     expect(changed.permissions.health?.manage_nutrition_plan).toBe(true);
   });
 
@@ -35,6 +34,7 @@ describe("Health permission editor", () => {
         ...gestor.permissions,
         health: {
           ...gestor.permissions.health,
+          read: true,
           future_health_action: true,
         },
       },

@@ -217,7 +217,6 @@ describe("access profile save path", () => {
         permissions: expect.objectContaining({
           health: expect.objectContaining({
             view: true,
-            read: true,
             manage_nutrition_plan: true,
             future_health_action: true,
           }),

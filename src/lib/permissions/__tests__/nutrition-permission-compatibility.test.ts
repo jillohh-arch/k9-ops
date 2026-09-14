@@ -250,13 +250,12 @@ describe("NUT-WEB-4C — default profiles keep existing read access", () => {
     }
   });
 
-  it("grants canonical health.read to exactly the frozen 4B target set", () => {
-    // Explicit read target set: operador_k9 + gestor ONLY. instrutor_k9 and
-    // administrador carry NO explicit health.read after the subtractive V6
-    // correction; almoxarifado has no health module at all.
+  it("grants NO canonical health.read to default profiles under CT3.AUTH-HEALTH-01", () => {
+    // Ratified CT3.AUTH-HEALTH-01: F10 persisted authorization uses health.view == true.
+    // There is NO persisted health.read in default profiles.
     const expectedRead: Record<string, boolean> = {
-      operador_k9: true,
-      gestor: true,
+      operador_k9: false,
+      gestor: false,
       instrutor_k9: false,
       administrador: false,
       almoxarifado: false,
@@ -268,18 +267,14 @@ describe("NUT-WEB-4C — default profiles keep existing read access", () => {
     }
   });
 
-  it("keeps read from ever becoming a write for the read-only profiles", () => {
-    // Even where canonical read is granted, no write capability derives from it.
-    for (const profileId of ["operador_k9", "gestor"]) {
+  it("keeps health.view from ever becoming an ungranted write", () => {
+    // Health view is granted, but write capabilities remain strictly bounded.
+    for (const profileId of ["operador_k9", "gestor", "instrutor_k9", "administrador"]) {
       const profile = getDefaultAccessProfile(profileId)!;
-      expect(hasAccessPermission(profile, "health", "read")).toBe(true);
-      expect(hasAccessPermission(profile, "health", "approve")).toBe(false);
-    }
-    // And the profiles that lost read via 4B gain no write from the removal.
-    for (const profileId of ["instrutor_k9", "administrador"]) {
-      const profile = getDefaultAccessProfile(profileId)!;
-      expect(hasAccessPermission(profile, "health", "read")).toBe(false);
       expect(hasAccessPermission(profile, "health", "view")).toBe(true);
+      if (profileId !== "administrador") {
+        expect(hasAccessPermission(profile, "health", "approve")).toBe(false);
+      }
     }
   });
 

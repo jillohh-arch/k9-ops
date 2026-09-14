@@ -37,11 +37,6 @@
       "description": "Permite consultar trilhas e evidências de auditoria."
     },
     {
-      "id": "read",
-      "label": "Leitura Health v1",
-      "description": "Permite ler dados canônicos de Health v1."
-    },
-    {
       "id": "manage_nutrition_plan",
       "label": "Gerenciar planos alimentares",
       "description": "Permite criar, substituir, atualizar administrativamente e cancelar planos alimentares dos K9."

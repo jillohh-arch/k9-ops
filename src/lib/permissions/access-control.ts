@@ -8,7 +8,6 @@ export type AccessAction =
   | "edit"
   | "export"
   | "manage_nutrition_plan"
-  | "read"
   | "view";
 
 export type AccessModuleId =
@@ -95,12 +94,18 @@ export function normalizePermissionMap(
   permissions: AccessProfileSeed["permissions"] | AccessPermissionMap,
 ): AccessPermissionMap {
   return Object.fromEntries(
-    Object.entries(permissions).map(([moduleId, actions]) => [
-      moduleId,
-      Array.isArray(actions)
+    Object.entries(permissions).map(([moduleId, actions]) => {
+      const normalizedActions = Array.isArray(actions)
         ? Object.fromEntries(actions.map((action) => [action, true]))
-        : actions,
-    ]),
+        : { ...actions };
+
+      // Explicitly drop deprecated persisted health.read under CT3.AUTH-HEALTH-01
+      if (moduleId === "health" && "read" in normalizedActions) {
+        delete normalizedActions.read;
+      }
+
+      return [moduleId, normalizedActions];
+    }),
   ) as AccessPermissionMap;
 }
 
@@ -198,14 +203,6 @@ export function hasAccessPermission(
   action: AccessAction = "view",
 ) {
   if (!profile || profile.status !== "active") return false;
-  if (
-    moduleId === "health" &&
-    action === "view" &&
-    (profile.permissions.health as Record<string, boolean> | undefined)?.read ===
-      true
-  ) {
-    return true;
-  }
   return profile.permissions[moduleId]?.[action] === true;
 }
 

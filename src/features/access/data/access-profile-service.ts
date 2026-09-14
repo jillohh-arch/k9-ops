@@ -217,6 +217,25 @@ export type AccessProfileInput = AccessProfile & {
   actorRa?: string | null;
 };
 
+function sanitizePermissionsForFunction(
+  permissions: AccessProfile["permissions"],
+): AccessProfile["permissions"] {
+  const result: AccessProfile["permissions"] = {};
+  for (const [moduleId, modulePerms] of Object.entries(permissions)) {
+    if (!modulePerms) continue;
+    const cleaned: Record<string, boolean | undefined> = {};
+    for (const [action, enabled] of Object.entries(modulePerms)) {
+      // Deprecated persisted action under CT3.AUTH-HEALTH-01: health.read must not be emitted.
+      if (moduleId === "health" && action === "read") {
+        continue;
+      }
+      cleaned[action] = enabled;
+    }
+    result[moduleId as keyof AccessProfile["permissions"]] = cleaned;
+  }
+  return result;
+}
+
 export function accessProfileForFunction(profile: AccessProfile) {
   return {
     description: profile.description,
@@ -224,7 +243,7 @@ export function accessProfileForFunction(profile: AccessProfile) {
     level: profile.level,
     module_tags: profile.module_tags,
     name: profile.name,
-    permissions: profile.permissions,
+    permissions: sanitizePermissionsForFunction(profile.permissions),
     role_keys: profile.role_keys,
     scope: profile.scope ?? "global",
     seed_version: profile.seed_version,

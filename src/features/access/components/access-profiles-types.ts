@@ -136,13 +136,11 @@ export const levelActions: Record<ModuleAccessLevel, AccessAction[]> = {
   operacional: ["view", "create", "edit", "approve"],
   total: accessActions
     .map((action) => action.id)
-    .filter(
-      (action) => action !== "read" && action !== "manage_nutrition_plan",
-    ),
+    .filter((action) => action !== "manage_nutrition_plan"),
 };
 
 const genericAccessActions = accessActions.filter(
-  (action) => action.id !== "read" && action.id !== "manage_nutrition_plan",
+  (action) => action.id !== "manage_nutrition_plan",
 );
 
 export const moduleViews: ModuleView[] = [

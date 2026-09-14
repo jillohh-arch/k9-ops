@@ -169,8 +169,8 @@ describe("access profile save path", () => {
     expect(callAdminSaveAccessProfile).toHaveBeenCalledTimes(1);
   });
 
-  // Matrix G — pre-existing serialization behavior stays green.
-  it("G: preserves unknown actions through load and serialization", () => {
+  // Matrix G — preserves future unknown actions while dropping deprecated health.read (CT3.AUTH-HEALTH-01)
+  it("G: preserves future unknown actions while omitting deprecated health.read", () => {
     const loaded = normalizeAccessProfile("gestor", {
       ...getDefaultAccessProfile("gestor")!,
       permissions: {
@@ -187,10 +187,10 @@ describe("access profile save path", () => {
 
     expect(payload.permissions.health).toEqual({
       view: true,
-      read: true,
       manage_nutrition_plan: true,
       future_health_action: true,
     });
+    expect("read" in (payload.permissions.health ?? {})).toBe(false);
   });
 
   it("G: sends preserved actions when another profile field is edited", async () => {

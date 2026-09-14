@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/firebase/client", () => ({ db: {} }));
+vi.mock("@/lib/firebase/functions", () => ({}));
 
 import {
   accessActions,
@@ -12,7 +15,14 @@ import {
   sortAccessProfiles,
   visibleAccessProfiles,
   type AccessAction,
+  type AccessProfile,
 } from "../permissions/access-control";
+import { accessProfileForFunction } from "@/features/access/data/access-profile-service";
+import {
+  CAPABILITY_LABELS,
+  LEGACY_TO_GRANULAR,
+  type HealthCapability,
+} from "@/features/health/domain/capabilities";
 
 describe("getDefaultAccessProfile", () => {
   it("returns profile by exact id", () => {
@@ -93,8 +103,8 @@ describe("normalizePermissionMap", () => {
 });
 
 describe("hasAccessPermission", () => {
-  it("declares the canonical Health v1 actions in policy v6", () => {
-    expect(accessActions.some((action) => action.id === "read")).toBe(true);
+  it("declares the canonical Health v1 actions in policy v6 (without read)", () => {
+    expect(accessActions.some((action) => (action.id as string) === "read")).toBe(false);
     expect(
       accessActions.some((action) => action.id === "manage_nutrition_plan"),
     ).toBe(true);
@@ -112,7 +122,7 @@ describe("hasAccessPermission", () => {
     "defaults %s health.read=%s and manage_nutrition_plan=%s",
     (profileId, canRead, canManage) => {
       const profile = getDefaultAccessProfile(profileId)!;
-      expect(hasAccessPermission(profile, "health", "read")).toBe(canRead);
+      expect(hasAccessPermission(profile, "health", "read" as AccessAction)).toBe(canRead);
       expect(
         hasAccessPermission(profile, "health", "manage_nutrition_plan"),
       ).toBe(canManage);
@@ -130,7 +140,7 @@ describe("hasAccessPermission", () => {
     };
 
     expect(hasAccessPermission(profile, "health", "view")).toBe(true);
-    expect(hasAccessPermission(profile, "health", "read")).toBe(false);
+    expect(hasAccessPermission(profile, "health", "read" as AccessAction)).toBe(false);
     expect(hasAccessPermission(profile, "health", "manage_nutrition_plan")).toBe(
       false,
     );
@@ -251,55 +261,138 @@ describe("mergeAccessProfilesWithDefaults", () => {
   });
 });
 
-describe("CT3.AUTH-HEALTH-01 — F10 Health Read Seed Drift Closure (Gate CT3.F10.HEALTH-READ-SEED-DRIFT-CLOSURE-R1)", () => {
-  it("1. canonical operador_k9 has health.view", () => {
+describe("CT3.AUTH-HEALTH-01 / CT3.F10.HEALTH-READ-ACTION-SCHEMA-CLOSURE-R2 — 8 Invariants", () => {
+  it("1. AccessAction canonical persisted vocabulary does NOT contain 'read'", () => {
+    const actionIds = accessActions.map((a) => a.id as string);
+    expect(actionIds).not.toContain("read");
+    expect(actionIds).toContain("view");
+    expect(actionIds).toContain("create");
+    expect(actionIds).toContain("edit");
+    expect(actionIds).toContain("archive");
+    expect(actionIds).toContain("approve");
+    expect(actionIds).toContain("audit");
+    expect(actionIds).toContain("export");
+    expect(actionIds).toContain("manage_nutrition_plan");
+  });
+
+  it("2. default operador_k9 contains health.view=true, health.create=true, health.edit=true, health.read ABSENT", () => {
     const profile = getDefaultAccessProfile("operador_k9")!;
     expect(profile).toBeDefined();
-    expect(profile.permissions.health?.view).toBe(true);
-    expect(hasAccessPermission(profile, "health", "view")).toBe(true);
-  });
-
-  it("2. canonical operador_k9 does not have health.read", () => {
-    const profile = getDefaultAccessProfile("operador_k9")!;
-    expect(profile).toBeDefined();
-    expect(profile.permissions.health?.read).toBeUndefined();
-    expect(hasAccessPermission(profile, "health", "read")).toBe(false);
-  });
-
-  it("3. every action in default profile definitions belongs to AccessAction", () => {
-    const validActions: AccessAction[] = [
-      "archive",
-      "approve",
-      "audit",
-      "create",
-      "edit",
-      "export",
-      "manage_nutrition_plan",
-      "read",
-      "view",
-    ];
-    const validSet = new Set<string>(validActions);
-
-    for (const profile of defaultAccessProfiles) {
-      for (const [moduleId, actions] of Object.entries(profile.permissions)) {
-        for (const action of Object.keys(actions ?? {})) {
-          expect(
-            validSet.has(action),
-            `Profile "${profile.id}" module "${moduleId}" action "${action}" must belong to AccessAction`,
-          ).toBe(true);
-        }
-      }
-    }
-  });
-
-  it("4. CT3.AUTH-HEALTH-01 does not require profile migration", () => {
-    const operador = getDefaultAccessProfile("operador_k9")!;
-    expect(operador.permissions.health).toEqual({
+    expect(profile.permissions.health).toEqual({
       view: true,
       create: true,
       edit: true,
     });
-    expect("read" in (operador.permissions.health ?? {})).toBe(false);
-    expect(hasAccessPermission(operador, "health", "view")).toBe(true);
+    expect("read" in (profile.permissions.health ?? {})).toBe(false);
+    expect(profile.permissions.health?.["read" as unknown as AccessAction]).toBeUndefined();
+    expect(hasAccessPermission(profile, "health", "view")).toBe(true);
+    expect(hasAccessPermission(profile, "health", "create")).toBe(true);
+    expect(hasAccessPermission(profile, "health", "edit")).toBe(true);
+    expect(hasAccessPermission(profile, "health", "read" as AccessAction)).toBe(false);
+  });
+
+  it("3. default gestor contains its valid grants and health.read ABSENT", () => {
+    const profile = getDefaultAccessProfile("gestor")!;
+    expect(profile).toBeDefined();
+    expect(profile.permissions.health?.view).toBe(true);
+    expect(profile.permissions.health?.edit).toBe(true);
+    expect(profile.permissions.health?.archive).toBe(true);
+    expect(profile.permissions.health?.approve).toBeUndefined();
+    expect(profile.permissions.health?.audit).toBe(true);
+    expect(profile.permissions.health?.export).toBe(true);
+    expect(profile.permissions.health?.manage_nutrition_plan).toBe(true);
+    expect("read" in (profile.permissions.health ?? {})).toBe(false);
+    expect(profile.permissions.health?.["read" as unknown as AccessAction]).toBeUndefined();
+    expect(hasAccessPermission(profile, "health", "read" as AccessAction)).toBe(false);
+  });
+
+  it("4. canonical authority evaluation does NOT allow health.read=true + health.view absent/false to substitute for health.view", () => {
+    const base = getDefaultAccessProfile("operador_k9")!;
+    const profileWithOnlyRead: AccessProfile = {
+      ...base,
+      permissions: {
+        ...base.permissions,
+        health: {
+          ...base.permissions.health,
+          view: false,
+          read: true,
+        } as unknown as Record<AccessAction, boolean>,
+      },
+    };
+
+    // Stale health.read MUST NOT independently grant view authority
+    expect(hasAccessPermission(profileWithOnlyRead, "health", "view")).toBe(false);
+
+    const profileWithoutView: AccessProfile = {
+      ...base,
+      permissions: {
+        ...base.permissions,
+        health: {
+          read: true,
+        } as unknown as Record<AccessAction, boolean>,
+      },
+    };
+    expect(hasAccessPermission(profileWithoutView, "health", "view")).toBe(false);
+  });
+
+  it("5. adminSaveAccessProfile client payload generation strips health.read", () => {
+    const base = getDefaultAccessProfile("operador_k9")!;
+    const profileWithRead: AccessProfile = {
+      ...base,
+      permissions: {
+        ...base.permissions,
+        health: {
+          view: true,
+          create: true,
+          edit: true,
+          read: true,
+        } as unknown as Record<AccessAction, boolean>,
+      },
+    };
+
+    const payload = accessProfileForFunction(profileWithRead);
+    expect("read" in (payload.permissions.health ?? {})).toBe(false);
+    expect(payload.permissions.health?.view).toBe(true);
+    expect(payload.permissions.health?.create).toBe(true);
+    expect(payload.permissions.health?.edit).toBe(true);
+  });
+
+  it("6. canonical profile editor/save flow does not re-emit health.read but preserves forward-compatible actions", () => {
+    const base = getDefaultAccessProfile("operador_k9")!;
+    const profileWithBoth: AccessProfile = {
+      ...base,
+      permissions: {
+        ...base.permissions,
+        health: {
+          view: true,
+          create: true,
+          edit: true,
+          read: true,
+          future_health_action: true,
+        } as unknown as Record<AccessAction, boolean>,
+      },
+    };
+
+    const payload = accessProfileForFunction(profileWithBoth);
+    expect("read" in (payload.permissions.health ?? {})).toBe(false);
+    expect((payload.permissions.health as Record<string, unknown>).future_health_action).toBe(true);
+    expect(payload.permissions.health?.view).toBe(true);
+  });
+
+  it("7. Health semantic capability name 'health.read' remains available in its domain vocabulary", () => {
+    const healthCapability: HealthCapability = "health.read";
+    expect(healthCapability).toBe("health.read");
+    expect(CAPABILITY_LABELS["health.read"]).toBe("Ler Dados de Saúde");
+    expect(LEGACY_TO_GRANULAR["health.view"]).toContain("health.read");
+  });
+
+  it("8. manage_nutrition_plan behavior remains unchanged", () => {
+    const gestor = getDefaultAccessProfile("gestor")!;
+    expect(gestor.permissions.health?.manage_nutrition_plan).toBe(true);
+    expect(hasAccessPermission(gestor, "health", "manage_nutrition_plan")).toBe(true);
+
+    const operador = getDefaultAccessProfile("operador_k9")!;
+    expect(operador.permissions.health?.manage_nutrition_plan).toBeUndefined();
+    expect(hasAccessPermission(operador, "health", "manage_nutrition_plan")).toBe(false);
   });
 });

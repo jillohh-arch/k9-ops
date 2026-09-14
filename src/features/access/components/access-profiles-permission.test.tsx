@@ -6,7 +6,7 @@ import { PermissionsEditor } from "./access-profiles-editor";
 import { setModuleAccessLevel, togglePermission } from "./access-profiles-types";
 
 describe("Health permission editor", () => {
-  it("renders dedicated read and nutrition management actions", () => {
+  it("renders nutrition management action and does not render deprecated read toggle", () => {
     render(
       <PermissionsEditor
         draft={getDefaultAccessProfile("gestor")!}
@@ -14,7 +14,7 @@ describe("Health permission editor", () => {
       />,
     );
 
-    expect(screen.getByText("Pode ler dados Health v1")).toBeTruthy();
+    expect(screen.queryByText("Pode ler dados Health v1")).toBeNull();
     expect(screen.getByText("Pode gerenciar planos alimentares")).toBeTruthy();
   });
 
@@ -34,7 +34,6 @@ describe("Health permission editor", () => {
         ...gestor.permissions,
         health: {
           ...gestor.permissions.health,
-          read: true,
           future_health_action: true,
         },
       },
@@ -43,7 +42,6 @@ describe("Health permission editor", () => {
     const changed = setModuleAccessLevel(withUnknown, "health", "consulta");
 
     expect(changed.permissions.health?.view).toBe(true);
-    expect(changed.permissions.health?.read).toBe(true);
     expect(changed.permissions.health?.manage_nutrition_plan).toBe(true);
     expect(changed.permissions.health?.future_health_action).toBe(true);
     expect(changed.permissions.health?.edit).toBe(false);

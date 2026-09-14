@@ -59,14 +59,15 @@ function healthSession(
 }
 
 describe("NUT-WEB-4C — Health read compatibility", () => {
-  // Scenario A: canonical read, no legacy view.
-  it("A. allows Health read with health.read alone", () => {
+  // Scenario A: Health domain capability vs F10 view authority.
+  it("A. allows Health read with health.read alone in domain, but does not grant F10 view without health.view", () => {
     expect(
       evaluateCapability(healthSession({ read: true }), "health.read").granted,
     ).toBe(true);
-    expect(hasAccessPermission(healthProfile({ read: true }), "health", "read")).toBe(
-      true,
-    );
+    // Under CT3.AUTH-HEALTH-01, stale health.read cannot substitute for canonical health.view
+    expect(
+      hasAccessPermission(healthProfile({ read: true }) as AccessProfile, "health", "view"),
+    ).toBe(false);
   });
 
   // Scenario B: legacy view only — temporary compatibility, deferred to NUT-WEB-6.
@@ -91,7 +92,7 @@ describe("NUT-WEB-4C — Health read compatibility", () => {
       ).granted,
     ).toBe(false);
     expect(
-      hasAccessPermission(healthProfile({ read: false, view: false }), "health", "read"),
+      hasAccessPermission(healthProfile({ read: false, view: false }) as AccessProfile, "health", "view"),
     ).toBe(false);
   });
 });
@@ -174,7 +175,7 @@ describe("NUT-WEB-4C — Nutrition management authority", () => {
       hasAccessPermission(null, "health", "manage_nutrition_plan"),
     ).toBe(false);
     expect(
-      hasAccessPermission(undefined, "health", "read"),
+      hasAccessPermission(undefined, "health", "read" as never),
     ).toBe(false);
 
     const noSession = evaluateCapability(
@@ -263,7 +264,7 @@ describe("NUT-WEB-4C — default profiles keep existing read access", () => {
 
     for (const [profileId, canRead] of Object.entries(expectedRead)) {
       const profile = getDefaultAccessProfile(profileId)!;
-      expect(hasAccessPermission(profile, "health", "read")).toBe(canRead);
+      expect(hasAccessPermission(profile, "health", "read" as never)).toBe(canRead);
     }
   });
 
@@ -281,7 +282,7 @@ describe("NUT-WEB-4C — default profiles keep existing read access", () => {
   it("leaves a module without Health grants fully denied", () => {
     const almoxarifado = getDefaultAccessProfile("almoxarifado")!;
     expect(hasAccessPermission(almoxarifado, "health", "view")).toBe(false);
-    expect(hasAccessPermission(almoxarifado, "health", "read")).toBe(false);
+    expect(hasAccessPermission(almoxarifado, "health", "read" as never)).toBe(false);
     expect(
       hasAccessPermission(almoxarifado, "health", "manage_nutrition_plan"),
     ).toBe(false);

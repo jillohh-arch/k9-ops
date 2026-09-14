@@ -46,17 +46,17 @@ import { useClinicalCaseEvents } from "../hooks/use-clinical-case-events";
 
 const allowedAccess: MockAccess = {
   status: "ready",
-  profile: { status: "active", permissions: { health: { read: true } } },
+  profile: { status: "active", permissions: { health: { view: true } } },
 };
 
 const forbiddenAccess: MockAccess = {
   status: "ready",
-  profile: { status: "active", permissions: { health: { view: true } } },
+  profile: { status: "active", permissions: { health: { view: false } } },
 };
 
 const inactiveAccess: MockAccess = {
   status: "ready",
-  profile: { status: "inactive", permissions: { health: { read: true } } },
+  profile: { status: "inactive", permissions: { health: { view: true } } },
 };
 
 const loadingAccess: MockAccess = {
@@ -104,7 +104,7 @@ describe("useClinicalCaseEvents", () => {
     accessState.current = allowedAccess;
   });
 
-  it("resolves to forbidden and NEVER reads events when permissions.health.read is missing", () => {
+  it("resolves to forbidden and NEVER reads events when permissions.health.view is missing or false", () => {
     accessState.current = forbiddenAccess;
 
     const { result } = renderHook(() =>
@@ -116,7 +116,7 @@ describe("useClinicalCaseEvents", () => {
     expect(readerMock.readEvents).not.toHaveBeenCalled();
   });
 
-  it("resolves to forbidden and NEVER reads events when profile is inactive, even if health.read is true", () => {
+  it("resolves to forbidden and NEVER reads events when profile is inactive, even if health.view is true", () => {
     accessState.current = inactiveAccess;
 
     const { result } = renderHook(() =>

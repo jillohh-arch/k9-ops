@@ -1,9 +1,9 @@
 /**
- * K9 Ops Web — Health Web v1 HW-6A.I2
+ * K9 Ops Web — Health Web v1 HW-6A.I2 / CT3.AUTH-HEALTH-01
  * useClinicalCases — authority gating, state truthfulness, race safety.
  *
- * THE mandatory security test (§11): a profile holding legacy `health.view`
- * without canonical `health.read` resolves to FORBIDDEN and performs ZERO
+ * THE mandatory security test (CT3.AUTH-HEALTH-01): a profile lacking canonical
+ * Health read authority (health.view !== true) resolves to FORBIDDEN and performs ZERO
  * Clinical scope reads.
  */
 
@@ -77,12 +77,12 @@ function resolveWith(
 
 const allowedAccess: MockAccess = {
   status: "ready",
-  profile: { status: "active", permissions: { health: { read: true } } },
+  profile: { status: "active", permissions: { health: { view: true } } },
 };
 
-const legacyViewOnlyAccess: MockAccess = {
+const forbiddenAccess: MockAccess = {
   status: "ready",
-  profile: { status: "active", permissions: { health: { view: true } } },
+  profile: { status: "active", permissions: { health: { view: false } } },
 };
 
 beforeEach(() => {
@@ -91,9 +91,9 @@ beforeEach(() => {
 });
 
 describe("HW-6A.I2 — useClinicalCases", () => {
-  // 1 — THE mandatory §11 security test
-  it("1. health.view without health.read -> forbidden AND ZERO scope reads", async () => {
-    accessState.current = legacyViewOnlyAccess;
+  // 1 — THE mandatory security test (CT3.AUTH-HEALTH-01)
+  it("1. health.view=false/absent -> forbidden AND ZERO scope reads", async () => {
+    accessState.current = forbiddenAccess;
     resolveWith({ status: "success", data: [entry("c1")], fetchedAt: new Date() });
 
     const { result } = renderHook(() => useClinicalCases());
@@ -112,7 +112,7 @@ describe("HW-6A.I2 — useClinicalCases", () => {
 
   // 2
   it("2. a denial is never presented as emptiness", async () => {
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
 
     const { result } = renderHook(() => useClinicalCases());
 
@@ -264,7 +264,7 @@ describe("HW-6A.I2 — useClinicalCases", () => {
 
   // 11
   it("11. refresh() while forbidden performs no read", async () => {
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
 
     const { result } = renderHook(() => useClinicalCases());
     await waitFor(() => expect(result.current.state.status).toBe("forbidden"));
@@ -305,7 +305,7 @@ describe("HW-6A.I2 — useClinicalCases", () => {
     // First render is authority-loading: nothing is read.
     accessState.current = {
       status: "loading",
-      profile: { status: "active", permissions: { health: { read: true } } },
+      profile: { status: "active", permissions: { health: { view: true } } },
     };
     resolveWith({ status: "success", data: [entry("c1")], fetchedAt: new Date() });
 
@@ -313,7 +313,7 @@ describe("HW-6A.I2 — useClinicalCases", () => {
     expect(loaderMock.load).not.toHaveBeenCalled();
 
     // Authority resolves to forbidden -> still zero reads, forbidden state.
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
     rerender();
 
     await waitFor(() => expect(result.current.state.status).toBe("forbidden"));
@@ -329,7 +329,7 @@ describe("HW-6A.I2 — useClinicalCases", () => {
 
   // 14
   it("14. coverage is safe to read in every state", async () => {
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
 
     const { result } = renderHook(() => useClinicalCases());
 

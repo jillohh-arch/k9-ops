@@ -96,7 +96,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(loadScheduleScope).not.toHaveBeenCalled();
   });
 
-  it("CASE A: health.read=false, reports.view=true, reports.export=true -> inaccessible through Health boundary (forbidden, 0 loader calls)", () => {
+  it("CASE A: health.view=false, reports.view=true, reports.export=true -> inaccessible through Health boundary (forbidden, 0 loader calls)", () => {
     vi.mocked(useAccessControl).mockReturnValue({
       status: "ready",
       profile: {
@@ -104,7 +104,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
         name: "Usuário Relatórios",
         status: "active",
         permissions: {
-          health: { read: false },
+          health: { view: false },
           reports: { view: true, export: true },
         },
       } as unknown as AccessProfile,
@@ -124,7 +124,90 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(loadScheduleScope).not.toHaveBeenCalled();
   });
 
-  it("CASE B: health.read=true, reports.view=false, reports.export=false -> reads normally, export disabled", async () => {
+  it("CASE B: generic admin status alone without health.view -> denied (forbidden, 0 loader calls)", () => {
+    vi.mocked(useAccessControl).mockReturnValue({
+      status: "ready",
+      profile: {
+        id: "admin-user",
+        name: "Administrador Geral",
+        status: "active",
+        permissions: {
+          access: { view: true, edit: true, audit: true },
+          reports: { view: true, export: true },
+        },
+      } as unknown as AccessProfile,
+      profileId: "admin-user",
+      error: null,
+      can: vi.fn(),
+    });
+
+    const { result } = renderHook(() => useHealthReportsData());
+
+    expect(result.current.authorityStatus).toBe("forbidden");
+    expect(result.current.state.status).toBe("forbidden");
+    expect(result.current.exportAuthority.canExport).toBe(false);
+    expect(result.current.exportAuthority.hasCanonicalRead).toBe(false);
+    expect(loadReadinessScope).not.toHaveBeenCalled();
+    expect(loadClinicalScope).not.toHaveBeenCalled();
+    expect(loadScheduleScope).not.toHaveBeenCalled();
+  });
+
+  it("CASE C: reports.export=true without health.view -> Reports read denied (forbidden, 0 loader calls)", () => {
+    vi.mocked(useAccessControl).mockReturnValue({
+      status: "ready",
+      profile: {
+        id: "exporter-only",
+        name: "Exportador Sem Saúde",
+        status: "active",
+        permissions: {
+          reports: { export: true },
+        },
+      } as unknown as AccessProfile,
+      profileId: "exporter-only",
+      error: null,
+      can: vi.fn(),
+    });
+
+    const { result } = renderHook(() => useHealthReportsData());
+
+    expect(result.current.authorityStatus).toBe("forbidden");
+    expect(result.current.state.status).toBe("forbidden");
+    expect(result.current.exportAuthority.canExport).toBe(false);
+    expect(result.current.exportAuthority.hasCanonicalRead).toBe(false);
+    expect(loadReadinessScope).not.toHaveBeenCalled();
+    expect(loadClinicalScope).not.toHaveBeenCalled();
+    expect(loadScheduleScope).not.toHaveBeenCalled();
+  });
+
+  it("CASE D: inactive profile carrying health.view=true -> denied (forbidden, 0 loader calls)", () => {
+    vi.mocked(useAccessControl).mockReturnValue({
+      status: "ready",
+      profile: {
+        id: "inactive-health-user",
+        name: "Usuário Inativo",
+        status: "inactive",
+        permissions: {
+          health: { view: true },
+          reports: { view: true, export: true },
+        },
+      } as unknown as AccessProfile,
+      profileId: "inactive-health-user",
+      error: null,
+      can: vi.fn(),
+    });
+
+    const { result } = renderHook(() => useHealthReportsData());
+
+    expect(result.current.authorityStatus).toBe("forbidden");
+    expect(result.current.state.status).toBe("forbidden");
+    expect(result.current.exportAuthority.canExport).toBe(false);
+    expect(result.current.exportAuthority.hasCanonicalRead).toBe(false);
+    expect(loadReadinessScope).not.toHaveBeenCalled();
+    expect(loadClinicalScope).not.toHaveBeenCalled();
+    expect(loadScheduleScope).not.toHaveBeenCalled();
+  });
+
+  it("CASE E: health.view=true, reports.view=false, reports.export=false -> reads normally, export disabled", async () => {
     mockScopeSuccess();
     vi.mocked(useAccessControl).mockReturnValue({
       status: "ready",
@@ -133,7 +216,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
         name: "Operador Saúde",
         status: "active",
         permissions: {
-          health: { read: true },
+          health: { view: true },
           reports: { view: false, export: false },
         },
       } as unknown as AccessProfile,
@@ -159,7 +242,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(result.current.exportAuthority.reason).toContain("reports.export");
   });
 
-  it("CASE C: health.read=true, reports.view=true, reports.export=false -> reads normally, export disabled", async () => {
+  it("CASE F: health.view=true, reports.view=true, reports.export=false -> reads normally, export disabled", async () => {
     mockScopeSuccess();
     vi.mocked(useAccessControl).mockReturnValue({
       status: "ready",
@@ -168,7 +251,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
         name: "Leitor Saúde e Relatórios",
         status: "active",
         permissions: {
-          health: { read: true },
+          health: { view: true },
           reports: { view: true, export: false },
         },
       } as unknown as AccessProfile,
@@ -194,7 +277,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(result.current.exportAuthority.reason).toContain("reports.export");
   });
 
-  it("CASE D: health.read=true, reports.view=false, reports.export=true -> reads normally, export remains disabled pending F10 ratification", async () => {
+  it("CASE G: health.view=true, reports.view=false, reports.export=true -> reads normally, export remains disabled pending F10 ratification", async () => {
     mockScopeSuccess();
     vi.mocked(useAccessControl).mockReturnValue({
       status: "ready",
@@ -203,7 +286,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
         name: "Leitor Saúde com Export",
         status: "active",
         permissions: {
-          health: { read: true },
+          health: { view: true },
           reports: { view: false, export: true },
         },
       } as unknown as AccessProfile,
@@ -231,7 +314,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(result.current.exportAuthority.reason).toContain("ratificação de política institucional (F10)");
   });
 
-  it("CASE E: health.read=true, reports.view=true, reports.export=true -> reads normally, export remains disabled pending F10 ratification", async () => {
+  it("CASE H: health.view=true, reports.view=true, reports.export=true -> reads normally, export remains disabled pending F10 ratification", async () => {
     mockScopeSuccess();
     vi.mocked(useAccessControl).mockReturnValue({
       status: "ready",
@@ -240,7 +323,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
         name: "Usuário Completo",
         status: "active",
         permissions: {
-          health: { read: true },
+          health: { view: true },
           reports: { view: true, export: true },
         },
       } as unknown as AccessProfile,

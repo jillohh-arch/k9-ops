@@ -1,33 +1,26 @@
 "use client";
 
 /**
- * K9 Ops Web — Health Web v1 HW-6A.I2
+ * K9 Ops Web — Health Web v1 HW-6A.I2 / CT3.AUTH-HEALTH-01
  * STRICT canonical Clinical read authority boundary.
  *
- * WHY THIS EXISTS (I2 §9, §10, §13, §14):
- * The Health shell (`app/(app)/health/layout.tsx`) grants entry through a
- * LEGACY COMPATIBILITY adapter: it seeds `legacyPermissions: ["health.view"]`
- * and `evaluateCapability` accepts `health.view` as a substitute for
- * `health.read`. That adapter is correct for the Health hub, but it is NOT
- * Clinical authority. A profile holding only `health.view` can therefore cross
- * the shell and reach this feature.
- *
- * Clinical read requires the EXPLICIT canonical capability, mirroring Front 20
- * `hasClinicalReadAuthority()` (firestore.rules @ f98952c), which reads the
- * live access profile grant with NO admin bypass.
+ * RATIFIED CONTRACT CT3.AUTH-HEALTH-01:
+ * - F10 persisted authorization contract: `permissions.health.view == true`
+ *   satisfies the F20 semantic/domain capability `health.read`.
+ * - `health.read` remains a valid F20 DOMAIN CAPABILITY name.
+ * - No `read` action is added to F10 schema. The runtime adapter is:
+ *   F10 `health.view === true` => canonical domain read authority (`health.read`).
  *
  * HARD RULES ENFORCED HERE:
- * - Authority is `profile.permissions.health.read === true`, read RAW off the
+ * - Authority is `profile.permissions.health.view === true`, read RAW off the
  *   access-control profile. Nothing else grants it.
- * - `health.view` NEVER grants Clinical read.
- * - `hasAccessPermission(...)` is deliberately NOT used: its `health` +
- *   `view` branch treats canonical read as satisfying legacy view, and routing
- *   Clinical authority through a shared compatibility helper would couple this
- *   boundary to a decision it must not inherit.
+ * - `hasAccessPermission(...)` is deliberately NOT used: routing Clinical
+ *   authority through a shared compatibility helper would couple this boundary
+ *   to decisions it must not inherit.
  * - `evaluateCapability(...)` is deliberately NOT used: it can resolve a grant
  *   from `legacyPermissions`.
  * - NO client-side admin/role bypass. An administrator profile is authorized
- *   only if it actually carries `health.read`.
+ *   only if it actually carries `health.view === true`.
  * - Firestore Rules remain the FINAL per-dog authority. This hook is a
  *   fail-closed pre-gate that prevents a guaranteed-denied fan-out; it never
  *   claims to be sufficient.
@@ -53,10 +46,9 @@ export interface ClinicalReadAuthority {
   /** Canonical capability required — always `health.read`. */
   requiredCapability: string;
   /**
-   * True when the profile carries the LEGACY `health.view` grant while lacking
-   * canonical `health.read`. Diagnostic only: it never softens the decision,
-   * but it lets a consumer explain WHY access stops here after the shell
-   * already let the user in.
+   * Diagnostic flag preserved for interface compatibility under CT3.AUTH-HEALTH-01.
+   * Under ratified CT3.AUTH-HEALTH-01, health.view satisfies canonical health.read,
+   * so this is always false.
    */
   hasLegacyViewOnly: boolean;
 }
@@ -86,8 +78,8 @@ export function useClinicalReadAuthority(): ClinicalReadAuthority {
     const health = rawHealthPermissions(profile?.permissions);
     // Strict identity check: only the literal boolean true grants read.
     // Truthy strings, 1, or "true" are NOT canonical grants.
-    const hasCanonicalRead = health?.read === true;
-    const hasLegacyView = health?.view === true;
+    // CT3.AUTH-HEALTH-01: F10 persisted grant health.view satisfies domain health.read.
+    const hasCanonicalRead = health?.view === true;
 
     if (status === "loading") {
       // Authority is not yet knowable. Fail closed WITHOUT rendering a denial.
@@ -108,7 +100,7 @@ export function useClinicalReadAuthority(): ClinicalReadAuthority {
         status: "forbidden",
         canRead: false,
         requiredCapability: CLINICAL_READ_CAPABILITY,
-        hasLegacyViewOnly: hasLegacyView && !hasCanonicalRead,
+        hasLegacyViewOnly: false,
       };
     }
 

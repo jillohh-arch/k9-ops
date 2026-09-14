@@ -5,7 +5,7 @@
  * Canonical hook for Health Reports data composition & authority gating.
  *
  * HARD SECURITY & INTEGRITY INVARIANTS:
- * - Gated strictly on canonical `health.read === true`.
+ * - Gated strictly on canonical Health read authority: health.view === true satisfies domain health.read (CT3.AUTH-HEALTH-01).
  * - While authority is not `allowed`, ZERO Firestore queries are made.
  * - Composes the 3 frozen institutional scope loaders in parallel:
  *   1. `loadReadinessScope`
@@ -122,10 +122,11 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
     const reports = rawReportsPermissions(profile?.permissions);
 
     // CANONICAL HEALTH REPORTS READ RULE:
-    // Read authority is strictly governed by `health.read === true`.
+    // CT3.AUTH-HEALTH-01: F10 persisted grant `health.view === true` satisfies
+    // canonical domain read authority `health.read`.
     // `reports.view` belongs to the generic reports surface and is NOT
     // required or evaluated for reading canonical Health Reports.
-    const hasCanonicalRead = health?.read === true;
+    const hasCanonicalRead = health?.view === true;
     const hasExportCapability = reports?.export === true;
     const isPolicyRatified = HEALTH_REPORTS_EXPORT_POLICY_RATIFIED;
 
@@ -143,7 +144,7 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
     }
 
     // CANDIDATE EXPORT POLICY GATE (F10 CROSS-FRONT):
-    // Candidate policy requires: health.read === true && reports.export === true.
+    // Candidate policy requires: health read authority && reports.export === true.
     // However, F10 governance has NOT ratified this policy yet.
     // Therefore, Health export remains FAIL-CLOSED (canExport: false) pending F10 ratification.
     const candidateEligible = hasCanonicalRead && hasExportCapability;

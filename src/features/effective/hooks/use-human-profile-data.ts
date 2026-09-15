@@ -205,6 +205,14 @@ export function useHumanProfileData(ra: string) {
     () => query(collection(db, "effective_movements"), limit(500)),
     [],
   );
+  const shiftAssignmentsQuery = useMemo(
+    () => query(collection(db, "user_shift_assignments"), limit(500)),
+    [],
+  );
+  const shiftGroupsQuery = useMemo(
+    () => query(collection(db, "shift_groups"), limit(500)),
+    [],
+  );
 
   const certifications = useRecords(certificationsQuery, "certifications");
   const documents = useRecords(documentsQuery, "documents");
@@ -216,6 +224,11 @@ export function useHumanProfileData(ra: string) {
   const promotionRequests = useRecords(promotionsQuery, "promotion_requests");
   const auditLogs = useRecords(auditQuery, "auditLogs");
   const movements = useRecords(movementsQuery, "effective_movements");
+  const shiftAssignments = useRecords(
+    shiftAssignmentsQuery,
+    "user_shift_assignments",
+  );
+  const shiftGroups = useRecords(shiftGroupsQuery, "shift_groups");
 
   useEffect(() => {
     if (!ra) return;
@@ -285,7 +298,37 @@ export function useHumanProfileData(ra: string) {
       promotionRequests,
       auditLogs,
       movements,
+      shiftAssignments,
+      shiftGroups,
     ];
+
+    const userAssignment = shiftAssignments.records.find(
+      (record) =>
+        record.active !== false &&
+        (humanText(record, "userId", "user_id", "user_ra") === ra ||
+          record._id === ra),
+    );
+    const assignedShiftGroupId = userAssignment
+      ? (humanText(userAssignment, "shiftGroupId", "shift_group_id") ?? "")
+      : (humanText(user, "shift_group_id", "shiftGroupId") ?? "");
+
+    const assignedGroup = assignedShiftGroupId
+      ? shiftGroups.records.find(
+          (g) =>
+            g._id === assignedShiftGroupId ||
+            g.id === assignedShiftGroupId ||
+            humanText(g, "id") === assignedShiftGroupId,
+        )
+      : null;
+
+    const administrativeShiftLabel =
+      (assignedGroup ? humanText(assignedGroup, "name", "code") : null) ||
+      (userAssignment
+        ? humanText(userAssignment, "shiftGroupLabel", "shift_group_label")
+        : null) ||
+      humanText(user, "shift_label", "shiftLabel") ||
+      null;
+
     return {
       activeShift:
         activeShifts.records.find(
@@ -293,6 +336,9 @@ export function useHumanProfileData(ra: string) {
             record._id === ra ||
             humanText(record, "handlerId", "handler_id") === ra,
         ) ?? null,
+      administrativeShift: userAssignment ?? null,
+      administrativeShiftGroup: assignedGroup ?? null,
+      administrativeShiftLabel,
       certifications: certifications.records,
       documents: documents.records,
       error:
@@ -319,6 +365,8 @@ export function useHumanProfileData(ra: string) {
     occurrences,
     promotionRequests,
     ra,
+    shiftAssignments,
+    shiftGroups,
     shiftLogs,
     trainings,
     user,

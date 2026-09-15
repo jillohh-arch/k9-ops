@@ -125,13 +125,27 @@ export function K9CreateForm() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(file.type)) {
+    const extension = file.name.split(".").pop()?.toLowerCase() || "";
+    const isImageExtension = ["jpg", "jpeg", "png", "webp"].includes(extension);
+    const isImageType = ["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(file.type);
+
+    if (!isImageType && !isImageExtension) {
       setPhotoError("Selecione uma imagem PNG, JPG ou WEBP.");
+      setPhotoFile(null);
+      if (previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl("");
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
       setPhotoError("A foto deve ter no máximo 5 MB.");
+      setPhotoFile(null);
+      if (previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl("");
       return;
     }
 
@@ -147,6 +161,14 @@ export function K9CreateForm() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+
+    if (photoError) {
+      setErrors((current) => ({
+        ...current,
+        form: "Corrija o erro na foto antes de salvar o cadastro.",
+      }));
+      return;
+    }
 
     const nextErrors = validate(values);
     setErrors(nextErrors);

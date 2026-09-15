@@ -99,13 +99,26 @@ function normalizeStatus(value: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+function inferImageContentType(file: File): string {
+  if (file.type && file.type.startsWith("image/")) {
+    return file.type;
+  }
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/jpeg";
+}
+
 async function uploadProfilePhoto(dogId: string, file: File) {
   const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const contentType = inferImageContentType(file);
   const fileRef = ref(
     storage,
     `profile_photos/${dogId}-${Date.now()}.${extension}`,
   );
-  await uploadBytes(fileRef, file, { contentType: file.type });
+  await uploadBytes(fileRef, file, { contentType });
   return getDownloadURL(fileRef);
 }
 

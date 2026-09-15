@@ -230,6 +230,32 @@ describe("K9 Create V1", () => {
     ).toBeInTheDocument();
   });
 
+  it("aceita foto com tipo MIME vazio quando a extensão for válida (compatibilidade Windows)", () => {
+    render(<K9CreateForm />);
+    const input = document.getElementById("k9-create-photo") as HTMLInputElement;
+
+    const windowsFile = new File(["x"], "cachorro.jpg", { type: "" });
+    fireEvent.change(input, { target: { files: [windowsFile] } });
+    expect(screen.getByText("Trocar foto")).toBeInTheDocument();
+    expect(screen.queryByText("Selecione uma imagem PNG, JPG ou WEBP.")).not.toBeInTheDocument();
+  });
+
+  it("bloqueia submissão quando houver erro na foto", async () => {
+    render(<K9CreateForm />);
+    fillRequired();
+    const input = document.getElementById("k9-create-photo") as HTMLInputElement;
+
+    const invalid = new File(["x"], "doc.pdf", { type: "application/pdf" });
+    fireEvent.change(input, { target: { files: [invalid] } });
+    expect(screen.getByText("Selecione uma imagem PNG, JPG ou WEBP.")).toBeInTheDocument();
+
+    const submit = screen.getByRole("button", { name: /Cadastrar K9/ });
+    fireEvent.click(submit);
+
+    expect(await screen.findByText("Corrija o erro na foto antes de salvar o cadastro.")).toBeInTheDocument();
+    expect(saveNewK9V1).not.toHaveBeenCalled();
+  });
+
   it("pede confirmação ao cancelar com alterações e permite cancelar sem alterações", () => {
     const { rerender } = render(<K9CreateForm />);
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));

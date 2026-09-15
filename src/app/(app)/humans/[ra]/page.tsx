@@ -3,6 +3,7 @@
 import {
   Activity,
   CalendarDays,
+  Camera,
   Clock3,
   Dog,
   FileText,
@@ -20,6 +21,7 @@ import { useMemo, useState } from "react";
 
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { HumanManagementPanel } from "@/features/effective/components/human-management-panel";
+import { HumanPhotoDialog } from "@/features/effective/components/human-photo-dialog";
 import {
   HumanMovementDialog,
   HumanRecordDialog,
@@ -110,7 +112,7 @@ export default function HumanProfilePage() {
   const ra = decodeURIComponent(params.ra ?? "");
   const data = useHumanProfileData(ra);
   const [dialog, setDialog] = useState<
-    "certification" | "document" | "movement" | null
+    "certification" | "document" | "movement" | "photo" | null
   >(null);
   const userOptions = useMemo(
     () => [
@@ -177,6 +179,15 @@ export default function HumanProfilePage() {
               <Pencil className="h-4 w-4" /> Editar perfil
             </Link>
           ) : null}
+          {canEditHuman ? (
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/[0.08] px-4 py-2.5 text-sm font-bold text-cyan-200 hover:bg-cyan-300/15 transition-colors"
+              onClick={() => setDialog("photo")}
+              type="button"
+            >
+              <Camera className="h-4 w-4" /> Alterar foto
+            </button>
+          ) : null}
           <Link
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-300"
             href={`/humans/${encodeURIComponent(ra)}/history`}
@@ -235,7 +246,9 @@ export default function HumanProfilePage() {
                 ],
                 [
                   "Jornada",
-                  humanText(user, "shift_label", "shiftLabel") ?? "--",
+                  data.administrativeShiftLabel ??
+                    humanText(user, "shift_label", "shiftLabel") ??
+                    "--",
                 ],
                 [
                   "Acesso",
@@ -291,6 +304,7 @@ export default function HumanProfilePage() {
 
       <HumanProfileConfigurationCenter
         activeShift={data.activeShift}
+        administrativeShiftLabel={data.administrativeShiftLabel}
         certifications={data.certifications}
         linkedDogs={data.linkedDogs}
         ra={ra}
@@ -346,7 +360,9 @@ export default function HumanProfilePage() {
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-400">
               <CalendarDays className="h-4 w-4 text-cyan-300/60" />
-              {humanText(user, "shift_label") ?? "Jornada não cadastrada"}
+              {data.administrativeShiftLabel ??
+                humanText(user, "shift_label") ??
+                "Jornada não cadastrada"}
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-400">
               <MapPin className="h-4 w-4 text-cyan-300/60" />
@@ -535,6 +551,17 @@ export default function HumanProfilePage() {
           initialRa={ra}
           onClose={() => setDialog(null)}
           users={userOptions}
+        />
+      ) : null}
+      {dialog === "photo" ? (
+        <HumanPhotoDialog
+          callsign={callsign}
+          currentPhotoUrl={photo}
+          onClose={() => setDialog(null)}
+          onSuccess={() => {
+            setDialog(null);
+          }}
+          ra={ra}
         />
       ) : null}
     </div>

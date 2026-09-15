@@ -9,6 +9,7 @@ import {
   callAdminArchiveHumanCertification,
   callAdminArchiveHumanDocument,
   callAdminArchiveHumanMovement,
+  callAdminPatchHumanPhoto,
   callAdminSaveHumanCertification,
   callAdminSaveHumanDocument,
   callAdminSaveHumanMovement,
@@ -287,14 +288,33 @@ export class LegacyHumanEditBlockedError extends Error {
   }
 }
 
+function inferImageContentType(file: File): string {
+  if (file.type && file.type.startsWith("image/")) {
+    return file.type;
+  }
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/jpeg";
+}
+
 export async function uploadHumanPhoto(ra: string, file: File) {
   const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const contentType = inferImageContentType(file);
   const storageRef = ref(
     storage,
     `profile_photos/human-${ra}-${Date.now()}.${extension}`,
   );
-  await uploadBytes(storageRef, file, { contentType: file.type });
+  await uploadBytes(storageRef, file, { contentType });
   return getDownloadURL(storageRef);
+}
+
+export async function patchHumanPhoto(ra: string, file: File) {
+  const photoUrl = await uploadHumanPhoto(ra, file);
+  const result = await callAdminPatchHumanPhoto({ photoUrl, ra });
+  return result.data;
 }
 
 export async function uploadHumanDocument(ra: string, file: File) {

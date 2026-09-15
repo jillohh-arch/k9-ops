@@ -178,7 +178,7 @@ describe("Human Create V1", () => {
     expect(values.notes).toBe("");
   });
 
-  it("bloqueia double submit e navega para /humans/{ra} da resposta", async () => {
+  it("bloqueia double submit e exibe tela de handoff pós-cadastro com links de acesso e perfil", async () => {
     let resolveSave: (result: { ra: string; created: true }) => void = () => undefined;
     createHumanV1.mockImplementation(
       () => new Promise((resolve) => (resolveSave = resolve)),
@@ -194,8 +194,14 @@ describe("Human Create V1", () => {
     expect(button).toBeDisabled();
 
     resolveSave({ ra: "654321", created: true });
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/humans/654321"));
-    expect(push).toHaveBeenCalledTimes(1);
+
+    const accessLink = await screen.findByRole("link", { name: /Configurar acesso/i });
+    expect(accessLink).toHaveAttribute("href", "/access?ra=654321");
+
+    const profileLink = screen.getByRole("link", { name: /Ver perfil do integrante/i });
+    expect(profileLink).toHaveAttribute("href", "/humans/654321");
+
+    expect(screen.getByText(/Integrante cadastrado com sucesso/i)).toBeInTheDocument();
   });
 
   it("não navega quando o cadastro falha e mostra a mensagem", async () => {

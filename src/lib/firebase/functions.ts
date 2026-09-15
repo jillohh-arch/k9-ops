@@ -399,6 +399,23 @@ export const callAdminSeedInventoryDefaults = httpsCallable<
   { seeded?: number }
 >(functions, "adminSeedInventoryDefaults");
 
+export type AdminPatchHumanPhotoRequest = {
+  photoUrl: string;
+  ra: string;
+};
+
+export type AdminPatchHumanPhotoResult = {
+  photoUrl: string;
+  ra: string;
+  updated: boolean;
+};
+
+export const callAdminPatchHumanPhoto = httpsCallable<
+  AdminPatchHumanPhotoRequest,
+  AdminPatchHumanPhotoResult
+>(functions, "adminPatchHumanPhoto");
+
+
 export const callAdminUpsertInventoryCategory = httpsCallable<
   { id?: string; mode: "create" | "edit"; payload: Record<string, unknown> },
   { id?: string }

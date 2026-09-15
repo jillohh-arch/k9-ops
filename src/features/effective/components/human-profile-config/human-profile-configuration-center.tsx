@@ -27,6 +27,7 @@ import { paths } from "@/lib/routes/paths";
 
 export type HumanProfileConfigurationCenterProps = {
   activeShift?: HumanRecord | null;
+  administrativeShiftLabel?: string | null;
   certifications?: HumanRecord[];
   linkedDogs?: HumanRecord[];
   ra: string;
@@ -35,6 +36,7 @@ export type HumanProfileConfigurationCenterProps = {
 
 export function HumanProfileConfigurationCenter({
   activeShift,
+  administrativeShiftLabel,
   certifications = [],
   linkedDogs = [],
   ra,
@@ -278,7 +280,9 @@ export function HumanProfileConfigurationCenter({
                       "vehicle_prefix",
                       "shiftId",
                     ) ?? "Turno operacional em andamento"
-                  : "Disponibilidade operacional não vinculada"}
+                  : administrativeShiftLabel
+                    ? `Escala: ${administrativeShiftLabel}`
+                    : "Disponibilidade operacional não vinculada"}
               </p>
             </div>
           </div>

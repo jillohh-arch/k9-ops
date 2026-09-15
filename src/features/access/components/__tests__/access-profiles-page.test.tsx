@@ -16,11 +16,19 @@ const {
   mockAssignUserAccessProfile,
   mockSeedDefaultAccessProfiles,
   mockUnassignUserAccessProfile,
+  mockSearchParamsGet,
 } = vi.hoisted(() => ({
   mockCan: vi.fn(),
   mockAssignUserAccessProfile: vi.fn(),
   mockSeedDefaultAccessProfiles: vi.fn(),
   mockUnassignUserAccessProfile: vi.fn(),
+  mockSearchParamsGet: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => ({
+    get: mockSearchParamsGet,
+  }),
 }));
 
 let mockProfiles: AccessProfile[] = [];
@@ -78,6 +86,8 @@ describe("AccessProfilesPage (F10.ACCESS-UX.IA-POLISH-V1)", () => {
     mockAssignUserAccessProfile.mockReset();
     mockSeedDefaultAccessProfiles.mockReset();
     mockUnassignUserAccessProfile.mockReset();
+    mockSearchParamsGet.mockReset();
+    mockSearchParamsGet.mockReturnValue(null);
     mockCan.mockImplementation((mod: string, act: string) => mod === "access" && act === "edit");
 
     mockProfiles = [
@@ -436,6 +446,17 @@ describe("AccessProfilesPage (F10.ACCESS-UX.IA-POLISH-V1)", () => {
         name: /Agente Novo Gamma/i,
       });
       expect(gammaBtn.getAttribute("disabled")).not.toBeNull();
+    });
+
+    it("pré-filtra e destaca o integrante quando query param 'ra' está presente", () => {
+      mockSearchParamsGet.mockImplementation((key: string) =>
+        key === "ra" ? "990013" : null,
+      );
+
+      render(<AccessProfilesPage />);
+
+      expect(screen.getByText(/Filtro ativo por RA:/i)).toBeInTheDocument();
+      expect(screen.getByText(/Indicado para acesso/i)).toBeInTheDocument();
     });
   });
 });

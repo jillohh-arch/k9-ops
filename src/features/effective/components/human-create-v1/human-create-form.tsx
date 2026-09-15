@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAuth } from "@/features/auth/providers/auth-provider";
-import { CircleAlert, Check, Loader, UserPlus } from "lucide-react";
+import { Check, CircleAlert, Loader, ShieldCheck, User, UserPlus } from "lucide-react";
 
 import { HumanCreateContact } from "./human-create-contact";
 import { HumanCreateFunctional } from "./human-create-functional";
@@ -70,6 +71,11 @@ export function HumanCreateForm() {
   const [values, setValues] = useState<HumanCreateFormValues>(
     emptyHumanCreateValues,
   );
+  const [createdResult, setCreatedResult] = useState<{
+    ra: string;
+    callsign: string;
+    fullName: string;
+  } | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
 
@@ -79,11 +85,12 @@ export function HumanCreateForm() {
 
   const isDirty = useMemo(
     () =>
+      !createdResult &&
       Object.entries(values).some(
         ([key, value]) =>
           value !== emptyHumanCreateValues[key as keyof HumanCreateFormValues],
       ),
-    [values],
+    [createdResult, values],
   );
 
   useEffect(() => {
@@ -118,7 +125,12 @@ export function HumanCreateForm() {
     setSaving(true);
     try {
       const { ra } = await createHumanV1(values);
-      router.push(`/humans/${encodeURIComponent(ra)}`);
+      setCreatedResult({
+        callsign: values.callsign.trim(),
+        fullName: values.fullName.trim(),
+        ra,
+      });
+      setSaving(false);
     } catch (error) {
       setErrors({
         form:
@@ -132,6 +144,77 @@ export function HumanCreateForm() {
 
   function handleCancel() {
     router.back();
+  }
+
+  if (createdResult) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6 py-6">
+        <div className="rounded-3xl border border-cyan-200/20 bg-[#0b1628]/90 p-6 sm:p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.15)]">
+              <Check className="h-7 w-7" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">
+                Cadastro concluído
+              </p>
+              <h2 className="text-2xl font-black text-white">
+                Integrante cadastrado com sucesso
+              </h2>
+            </div>
+          </div>
+
+          <p className="mt-4 text-sm leading-relaxed text-slate-300">
+            Os dados de pessoal de <strong className="text-white">{createdResult.callsign}</strong> (RA {createdResult.ra}) foram registrados no efetivo. Como as credenciais e perfis de governança são gerenciados em domínio separado, configure o acesso no módulo correspondente.
+          </p>
+
+          <div className="mt-6 space-y-2.5 rounded-2xl border border-white/8 bg-white/[0.025] p-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-400">Nome completo</span>
+              <span className="font-semibold text-white">{createdResult.fullName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Nome de guerra</span>
+              <span className="font-semibold text-cyan-200">{createdResult.callsign}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">RA</span>
+              <span className="font-mono font-bold text-white">{createdResult.ra}</span>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Link
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-[0_0_24px_rgba(77,208,225,0.24)] hover:bg-cyan-200 transition-colors"
+              href={`/access?ra=${encodeURIComponent(createdResult.ra)}`}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Configurar acesso
+            </Link>
+            <Link
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/[0.08] px-5 py-3 text-sm font-bold text-cyan-200 hover:bg-cyan-300/15 transition-colors"
+              href={`/humans/${encodeURIComponent(createdResult.ra)}`}
+            >
+              <User className="h-4 w-4" />
+              Ver perfil do integrante
+            </Link>
+          </div>
+
+          <div className="mt-5 text-center">
+            <button
+              className="text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+              onClick={() => {
+                setValues(emptyHumanCreateValues);
+                setCreatedResult(null);
+              }}
+              type="button"
+            >
+              Cadastrar outro integrante
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!profile || !canCreateHuman) {

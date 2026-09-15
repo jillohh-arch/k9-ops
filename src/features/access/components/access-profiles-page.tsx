@@ -14,7 +14,8 @@ import {
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -233,10 +234,12 @@ function SectionCard({
 
 function UserRow({
   blocked,
+  highlighted,
   selected,
   user,
 }: {
   blocked?: boolean;
+  highlighted?: boolean;
   selected?: boolean;
   user: AccessUser;
 }) {
@@ -248,9 +251,11 @@ function UserRow({
         "flex items-center gap-3 rounded-xl border p-2.5 transition",
         selected
           ? "border-cyan-300/30 bg-cyan-300/10"
-          : blocked
-            ? "border-amber-300/20 bg-amber-300/10"
-            : "border-white/10 bg-black/20 hover:border-white/15",
+          : highlighted
+            ? "border-cyan-300/60 bg-cyan-300/15 ring-2 ring-cyan-400/50"
+            : blocked
+              ? "border-amber-300/20 bg-amber-300/10"
+              : "border-white/10 bg-black/20 hover:border-white/15",
       )}
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-300/10 text-xs font-black text-cyan-100">
@@ -263,6 +268,7 @@ function UserRow({
         <span className="block truncate text-[11px] text-slate-400">
           {numericRa ? `RA ${user.ra}` : "Cadastro sem RA numérico"}
           {user.isK9Instructor ? " · Instrutor K9" : ""}
+          {highlighted ? " · Indicado para acesso" : ""}
         </span>
       </span>
       {blocked ? (
@@ -284,10 +290,19 @@ export function AccessProfilesPage() {
   const { profiles, loading: profilesLoading } = useAccessProfiles();
   const { users, loading: usersLoading } = useAccessUsers();
 
+  const searchParams = useSearchParams();
+  const targetRa = searchParams?.get?.("ra")?.trim() ?? "";
+
   const [activeTab, setActiveTab] = useState<TabType>("profiles");
   const [selectedProfileId, setSelectedProfileId] = useState("operador_k9");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(targetRa);
   const [assigningRa, setAssigningRa] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (targetRa) {
+      setSearchQuery(targetRa);
+    }
+  }, [targetRa]);
   const [unassignTargetUser, setUnassignTargetUser] = useState<AccessUser | null>(null);
   const [unassigningRa, setUnassigningRa] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -716,10 +731,25 @@ export function AccessProfilesPage() {
                   />
                 </div>
                 <div className="mt-3 max-h-[340px] space-y-2 overflow-y-auto pr-1">
+                  {targetRa ? (
+                    <div className="mb-2 flex items-center justify-between rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-xs text-cyan-200">
+                      <span>
+                        Filtro ativo por RA: <strong>{targetRa}</strong>
+                      </span>
+                      <button
+                        className="text-[11px] font-bold text-cyan-300 underline hover:text-cyan-100"
+                        onClick={() => setSearchQuery("")}
+                        type="button"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                  ) : null}
                   {filteredUsers.map((user) => {
                     const alreadySelected =
                       visibleUserProfileId(user) === selectedProfile.id;
                     const blocked = !hasNumericRa(user);
+                    const isTarget = Boolean(targetRa && user.ra === targetRa);
                     return (
                       <button
                         className="w-full text-left disabled:cursor-not-allowed disabled:opacity-55"
@@ -740,6 +770,7 @@ export function AccessProfilesPage() {
                       >
                         <UserRow
                           blocked={blocked}
+                          highlighted={isTarget}
                           selected={alreadySelected}
                           user={user}
                         />

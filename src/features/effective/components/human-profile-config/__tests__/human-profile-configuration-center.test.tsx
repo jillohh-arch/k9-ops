@@ -297,4 +297,20 @@ describe("HumanProfileConfigurationCenter (H3-W2)", () => {
     // Prova de ausência de escrita inline
     expect(screen.queryByRole("button", { name: /adicionar capacitação/i })).not.toBeInTheDocument();
   });
+
+  it("ROW ESCALA: exibe simultaneamente 'Plantão Charlie' e 'Sem turno ativo' sem contradição", () => {
+    render(
+      <HumanProfileConfigurationCenter
+        activeShift={null}
+        administrativeShiftLabel="Plantão Charlie"
+        ra="8888"
+        user={{ callsign: "CHARLIE", ra: "8888" }}
+      />,
+    );
+
+    const escalaRow = screen.getByTestId("config-row-escala");
+    expect(escalaRow).toHaveTextContent("Sem turno ativo");
+    expect(escalaRow).toHaveTextContent("Escala: Plantão Charlie");
+    expect(escalaRow).not.toHaveTextContent("Em turno");
+  });
 });

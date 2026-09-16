@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -296,13 +296,13 @@ export function AccessProfilesPage() {
   const [activeTab, setActiveTab] = useState<TabType>("profiles");
   const [selectedProfileId, setSelectedProfileId] = useState("operador_k9");
   const [searchQuery, setSearchQuery] = useState(targetRa);
+  const [prevTargetRa, setPrevTargetRa] = useState(targetRa);
   const [assigningRa, setAssigningRa] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (targetRa) {
-      setSearchQuery(targetRa);
-    }
-  }, [targetRa]);
+  if (targetRa !== prevTargetRa) {
+    setPrevTargetRa(targetRa);
+    setSearchQuery(targetRa);
+  }
   const [unassignTargetUser, setUnassignTargetUser] = useState<AccessUser | null>(null);
   const [unassigningRa, setUnassigningRa] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);

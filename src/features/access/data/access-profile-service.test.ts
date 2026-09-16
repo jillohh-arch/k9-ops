@@ -4,6 +4,7 @@ vi.mock("@/lib/firebase/client", () => ({ db: {} }));
 vi.mock("@/lib/firebase/functions", () => ({
   callAdminAssignAccessProfile: vi.fn(),
   callAdminDuplicateAccessProfile: vi.fn(),
+  callAdminProvisionHumanAuth: vi.fn(),
   callAdminSaveAccessProfile: vi.fn(),
   callAdminSeedAccessProfiles: vi.fn(),
   callAdminSetAccessProfileStatus: vi.fn(),
@@ -12,6 +13,7 @@ vi.mock("@/lib/firebase/functions", () => ({
 
 import {
   callAdminDuplicateAccessProfile,
+  callAdminProvisionHumanAuth,
   callAdminSaveAccessProfile,
   callAdminUnassignAccessProfile,
 } from "@/lib/firebase/functions";
@@ -21,6 +23,7 @@ import {
   accessProfileForFunction,
   duplicateAccessProfile,
   normalizeAccessProfile,
+  provisionHumanAuth,
   saveAccessProfile,
   unassignUserAccessProfile,
 } from "./access-profile-service";
@@ -260,6 +263,42 @@ describe("unassignUserAccessProfile", () => {
 
     await expect(unassignUserAccessProfile("990011")).rejects.toThrow(
       "Cadastro inativo nao pode receber ou trocar perfil de acesso.",
+    );
+  });
+});
+
+describe("provisionHumanAuth (F10.AUTH-PROVISIONING-CREDENTIALS-R1)", () => {
+  it("invoca callAdminProvisionHumanAuth com RA e retorna dados do backend", async () => {
+    vi.mocked(callAdminProvisionHumanAuth).mockResolvedValue({
+      data: {
+        auth_uid: "uid-prov-101",
+        created: true,
+        email: "990011@gcm.com.br",
+        initial_password: "InitialPassword123!Aa",
+        ra: "990011",
+      },
+    } as never);
+
+    const result = await provisionHumanAuth("990011");
+
+    expect(callAdminProvisionHumanAuth).toHaveBeenCalledTimes(1);
+    expect(callAdminProvisionHumanAuth).toHaveBeenCalledWith({ ra: "990011" });
+    expect(result).toEqual({
+      auth_uid: "uid-prov-101",
+      created: true,
+      email: "990011@gcm.com.br",
+      initial_password: "InitialPassword123!Aa",
+      ra: "990011",
+    });
+  });
+
+  it("propaga erro quando o callable falha (ex: conflito de identidade)", async () => {
+    vi.mocked(callAdminProvisionHumanAuth).mockRejectedValue(
+      new Error("Conflito de identidade"),
+    );
+
+    await expect(provisionHumanAuth("990011")).rejects.toThrow(
+      "Conflito de identidade",
     );
   });
 });

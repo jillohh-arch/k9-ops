@@ -326,6 +326,23 @@ export const callAdminResetHumanPassword = httpsCallable<
   { temporary_password: string }
 >(functions, "adminResetHumanPassword");
 
+export interface AdminProvisionHumanAuthRequest {
+  ra: string;
+}
+
+export interface AdminProvisionHumanAuthResult {
+  auth_uid: string;
+  created: boolean;
+  email: string;
+  initial_password?: string;
+  ra: string;
+}
+
+export const callAdminProvisionHumanAuth = httpsCallable<
+  AdminProvisionHumanAuthRequest,
+  AdminProvisionHumanAuthResult
+>(functions, "adminProvisionHumanAuth");
+
 export const callAdminSaveHumanCertification = httpsCallable<
   { id?: string; payload: Record<string, unknown>; ra: string },
   { id?: string; ra?: string }

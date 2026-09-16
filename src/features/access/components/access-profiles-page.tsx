@@ -28,6 +28,7 @@ import { useAccessProfiles } from "@/features/access/hooks/use-access-profiles";
 import { useAccessUsers } from "@/features/access/hooks/use-access-users";
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAuth } from "@/features/auth/providers/auth-provider";
+import { AccessOnboardingJourney } from "./access-onboarding-journey";
 import {
   accessActions,
   accessModules,
@@ -321,6 +322,10 @@ export function AccessProfilesPage() {
     () => new Set(profiles.map((profile) => profile.id)),
     [profiles],
   );
+  const targetUser = useMemo(
+    () => users.find((user) => user.ra === targetRa),
+    [users, targetRa],
+  );
   const selectedProfile =
     displayProfiles.find((profile) => profile.id === selectedProfileId) ??
     displayProfiles[0];
@@ -444,6 +449,27 @@ export function AccessProfilesPage() {
           </p>
         </div>
       </div>
+
+      {/* Onboarding Journey for target RA */}
+      {targetRa ? (
+        <AccessOnboardingJourney
+          actorRa={authProfile?.ra ?? null}
+          canManageAccess={canManageAccess}
+          onClearTarget={() => {
+            if (typeof window !== "undefined") {
+              window.history.replaceState(null, "", "/access");
+            }
+            setPrevTargetRa("");
+            setSearchQuery("");
+          }}
+          onProfileAssigned={(profileName) => {
+            setStatusMessage(`Perfil ${profileName} atribuído com sucesso.`);
+          }}
+          profiles={displayProfiles}
+          targetRa={targetRa}
+          targetUser={targetUser}
+        />
+      ) : null}
 
       {/* Top HUD Compact Summary */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-cyan-200/12 bg-slate-950/60 px-4 py-3 text-xs sm:text-sm">

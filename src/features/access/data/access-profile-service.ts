@@ -13,6 +13,7 @@ import { db } from "@/lib/firebase/client";
 import {
   callAdminAssignAccessProfile,
   callAdminDuplicateAccessProfile,
+  callAdminProvisionHumanAuth,
   callAdminSaveAccessProfile,
   callAdminSeedAccessProfiles,
   callAdminSetAccessProfileStatus,
@@ -126,6 +127,7 @@ export type AccessUser = {
   accessProfile: string | null;
   accessProfileId: string | null;
   active: boolean;
+  authUid?: string | null;
   callsign: string;
   fullName: string | null;
   isK9Instructor: boolean;
@@ -173,6 +175,7 @@ function normalizeAccessUser(id: string, data: Record<string, unknown>) {
     accessProfile: text(data, "accessProfile", "access_profile"),
     accessProfileId,
     active: booleanValue(data.active, true) && !isArchived(data),
+    authUid: text(data, "auth_uid", "authUid", "uid"),
     callsign:
       text(data, "callsign", "callSign", "nome_guerra", "nome", "name") ?? id,
     fullName: text(data, "nomeCompleto", "fullName", "name", "nome_completo"),
@@ -334,6 +337,11 @@ export async function setAccessProfileStatus(
     id: profileId,
     status,
   });
+}
+
+export async function provisionHumanAuth(ra: string) {
+  const response = await callAdminProvisionHumanAuth({ ra });
+  return response.data;
 }
 
 export async function assignUserAccessProfile(

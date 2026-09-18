@@ -121,17 +121,17 @@ function deferLoader(): (value: unknown) => void {
 
 const allowedAccess: MockAccess = {
   status: "ready",
-  profile: { status: "active", permissions: { health: { read: true } } },
+  profile: { status: "active", permissions: { health: { view: true } } },
 };
 
 const loadingAccess: MockAccess = {
   status: "loading",
-  profile: { status: "active", permissions: { health: { read: true } } },
+  profile: { status: "active", permissions: { health: { view: true } } },
 };
 
-const legacyViewOnlyAccess: MockAccess = {
+const forbiddenAccess: MockAccess = {
   status: "ready",
-  profile: { status: "active", permissions: { health: { view: true } } },
+  profile: { status: "active", permissions: { health: { view: false } } },
 };
 
 beforeEach(() => {
@@ -156,8 +156,8 @@ describe("no unauthorized read", () => {
     expect(loaderMock.load).not.toHaveBeenCalled();
   });
 
-  it("2. health.view without health.read -> forbidden AND ZERO reads", async () => {
-    accessState.current = legacyViewOnlyAccess;
+  it("2. health.view false/absent -> forbidden AND ZERO reads", async () => {
+    accessState.current = forbiddenAccess;
     resolveWith({ status: "success", data: [entry("s1")], fetchedAt: new Date() });
 
     const { result } = renderHook(() => useSchedule());
@@ -172,7 +172,7 @@ describe("no unauthorized read", () => {
   });
 
   it("3. a denial is never presented as emptiness", async () => {
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
 
     const { result } = renderHook(() => useSchedule());
 
@@ -188,7 +188,7 @@ describe("no unauthorized read", () => {
     const { result, rerender } = renderHook(() => useSchedule());
     expect(loaderMock.load).not.toHaveBeenCalled();
 
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
     rerender();
 
     await waitFor(() => expect(result.current.state.status).toBe("forbidden"));
@@ -224,7 +224,7 @@ describe("authority transitions", () => {
   });
 
   it("7. forbidden -> allowed reads only after the grant", async () => {
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
     resolveWith({ status: "success", data: [entry("s1")], fetchedAt: new Date() });
 
     const { result, rerender } = renderHook(() => useSchedule());
@@ -269,7 +269,7 @@ describe("KILLER — authority revocation in flight", () => {
     await waitFor(() => expect(loaderMock.load).toHaveBeenCalledTimes(1));
 
     // Authority is revoked while cycle A is still pending.
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
     rerender();
 
     await waitFor(() => expect(result.current.state.status).toBe("forbidden"));
@@ -552,7 +552,7 @@ describe("refresh", () => {
   });
 
   it("20. refresh() while forbidden performs ZERO reads", async () => {
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
 
     const { result } = renderHook(() => useSchedule());
     await waitFor(() => expect(result.current.state.status).toBe("forbidden"));
@@ -583,7 +583,7 @@ describe("refresh", () => {
 
 describe("coverage", () => {
   it("22. coverage is safe to read in every state and empty until known", async () => {
-    accessState.current = legacyViewOnlyAccess;
+    accessState.current = forbiddenAccess;
 
     const { result } = renderHook(() => useSchedule());
     await waitFor(() => expect(result.current.state.status).toBe("forbidden"));

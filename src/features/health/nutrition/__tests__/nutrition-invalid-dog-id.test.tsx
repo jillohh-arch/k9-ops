@@ -56,7 +56,7 @@ vi.mock("@/features/access/providers/access-control-provider", () => ({
     status: "ready",
     profile: {
       status: "active",
-      permissions: { health: { read: true } },
+      permissions: { health: { view: true } },
     },
   }),
 }));

@@ -1,14 +1,19 @@
 ﻿"use client";
 
 /**
- * K9 Ops Web — Health Web v1 HW-8 Nutrition
+ * K9 Ops Web — Health Web v1 HW-8 Nutrition / CT3.AUTH-HEALTH-01
  * Strict canonical Nutrition read authority hook.
  *
- * Enforces the strict capability boundary:
- * - health.read === true is the ONLY capability that grants Nutrition read authority.
- * - health.view === true without health.read === true is explicitly REJECTED (hasLegacyViewOnly).
+ * RATIFIED CONTRACT CT3.AUTH-HEALTH-01:
+ * - F10 persisted authorization contract: `permissions.health.view == true`
+ *   satisfies the F20 semantic/domain capability `health.read`.
+ * - `health.read` remains a valid F20 DOMAIN CAPABILITY name.
+ * - No `read` action is added to F10 schema. The runtime adapter is:
+ *   F10 `health.view === true` => canonical domain read authority (`health.read`).
  * - Profile status MUST be "active".
  * - Fail-closed: while status !== "allowed", NO Nutrition data reads may be started.
+ * - NO client-side admin/role bypass. An administrator profile is authorized
+ *   only if it actually carries `health.view === true`.
  *
  * Note: Write/mutation capabilities (e.g. health.manage_nutrition_plan) are distinct
  * and remain governed by explicit mutation guards (can("health", "manage_nutrition_plan")).
@@ -42,8 +47,8 @@ export function useNutritionReadAuthority(): NutritionReadAuthority {
   return useMemo<NutritionReadAuthority>(() => {
     const health = rawHealthPermissions(profile?.permissions);
     // Strict identity check: only literal boolean true grants read.
-    const hasCanonicalRead = health?.read === true;
-    const hasLegacyView = health?.view === true;
+    // CT3.AUTH-HEALTH-01: F10 persisted grant health.view satisfies domain health.read.
+    const hasCanonicalRead = health?.view === true;
 
     if (status === "loading") {
       return {
@@ -61,7 +66,7 @@ export function useNutritionReadAuthority(): NutritionReadAuthority {
         status: "forbidden",
         canRead: false,
         requiredCapability: NUTRITION_READ_CAPABILITY,
-        hasLegacyViewOnly: hasLegacyView && !hasCanonicalRead,
+        hasLegacyViewOnly: false,
       };
     }
 

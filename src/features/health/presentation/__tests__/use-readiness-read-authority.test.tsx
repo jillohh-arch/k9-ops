@@ -1,17 +1,23 @@
 /**
- * HW-5.WEB-READINESS.FIX1 — STRICT Readiness read authority: contract & security.
+ * HW-5.WEB-READINESS.FIX1 / CT3.AUTH-HEALTH-01 — STRICT Readiness read authority: contract & security.
  *
- * Load-bearing security guarantee:
- *   `health.view` NEVER grants Readiness read authority. Only the RAW canonical
- *   `profile.permissions.health.read === true` does, with no role/admin/scope
- *   bypass and no truthiness coercion.
+ * Load-bearing security guarantee (CT3.AUTH-HEALTH-01):
+ *   F10 persisted grant `permissions.health.view === true` satisfies domain
+ *   capability `health.read`. Only the RAW canonical `profile.permissions.health.view === true`
+ *   grants read, with no generic role/admin/scope bypass and no truthiness coercion.
  */
 
 import { describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 type MockAccess = {
-  profile: { status?: string; permissions?: Record<string, unknown>; scope?: string } | null;
+  profile: {
+    status?: string;
+    permissions?: Record<string, unknown>;
+    scope?: string;
+    role?: string;
+    roles?: string[];
+  } | null;
   status: "fallback" | "loading" | "ready";
 };
 
@@ -55,7 +61,7 @@ describe("useReadinessReadAuthority", () => {
     it("is always the canonical health.read", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ health: { read: true } }),
+        profile: activeProfile({ health: { view: true } }),
       });
 
       expect(result.current.requiredCapability).toBe(READINESS_READ_CAPABILITY);
@@ -66,7 +72,7 @@ describe("useReadinessReadAuthority", () => {
     it("reports the capability even while forbidden", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ health: { view: true } }),
+        profile: activeProfile({ health: { view: false } }),
       });
 
       expect(result.current.requiredCapability).toBe("health.read");
@@ -78,7 +84,7 @@ describe("useReadinessReadAuthority", () => {
     it("AccessStatus loading yields loading, never a denial", () => {
       const { result } = withAccess({
         status: "loading",
-        profile: activeProfile({ health: { read: true } }),
+        profile: activeProfile({ health: { view: true } }),
       });
 
       expect(result.current.status).toBe("loading");
@@ -86,10 +92,10 @@ describe("useReadinessReadAuthority", () => {
       expect(result.current.status).not.toBe("forbidden");
     });
 
-    it("loading does not grant read even when profile carries health.read", () => {
+    it("loading does not grant read even when profile carries health.view", () => {
       const { result } = withAccess({
         status: "loading",
-        profile: activeProfile({ health: { read: true } }),
+        profile: activeProfile({ health: { view: true } }),
       });
 
       expect(result.current.canRead).toBe(false);
@@ -105,34 +111,43 @@ describe("useReadinessReadAuthority", () => {
     });
   });
 
-  describe("B. killer test — gestor / legacy view only", () => {
-    it("rejects active gestor with health.view=true and health.read absent", () => {
+  describe("B. canonical grant (CT3.AUTH-HEALTH-01)", () => {
+    // CASE 1: health.view == true, health.read absent -> ALLOW semantic health.read
+    it("grants read when profile is active and health.view === true", () => {
+      const { result } = withAccess({
+        status: "ready",
+        profile: activeProfile({ health: { view: true } }, "own_records"),
+      });
+
+      expect(result.current.status).toBe("allowed");
+      expect(result.current.canRead).toBe(true);
+      expect(result.current.hasLegacyViewOnly).toBe(false);
+    });
+
+    it("allows with global scope when health.view === true", () => {
       const { result } = withAccess({
         status: "ready",
         profile: activeProfile({ health: { view: true } }, "global"),
       });
 
-      expect(result.current.status).toBe("forbidden");
-      expect(result.current.canRead).toBe(false);
-      expect(result.current.hasLegacyViewOnly).toBe(true);
+      expect(result.current.status).toBe("allowed");
+      expect(result.current.canRead).toBe(true);
     });
+  });
 
-    it("global scope does NOT bypass the health.read requirement", () => {
+  describe("C. missing canonical grant", () => {
+    // CASE 2: health.view == false/absent -> DENY
+    it("rejects active profile with health.view === false", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: {
-          status: "active",
-          scope: "global",
-          permissions: { health: { view: true } },
-        },
+        profile: activeProfile({ health: { view: false } }),
       });
 
       expect(result.current.status).toBe("forbidden");
       expect(result.current.canRead).toBe(false);
+      expect(result.current.hasLegacyViewOnly).toBe(false);
     });
-  });
 
-  describe("C. active profile without canonical read", () => {
     it("rejects active profile with empty health permissions", () => {
       const { result } = withAccess({
         status: "ready",
@@ -155,10 +170,10 @@ describe("useReadinessReadAuthority", () => {
       expect(result.current.hasLegacyViewOnly).toBe(false);
     });
 
-    it("rejects truthy non-boolean read value ('true', 1)", () => {
+    it("rejects truthy non-boolean view value ('true', 1)", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ health: { read: "true" } }),
+        profile: activeProfile({ health: { view: "true" } }),
       });
 
       expect(result.current.status).toBe("forbidden");
@@ -167,12 +182,13 @@ describe("useReadinessReadAuthority", () => {
   });
 
   describe("D. inactive profile", () => {
-    it("rejects inactive profile even if health.read === true", () => {
+    // CASE 3: profile inactive -> DENY
+    it("rejects inactive profile even if health.view === true", () => {
       const { result } = withAccess({
         status: "ready",
         profile: {
           status: "inactive",
-          permissions: { health: { read: true } },
+          permissions: { health: { view: true } },
         },
       });
 
@@ -181,16 +197,66 @@ describe("useReadinessReadAuthority", () => {
     });
   });
 
-  describe("E. canonical allowed", () => {
-    it("grants read when profile is active and health.read === true", () => {
+  describe("E. role and admin contracts", () => {
+    // CASE 6: no generic admin bypass
+    it("rejects administrator without health.view (no generic admin bypass)", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ health: { read: true } }, "own_records"),
+        profile: {
+          status: "active",
+          role: "admin",
+          scope: "global",
+          permissions: { other: { manage: true } },
+        },
+      });
+
+      expect(result.current.status).toBe("forbidden");
+      expect(result.current.canRead).toBe(false);
+    });
+
+    // CASE 4: administrator profile using health.view -> ALLOW
+    it("allows administrator profile with health.view === true", () => {
+      const { result } = withAccess({
+        status: "ready",
+        profile: {
+          status: "active",
+          role: "admin",
+          permissions: { health: { view: true } },
+        },
       });
 
       expect(result.current.status).toBe("allowed");
       expect(result.current.canRead).toBe(true);
-      expect(result.current.hasLegacyViewOnly).toBe(false);
+    });
+
+    // CASE 5: operador_k9 profile using health.view -> ALLOW
+    it("allows operador_k9 profile with health.view === true", () => {
+      const { result } = withAccess({
+        status: "ready",
+        profile: {
+          status: "active",
+          role: "condutor",
+          permissions: { health: { view: true, create: true, edit: true } },
+        },
+      });
+
+      expect(result.current.status).toBe("allowed");
+      expect(result.current.canRead).toBe(true);
+    });
+
+    // CASE 7: Instructor qualification does not affect Health base authorization
+    it("instructor qualification alone without health.view remains forbidden", () => {
+      const { result } = withAccess({
+        status: "ready",
+        profile: {
+          status: "active",
+          permissions: { health: {} },
+          roles: ["condutor", "instrutor_k9"],
+        },
+      });
+
+      expect(result.current.status).toBe("forbidden");
+      expect(result.current.canRead).toBe(false);
     });
   });
 
@@ -198,7 +264,7 @@ describe("useReadinessReadAuthority", () => {
     it("transitions from allowed to forbidden cleanly when profile switches", () => {
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ health: { read: true } }),
+        profile: activeProfile({ health: { view: true } }),
       };
 
       const { result, rerender } = renderHook(() => useReadinessReadAuthority());
@@ -206,26 +272,25 @@ describe("useReadinessReadAuthority", () => {
       expect(result.current.status).toBe("allowed");
       expect(result.current.canRead).toBe(true);
 
-      // Transition to legacy-view-only gestor
+      // Transition to forbidden
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ health: { view: true } }, "global"),
+        profile: activeProfile({ health: { view: false } }, "global"),
       };
 
       rerender();
 
       expect(result.current.status).toBe("forbidden");
       expect(result.current.canRead).toBe(false);
-      expect(result.current.hasLegacyViewOnly).toBe(true);
     });
   });
 
   describe("G. cockpit read ordering & authority integration", () => {
-    it("KILLER CASE — gestor (health.view=true, health.read absent) is forbidden and causes 0 cockpit loader calls", () => {
+    it("unauthorized user (health.view absent) is forbidden and causes 0 cockpit loader calls", () => {
       vi.clearAllMocks();
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ health: { view: true } }, "global"),
+        profile: activeProfile({ health: {} }, "global"),
       };
 
       const { result } = renderHook(() => useReadinessCockpit("stg-dog-001"));
@@ -235,13 +300,13 @@ describe("useReadinessReadAuthority", () => {
       expect(loadReadinessCockpit).toHaveBeenCalledTimes(0);
     });
 
-    it("inactive profile with health.read=true is forbidden and causes 0 cockpit loader calls", () => {
+    it("inactive profile with health.view=true is forbidden and causes 0 cockpit loader calls", () => {
       vi.clearAllMocks();
       accessState.current = {
         status: "ready",
         profile: {
           status: "inactive",
-          permissions: { health: { read: true } },
+          permissions: { health: { view: true } },
         },
       };
 
@@ -266,11 +331,11 @@ describe("useReadinessReadAuthority", () => {
       expect(loadReadinessCockpit).toHaveBeenCalledTimes(0);
     });
 
-    it("canonical allowed user (health.read=true) initiates cockpit data load", () => {
+    it("canonical allowed user (health.view=true) initiates cockpit data load", () => {
       vi.clearAllMocks();
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ health: { read: true } }),
+        profile: activeProfile({ health: { view: true } }),
       };
 
       renderHook(() => useReadinessCockpit("stg-dog-001"));
@@ -283,17 +348,17 @@ describe("useReadinessReadAuthority", () => {
       vi.clearAllMocks();
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ health: { read: true } }),
+        profile: activeProfile({ health: { view: true } }),
       };
 
       const { result, rerender } = renderHook(() => useReadinessCockpit("stg-dog-001"));
 
       expect(loadReadinessCockpit).toHaveBeenCalledTimes(1);
 
-      // Switch to forbidden gestor
+      // Switch to forbidden
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ health: { view: true } }, "global"),
+        profile: activeProfile({ health: { view: false } }, "global"),
       };
 
       rerender();
@@ -304,4 +369,3 @@ describe("useReadinessReadAuthority", () => {
     });
   });
 });
-

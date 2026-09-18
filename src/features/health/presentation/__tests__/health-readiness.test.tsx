@@ -23,7 +23,7 @@ const accessState = vi.hoisted(() => ({
     status: "ready" as const,
     profile: {
       status: "active",
-      permissions: { health: { read: true } },
+      permissions: { health: { view: true } },
       scope: "own_records",
     },
   } as MockAccess,
@@ -501,18 +501,18 @@ describe("HW-5.WEB-READINESS.FIX1 — strict workforce authority & read ordering
       status: "ready",
       profile: {
         status: "active",
-        permissions: { health: { read: true } },
+        permissions: { health: { view: true } },
         scope: "own_records",
       },
     };
   });
 
-  it("24. KILLER CASE — gestor (health.view=true, health.read absent) is forbidden and causes 0 loader calls", () => {
+  it("24. health.view absent/false is forbidden and causes 0 loader calls", () => {
     accessState.current = {
       status: "ready",
       profile: {
         status: "active",
-        permissions: { health: { view: true } },
+        permissions: { health: { view: false } },
         scope: "global",
       },
     };
@@ -524,12 +524,12 @@ describe("HW-5.WEB-READINESS.FIX1 — strict workforce authority & read ordering
     expect(loadReadinessScope).toHaveBeenCalledTimes(0);
   });
 
-  it("25. Inactive profile with health.read=true is forbidden and causes 0 loader calls", () => {
+  it("25. Inactive profile with health.view=true is forbidden and causes 0 loader calls", () => {
     accessState.current = {
       status: "ready",
       profile: {
         status: "inactive",
-        permissions: { health: { read: true } },
+        permissions: { health: { view: true } },
       },
     };
 
@@ -553,7 +553,7 @@ describe("HW-5.WEB-READINESS.FIX1 — strict workforce authority & read ordering
     expect(loadReadinessScope).toHaveBeenCalledTimes(0);
   });
 
-  it("27. Canonical allowed user (health.read=true) initiates data load", async () => {
+  it("27. Canonical allowed user (health.view=true) initiates data load", async () => {
     vi.mocked(loadReadinessScope).mockResolvedValueOnce({
       items: [],
       activeRestrictions: [],
@@ -593,12 +593,12 @@ describe("HW-5.WEB-READINESS.FIX1 — strict workforce authority & read ordering
       expect(result.current.items.length).toBe(1);
     });
 
-    // Session switches to forbidden gestor
+    // Session switches to forbidden
     accessState.current = {
       status: "ready",
       profile: {
         status: "active",
-        permissions: { health: { view: true } },
+        permissions: { health: { view: false } },
         scope: "global",
       },
     };

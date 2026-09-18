@@ -1,10 +1,10 @@
 /**
- * HW-4.WEB-SCHED-RD-I4 — STRICT Schedule read authority: contract & security.
+ * HW-4.WEB-SCHED-RD-I4 / CT3.AUTH-HEALTH-01 — STRICT Schedule read authority: contract & security.
  *
- * The load-bearing security guarantee:
- *   `health.view` NEVER grants Schedule read authority. Only the RAW canonical
- *   `profile.permissions.health.read === true` does, with no admin/legacy
- *   bypass and no truthiness coercion.
+ * The load-bearing security guarantee (CT3.AUTH-HEALTH-01):
+ *   F10 persisted grant `permissions.health.view === true` satisfies the F20
+ *   semantic/domain capability `health.read`. Only the RAW canonical
+ *   `profile.permissions.health.view === true` grants read, with no admin bypass.
  *
  * DELIBERATELY ABSENT: any test claiming this hook prevents a read from
  * starting. The hook is derivation-only; the "no read before allowed" timing
@@ -16,7 +16,12 @@ import { describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 type MockAccess = {
-  profile: { status?: string; permissions?: Record<string, unknown> };
+  profile: {
+    status?: string;
+    permissions?: Record<string, unknown>;
+    role?: string;
+    roles?: string[];
+  };
   status: "fallback" | "loading" | "ready";
 };
 
@@ -51,7 +56,7 @@ describe("required capability", () => {
   it("is always the canonical health.read", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
 
     expect(result.current.requiredCapability).toBe("health.read");
@@ -61,7 +66,7 @@ describe("required capability", () => {
   it("reports the capability even while forbidden", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { view: true } }),
+      profile: activeProfile({ health: { view: false } }),
     });
 
     expect(result.current.requiredCapability).toBe("health.read");
@@ -72,7 +77,7 @@ describe("A. unresolved profile", () => {
   it("AccessStatus loading yields loading, never a denial", () => {
     const { result } = withAccess({
       status: "loading",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
 
     expect(result.current.status).toBe("loading");
@@ -84,7 +89,7 @@ describe("A. unresolved profile", () => {
   it("loading does not grant read even when the profile already carries it", () => {
     const { result } = withAccess({
       status: "loading",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
 
     expect(result.current.canRead).toBe(false);
@@ -100,11 +105,12 @@ describe("A. unresolved profile", () => {
   });
 });
 
-describe("B. canonical grant", () => {
-  it("active profile + health.read === true yields allowed", () => {
+describe("B. canonical grant (CT3.AUTH-HEALTH-01)", () => {
+  // CASE 1: health.view == true, health.read absent -> ALLOW semantic health.read
+  it("active profile + health.view === true yields allowed with health.read capability", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
 
     expect(result.current.status).toBe("allowed");
@@ -115,13 +121,13 @@ describe("B. canonical grant", () => {
   it("canRead is true ONLY for allowed", () => {
     const allowed = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
     expect(allowed.result.current.canRead).toBe(true);
 
     const denied = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: false } }),
+      profile: activeProfile({ health: { view: false } }),
     });
     expect(denied.result.current.canRead).toBe(false);
   });
@@ -130,8 +136,8 @@ describe("B. canonical grant", () => {
     const { result } = withAccess({
       status: "ready",
       profile: activeProfile({
-        health: { read: true, view: true, write: true },
-        training: { read: true },
+        health: { view: true, write: true },
+        training: { view: true },
       }),
     });
 
@@ -140,17 +146,18 @@ describe("B. canonical grant", () => {
 });
 
 describe("C/D. missing canonical grant", () => {
-  it("health.read === false yields forbidden", () => {
+  // CASE 2: health.view == false/absent -> DENY
+  it("health.view === false yields forbidden", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: false } }),
+      profile: activeProfile({ health: { view: false } }),
     });
 
     expect(result.current.status).toBe("forbidden");
     expect(result.current.canRead).toBe(false);
   });
 
-  it("absent health.read yields forbidden", () => {
+  it("absent health.view yields forbidden", () => {
     const { result } = withAccess({
       status: "ready",
       profile: activeProfile({ health: {} }),
@@ -162,7 +169,7 @@ describe("C/D. missing canonical grant", () => {
   it("absent health module entirely yields forbidden", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: activeProfile({ training: { read: true } }),
+      profile: activeProfile({ training: { view: true } }),
     });
 
     expect(result.current.status).toBe("forbidden");
@@ -175,45 +182,12 @@ describe("C/D. missing canonical grant", () => {
   });
 });
 
-describe("E. legacy health.view never grants", () => {
-  it("health.view only yields forbidden with the diagnostic set", () => {
-    const { result } = withAccess({
-      status: "ready",
-      profile: activeProfile({ health: { view: true } }),
-    });
-
-    expect(result.current.status).toBe("forbidden");
-    expect(result.current.canRead).toBe(false);
-    // Diagnostic explains WHY access stops after the shell let the user in.
-    expect(result.current.hasLegacyViewOnly).toBe(true);
-  });
-
-  it("health.view alongside health.read === false is still forbidden", () => {
-    const { result } = withAccess({
-      status: "ready",
-      profile: activeProfile({ health: { view: true, read: false } }),
-    });
-
-    expect(result.current.status).toBe("forbidden");
-    expect(result.current.hasLegacyViewOnly).toBe(true);
-  });
-
-  it("the diagnostic is false when canonical read is present", () => {
-    const { result } = withAccess({
-      status: "ready",
-      profile: activeProfile({ health: { view: true, read: true } }),
-    });
-
-    expect(result.current.status).toBe("allowed");
-    expect(result.current.hasLegacyViewOnly).toBe(false);
-  });
-});
-
 describe("F. inactive profile", () => {
-  it("inactive profile with health.read true is forbidden", () => {
+  // CASE 3: profile inactive -> DENY
+  it("inactive profile with health.view true is forbidden", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: { status: "inactive", permissions: { health: { read: true } } },
+      profile: { status: "inactive", permissions: { health: { view: true } } },
     });
 
     expect(result.current.status).toBe("forbidden");
@@ -223,7 +197,7 @@ describe("F. inactive profile", () => {
   it("absent profile status is forbidden", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: { permissions: { health: { read: true } } },
+      profile: { permissions: { health: { view: true } } },
     });
 
     expect(result.current.status).toBe("forbidden");
@@ -240,10 +214,10 @@ describe("G/H. literal boolean strictness", () => {
     ["null", null],
     ["undefined", undefined],
     ["string 'yes'", "yes"],
-  ])("health.read as %s does NOT grant read", (_label, value) => {
+  ])("health.view as %s does NOT grant read", (_label, value) => {
     const { result } = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: value } }),
+      profile: activeProfile({ health: { view: value } }),
     });
 
     expect(result.current.status).toBe("forbidden");
@@ -253,7 +227,7 @@ describe("G/H. literal boolean strictness", () => {
   it("only the literal boolean true grants", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
 
     expect(result.current.canRead).toBe(true);
@@ -261,6 +235,7 @@ describe("G/H. literal boolean strictness", () => {
 });
 
 describe("I. no admin or role bypass", () => {
+  // CASE 6: no generic admin bypass
   it.each([
     ["admin role", { role: "admin" }],
     ["administrador role", { role: "administrador" }],
@@ -268,7 +243,7 @@ describe("I. no admin or role bypass", () => {
     ["superuser flag", { superuser: true }],
     ["internal_role", { internal_role: "admin" }],
     ["roles array", { roles: ["admin", "superuser"] }],
-  ])("%s without health.read remains forbidden", (_label, extra) => {
+  ])("%s without health.view remains forbidden", (_label, extra) => {
     const { result } = withAccess({
       status: "ready",
       profile: { status: "active", permissions: { health: {} }, ...extra },
@@ -278,22 +253,68 @@ describe("I. no admin or role bypass", () => {
     expect(result.current.canRead).toBe(false);
   });
 
-  it("an admin-like profile is allowed only via literal health.read", () => {
+  // CASE 4: administrator profile using health.view -> ALLOW
+  it("an administrator profile with health.view === true is allowed", () => {
     const { result } = withAccess({
       status: "ready",
       profile: {
         status: "active",
-        permissions: { health: { read: true } },
+        permissions: { health: { view: true } },
         role: "admin",
-      } as MockAccess["profile"],
+      },
     });
 
     expect(result.current.status).toBe("allowed");
+    expect(result.current.canRead).toBe(true);
+  });
+
+  // CASE 5: operador_k9 profile using health.view -> ALLOW
+  it("an operador_k9 profile with health.view === true is allowed", () => {
+    const { result } = withAccess({
+      status: "ready",
+      profile: {
+        status: "active",
+        permissions: { health: { view: true, create: true, edit: true } },
+        role: "condutor",
+      },
+    });
+
+    expect(result.current.status).toBe("allowed");
+    expect(result.current.canRead).toBe(true);
+  });
+
+  // CASE 7: Instructor qualification does not affect Health base authorization
+  it("instructor qualification alone without health.view remains forbidden", () => {
+    const { result } = withAccess({
+      status: "ready",
+      profile: {
+        status: "active",
+        permissions: { health: {} },
+        roles: ["condutor", "instrutor_k9"],
+      },
+    });
+
+    expect(result.current.status).toBe("forbidden");
+    expect(result.current.canRead).toBe(false);
+  });
+
+  it("instructor qualification alongside health.view === true is allowed", () => {
+    const { result } = withAccess({
+      status: "ready",
+      profile: {
+        status: "active",
+        permissions: { health: { view: true } },
+        roles: ["condutor", "instrutor_k9"],
+      },
+    });
+
+    expect(result.current.status).toBe("allowed");
+    expect(result.current.canRead).toBe(true);
   });
 });
 
 describe("J. fallback access status", () => {
-  it("fallback without health.read is forbidden, NOT loading", () => {
+  it("fallback without health.view is forbidden, NOT loading", () => {
     const { result } = withAccess({
       status: "fallback",
       profile: activeProfile({ health: {} }),
@@ -304,10 +325,10 @@ describe("J. fallback access status", () => {
     expect(result.current.status).not.toBe("loading");
   });
 
-  it("fallback WITH literal health.read is allowed", () => {
+  it("fallback WITH literal health.view is allowed", () => {
     const { result } = withAccess({
       status: "fallback",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
 
     expect(result.current.status).toBe("allowed");
@@ -315,13 +336,10 @@ describe("J. fallback access status", () => {
 });
 
 describe("derivation-only surface", () => {
-  // Structural evidence of scope: the hook exposes authority state and nothing
-  // that could start, cancel or coordinate a read. This is NOT a claim that it
-  // enforces read timing — that belongs to the orchestration gate.
   it("exposes exactly the four authority fields and no read/load function", () => {
     const { result } = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
 
     expect(Object.keys(result.current).sort()).toEqual([
@@ -339,14 +357,12 @@ describe("derivation-only surface", () => {
   it("returns a stable result for unchanged access state", () => {
     const { result, rerender } = withAccess({
       status: "ready",
-      profile: activeProfile({ health: { read: true } }),
+      profile: activeProfile({ health: { view: true } }),
     });
     const first = result.current;
 
     rerender();
 
-    // Memoized on [profile, status]; identity stability matters for consumers
-    // that will place this in an effect dependency list.
     expect(result.current).toBe(first);
   });
 });

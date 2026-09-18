@@ -1,12 +1,13 @@
 /**
- * K9 Ops Web — Health Web v1 HW-8 Nutrition
+ * K9 Ops Web — Health Web v1 HW-8 Nutrition / CT3.AUTH-HEALTH-01
  * Unit & Integration Test Suite for Strict Nutrition Read Authority
  *
- * Enforces the strict capability boundary:
- * - \health.read === true\ is the ONLY capability that grants Nutrition read authority.
- * - \health.view === true\ without \health.read === true\ is explicitly REJECTED.
+ * Enforces the strict capability boundary (CT3.AUTH-HEALTH-01):
+ * - F10 persisted grant permissions.health.view == true satisfies domain capability health.read.
+ * - health.view === false or absent is explicitly REJECTED.
  * - Profile status MUST be "active".
  * - Fail-closed: while status !== "allowed", 0 reads may be executed.
+ * - NO generic admin or instructor bypass.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -18,6 +19,7 @@ type MockAccess = {
     permissions?: Record<string, unknown>;
     scope?: string;
     role?: string;
+    roles?: string[];
     [key: string]: unknown;
   } | null;
   status: "fallback" | "loading" | "ready";
@@ -29,7 +31,7 @@ const accessState = vi.hoisted(() => ({
     status: "ready",
     profile: {
       status: "active",
-      permissions: { health: { read: true } },
+      permissions: { health: { view: true } },
       scope: "global",
     },
     can: () => false,
@@ -113,7 +115,7 @@ describe("useNutritionReadAuthority", () => {
     it("is always the canonical health.read", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ read: true }),
+        profile: activeProfile({ view: true }),
       });
 
       expect(result.current.requiredCapability).toBe("health.read");
@@ -143,10 +145,10 @@ describe("useNutritionReadAuthority", () => {
       expect(result.current.hasLegacyViewOnly).toBe(false);
     });
 
-    it("loading does not grant read even when profile carries health.read", () => {
+    it("loading does not grant read even when profile carries health.view", () => {
       const { result } = withAccess({
         status: "loading",
-        profile: activeProfile({ read: true }),
+        profile: activeProfile({ view: true }),
       });
 
       expect(result.current.status).toBe("loading");
@@ -155,13 +157,13 @@ describe("useNutritionReadAuthority", () => {
   });
 
   describe("B. profile inactive", () => {
-    it("inactive profile with health.read=true is FORBIDDEN", () => {
+    it("inactive profile with health.view=true is FORBIDDEN", () => {
       const { result } = withAccess({
         status: "ready",
         profile: {
           status: "inactive",
           scope: "global",
-          permissions: { health: { read: true } },
+          permissions: { health: { view: true } },
         },
       });
 
@@ -169,13 +171,13 @@ describe("useNutritionReadAuthority", () => {
       expect(result.current.canRead).toBe(false);
     });
 
-    it("suspended profile with health.read=true is FORBIDDEN", () => {
+    it("suspended profile with health.view=true is FORBIDDEN", () => {
       const { result } = withAccess({
         status: "ready",
         profile: {
           status: "suspended",
           scope: "global",
-          permissions: { health: { read: true } },
+          permissions: { health: { view: true } },
         },
       });
 
@@ -184,11 +186,12 @@ describe("useNutritionReadAuthority", () => {
     });
   });
 
-  describe("C. canonical active health.read (allowed)", () => {
-    it("active profile with explicit health.read=true is ALLOWED", () => {
+  describe("C. canonical active health.view (allowed)", () => {
+    // CASE 1: health.view == true, health.read absent -> ALLOW semantic health.read
+    it("active profile with explicit health.view=true is ALLOWED", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ read: true }),
+        profile: activeProfile({ view: true }),
       });
 
       expect(result.current.status).toBe("allowed");
@@ -196,10 +199,10 @@ describe("useNutritionReadAuthority", () => {
       expect(result.current.hasLegacyViewOnly).toBe(false);
     });
 
-    it("allowed with scope=global when health.read=true", () => {
+    it("allowed with scope=global when health.view=true", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ read: true }, "global"),
+        profile: activeProfile({ view: true }, "global"),
       });
 
       expect(result.current.status).toBe("allowed");
@@ -207,26 +210,27 @@ describe("useNutritionReadAuthority", () => {
     });
   });
 
-  describe("D. PERMANENT SECURITY KILLER: health.view only is REJECTED", () => {
-    it("active profile with health.view=true and NO health.read is FORBIDDEN", () => {
+  describe("D. health.view false or absent is REJECTED", () => {
+    // CASE 2: health.view == false/absent -> DENY
+    it("active profile with health.view=false is FORBIDDEN", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ view: true }),
+        profile: activeProfile({ view: false }),
       });
 
       expect(result.current.status).toBe("forbidden");
       expect(result.current.canRead).toBe(false);
-      expect(result.current.hasLegacyViewOnly).toBe(true);
+      expect(result.current.hasLegacyViewOnly).toBe(false);
     });
 
-    it("rejects health.view even with admin/gestor profile and scope=global", () => {
+    it("rejects absent health.view even with admin/gestor profile and scope=global", () => {
       const { result } = withAccess({
         status: "ready",
         profile: {
           status: "active",
           scope: "global",
+          role: "admin",
           permissions: {
-            health: { view: true },
             admin: { manage: true },
           },
         },
@@ -234,28 +238,18 @@ describe("useNutritionReadAuthority", () => {
 
       expect(result.current.status).toBe("forbidden");
       expect(result.current.canRead).toBe(false);
-      expect(result.current.hasLegacyViewOnly).toBe(true);
-    });
-
-    it("rejects health.view=true when health.read=false", () => {
-      const { result } = withAccess({
-        status: "ready",
-        profile: activeProfile({ view: true, read: false }),
-      });
-
-      expect(result.current.status).toBe("forbidden");
-      expect(result.current.canRead).toBe(false);
-      expect(result.current.hasLegacyViewOnly).toBe(true);
     });
   });
 
   describe("E. no role/admin/scope bypass", () => {
-    it("admin profile without health.read is FORBIDDEN", () => {
+    // CASE 6: no generic admin bypass
+    it("admin profile without health.view is FORBIDDEN", () => {
       const { result } = withAccess({
         status: "ready",
         profile: {
           status: "active",
           scope: "global",
+          role: "admin",
           permissions: { admin: { superuser: true } },
         },
       });
@@ -284,13 +278,58 @@ describe("useNutritionReadAuthority", () => {
       expect(result.current.status).toBe("forbidden");
       expect(result.current.canRead).toBe(false);
     });
+
+    // CASE 4: administrator profile using health.view -> ALLOW
+    it("administrator profile with health.view=true is ALLOWED", () => {
+      const { result } = withAccess({
+        status: "ready",
+        profile: {
+          status: "active",
+          role: "admin",
+          permissions: { health: { view: true } },
+        },
+      });
+
+      expect(result.current.status).toBe("allowed");
+      expect(result.current.canRead).toBe(true);
+    });
+
+    // CASE 5: operador_k9 profile using health.view -> ALLOW
+    it("operador_k9 profile with health.view=true is ALLOWED", () => {
+      const { result } = withAccess({
+        status: "ready",
+        profile: {
+          status: "active",
+          role: "condutor",
+          permissions: { health: { view: true, create: true, edit: true } },
+        },
+      });
+
+      expect(result.current.status).toBe("allowed");
+      expect(result.current.canRead).toBe(true);
+    });
+
+    // CASE 7: Instructor qualification does not affect Health base authorization
+    it("instructor qualification alone without health.view remains forbidden", () => {
+      const { result } = withAccess({
+        status: "ready",
+        profile: {
+          status: "active",
+          permissions: { health: {} },
+          roles: ["condutor", "instrutor_k9"],
+        },
+      });
+
+      expect(result.current.status).toBe("forbidden");
+      expect(result.current.canRead).toBe(false);
+    });
   });
 
   describe("F. truthiness vs strict boolean identity", () => {
     it("string 'true' does NOT grant read", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ read: "true" }),
+        profile: activeProfile({ view: "true" }),
       });
 
       expect(result.current.status).toBe("forbidden");
@@ -300,7 +339,7 @@ describe("useNutritionReadAuthority", () => {
     it("number 1 does NOT grant read", () => {
       const { result } = withAccess({
         status: "ready",
-        profile: activeProfile({ read: 1 }),
+        profile: activeProfile({ view: 1 }),
       });
 
       expect(result.current.status).toBe("forbidden");
@@ -309,11 +348,11 @@ describe("useNutritionReadAuthority", () => {
   });
 
   describe("G. Nutrition Landing read ordering & authority integration", () => {
-    it("unauthorized user (health.view only) triggers 0 loadReadinessScope calls and renders ForbiddenState", () => {
+    it("unauthorized user (health.view absent) triggers 0 loadReadinessScope calls and renders ForbiddenState", () => {
       vi.clearAllMocks();
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ view: true }, "global"),
+        profile: activeProfile(null, "global"),
         can: () => false,
       };
 
@@ -328,7 +367,7 @@ describe("useNutritionReadAuthority", () => {
       vi.clearAllMocks();
       accessState.current = {
         status: "loading",
-        profile: activeProfile({ read: true }),
+        profile: activeProfile({ view: true }),
         can: () => false,
       };
 
@@ -338,7 +377,7 @@ describe("useNutritionReadAuthority", () => {
       expect(screen.getByText("Verificando permissões...")).toBeInTheDocument();
     });
 
-    it("canonical allowed user (health.read=true) initiates loadReadinessScope", async () => {
+    it("canonical allowed user (health.view=true) initiates loadReadinessScope", async () => {
       vi.clearAllMocks();
       vi.mocked(loadReadinessScope).mockResolvedValueOnce({
         items: [],
@@ -350,7 +389,7 @@ describe("useNutritionReadAuthority", () => {
 
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ read: true }),
+        profile: activeProfile({ view: true }),
         can: () => false,
       };
 
@@ -390,7 +429,7 @@ describe("useNutritionReadAuthority", () => {
 
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ read: true }),
+        profile: activeProfile({ view: true }),
         can: () => false,
       };
 
@@ -403,7 +442,7 @@ describe("useNutritionReadAuthority", () => {
       // Transition to forbidden
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ view: true }),
+        profile: activeProfile({ view: false }),
         can: () => false,
       };
 
@@ -417,11 +456,11 @@ describe("useNutritionReadAuthority", () => {
   });
 
   describe("H. Nutrition Dog View read ordering & authority integration", () => {
-    it("unauthorized user (health.view only) triggers 0 getDoc calls and renders ForbiddenState", () => {
+    it("unauthorized user (health.view absent) triggers 0 getDoc calls and renders ForbiddenState", () => {
       vi.clearAllMocks();
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ view: true }, "global"),
+        profile: activeProfile(null, "global"),
         can: () => false,
       };
 
@@ -436,7 +475,7 @@ describe("useNutritionReadAuthority", () => {
       vi.clearAllMocks();
       accessState.current = {
         status: "loading",
-        profile: activeProfile({ read: true }),
+        profile: activeProfile({ view: true }),
         can: () => false,
       };
 
@@ -446,7 +485,7 @@ describe("useNutritionReadAuthority", () => {
       expect(screen.getByText("Verificando permissões...")).toBeInTheDocument();
     });
 
-    it("canonical allowed user (health.read=true) initiates getDoc", async () => {
+    it("canonical allowed user (health.view=true) initiates getDoc", async () => {
       vi.clearAllMocks();
       mockGetDoc.mockResolvedValueOnce({
         exists: () => true,
@@ -456,7 +495,7 @@ describe("useNutritionReadAuthority", () => {
 
       accessState.current = {
         status: "ready",
-        profile: activeProfile({ read: true }),
+        profile: activeProfile({ view: true }),
         can: () => false,
       };
 

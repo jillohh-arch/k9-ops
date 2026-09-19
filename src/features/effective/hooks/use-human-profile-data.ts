@@ -6,6 +6,7 @@ import {
   limit,
   onSnapshot,
   query,
+  where,
   type DocumentData,
   type Query,
 } from "firebase/firestore";
@@ -157,7 +158,17 @@ function useRecords(source: Query<DocumentData>, sourceName: string) {
   return state;
 }
 
-export function useHumanProfileData(ra: string) {
+export type HumanProfileAccessMode = "administrative" | "self";
+
+export type HumanProfileOptions = {
+  mode?: HumanProfileAccessMode;
+};
+
+export function useHumanProfileData(
+  ra: string,
+  options?: HumanProfileOptions,
+) {
+  const mode = options?.mode ?? "administrative";
   const [user, setUser] = useState<HumanRecord | null>(null);
   const [userLoading, setUserLoading] = useState(true);
   const [userError, setUserError] = useState<string | null>(null);
@@ -194,8 +205,15 @@ export function useHumanProfileData(ra: string) {
     [],
   );
   const promotionsQuery = useMemo(
-    () => query(collection(db, "promotion_requests"), limit(500)),
-    [],
+    () =>
+      mode === "self"
+        ? query(
+            collection(db, "promotion_requests"),
+            where("requester_ra", "==", ra || "__no_ra__"),
+            limit(500),
+          )
+        : query(collection(db, "promotion_requests"), limit(500)),
+    [mode, ra],
   );
   const auditQuery = useMemo(
     () => query(collection(db, "auditLogs"), limit(500)),
@@ -373,6 +391,10 @@ export function useHumanProfileData(ra: string) {
     userError,
     userLoading,
   ]);
+}
+
+export function useSelfProfileData(ra: string) {
+  return useHumanProfileData(ra, { mode: "self" });
 }
 
 export function useHumanAdministrativeRecords() {

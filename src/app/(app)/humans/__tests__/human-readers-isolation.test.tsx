@@ -86,6 +86,7 @@ vi.mock("@/features/effective/hooks/use-human-profile-data", async () => {
   return {
     ...actual,
     useHumanProfileData: () => profileDataState,
+    useSelfProfileData: () => profileDataState,
   };
 });
 

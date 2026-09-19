@@ -22,7 +22,7 @@ import {
 import {
   humanRecordDate,
   humanText,
-  useHumanProfileData,
+  useSelfProfileData,
 } from "@/features/effective/hooks/use-human-profile-data";
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAuth } from "@/features/auth/providers/auth-provider";
@@ -84,7 +84,7 @@ export default function MePage() {
   const [activeTab, setActiveTab] = useState<MeTab>("k9");
   const canEditHuman = can("humans", "edit");
   const ra = profile?.ra ?? "";
-  const data = useHumanProfileData(ra);
+  const data = useSelfProfileData(ra);
 
   if (!ra) {
     return (

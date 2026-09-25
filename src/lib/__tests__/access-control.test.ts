@@ -6,18 +6,22 @@ vi.mock("@/lib/firebase/functions", () => ({}));
 import {
   accessActions,
   defaultAccessProfiles,
+  getCanonicalProfileId,
   getDefaultAccessProfile,
   getProfileIdFromLegacyValue,
   hasAccessPermission,
+  isValidProfileIdFormat,
   isVisibleAccessProfile,
   mergeAccessProfilesWithDefaults,
   normalizePermissionMap,
+  normalizeProfileId,
   sortAccessProfiles,
   visibleAccessProfiles,
   type AccessAction,
   type AccessProfile,
 } from "../permissions/access-control";
 import { accessProfileForFunction } from "@/features/access/data/access-profile-service";
+import { resolveProfileId } from "@/features/access/providers/access-control-provider";
 import {
   CAPABILITY_LABELS,
   LEGACY_TO_GRANULAR,
@@ -394,5 +398,212 @@ describe("CT3.AUTH-HEALTH-01 / CT3.F10.HEALTH-READ-ACTION-SCHEMA-CLOSURE-R2 — 
     const operador = getDefaultAccessProfile("operador_k9")!;
     expect(operador.permissions.health?.manage_nutrition_plan).toBeUndefined();
     expect(hasAccessPermission(operador, "health", "manage_nutrition_plan")).toBe(false);
+  });
+});
+
+describe("normalizeProfileId", () => {
+  it("normalizes dynamic IDs", () => {
+    expect(normalizeProfileId("stg_health_readiness_homologator")).toBe(
+      "stg_health_readiness_homologator",
+    );
+    expect(normalizeProfileId("  STG-Health.Readiness Homologator  ")).toBe(
+      "stg_health_readiness_homologator",
+    );
+  });
+
+  it("returns null for empty/invalid", () => {
+    expect(normalizeProfileId(null)).toBeNull();
+    expect(normalizeProfileId("")).toBeNull();
+    expect(normalizeProfileId("   ")).toBeNull();
+  });
+});
+
+describe("isValidProfileIdFormat", () => {
+  it("accepts valid Firestore-like IDs", () => {
+    expect(isValidProfileIdFormat("operador_k9")).toBe(true);
+    expect(isValidProfileIdFormat("stg_health_readiness_homologator")).toBe(true);
+    expect(isValidProfileIdFormat("custom_profile_123")).toBe(true);
+    expect(isValidProfileIdFormat("abc")).toBe(true);
+  });
+
+  it("rejects invalid formats", () => {
+    expect(isValidProfileIdFormat("ab")).toBe(false);
+    expect(isValidProfileIdFormat("")).toBe(false);
+    expect(isValidProfileIdFormat("_invalid")).toBe(false);
+    expect(isValidProfileIdFormat("a")).toBe(false);
+  });
+});
+
+describe("getCanonicalProfileId", () => {
+  it("operador_k9 remains operador_k9", () => {
+    expect(getCanonicalProfileId("operador_k9")).toBe("operador_k9");
+  });
+
+  it("gestor remains gestor", () => {
+    expect(getCanonicalProfileId("gestor")).toBe("gestor");
+  });
+
+  it("administrador remains administrador", () => {
+    expect(getCanonicalProfileId("administrador")).toBe("administrador");
+  });
+
+  it("known legacy aliases still resolve", () => {
+    expect(getCanonicalProfileId("condutor")).toBe("operador_k9");
+    expect(getCanonicalProfileId("comando")).toBe("gestor");
+    expect(getCanonicalProfileId("admin")).toBe("administrador");
+    expect(getCanonicalProfileId("estoque")).toBe("almoxarifado");
+    expect(getCanonicalProfileId("instrutor")).toBe("instrutor_k9");
+  });
+
+  it("valid dynamic canonical profile resolves correctly", () => {
+    expect(getCanonicalProfileId("stg_health_readiness_homologator")).toBe(
+      "stg_health_readiness_homologator",
+    );
+    expect(getCanonicalProfileId("custom_profile_123")).toBe("custom_profile_123");
+    expect(getCanonicalProfileId("my_dynamic_profile")).toBe("my_dynamic_profile");
+  });
+
+  it("stg_health_readiness_homologator resolves to itself", () => {
+    expect(getCanonicalProfileId("stg_health_readiness_homologator")).toBe(
+      "stg_health_readiness_homologator",
+    );
+  });
+
+  it("invalid/nonexistent profile fails safely", () => {
+    expect(getCanonicalProfileId(null)).toBeNull();
+    expect(getCanonicalProfileId("")).toBeNull();
+    expect(getCanonicalProfileId("ab")).toBeNull();
+    expect(getCanonicalProfileId("!@#")).toBeNull();
+  });
+
+  it("does not hard-code only homologator — other dynamics work", () => {
+    expect(getCanonicalProfileId("another_dynamic_profile_xyz")).toBe(
+      "another_dynamic_profile_xyz",
+    );
+  });
+});
+
+describe("resolveProfileId — precedence and fail-safe", () => {
+  function authProfile(overrides: {
+    access_profile_id?: string | null;
+    accessProfileId?: string | null;
+    accessProfile?: string | null;
+    access_profile?: string | null;
+    accessLevel?: string | null;
+    roles?: string[];
+    isK9Instructor?: boolean;
+  }) {
+    const mirror: Record<string, unknown> = {};
+    if (overrides.access_profile_id !== undefined)
+      mirror.access_profile_id = overrides.access_profile_id;
+    if (overrides.accessProfileId !== undefined)
+      mirror.accessProfileId = overrides.accessProfileId;
+    if (overrides.accessProfile !== undefined)
+      mirror.accessProfile = overrides.accessProfile;
+    if (overrides.access_profile !== undefined)
+      mirror.access_profile = overrides.access_profile;
+    if (overrides.accessLevel !== undefined)
+      mirror.accessLevel = overrides.accessLevel;
+    return {
+      uid: "uid",
+      email: "test@gcm.com.br",
+      displayName: "Test",
+      photoUrl: null,
+      ra: "123",
+      roles: overrides.roles ?? [],
+      isK9Instructor: overrides.isK9Instructor ?? false,
+      claims: {},
+      userMirror: mirror,
+    };
+  }
+
+  it("explicit canonical profile has precedence over legacy role", () => {
+    const profile = authProfile({
+      access_profile_id: "stg_health_readiness_homologator",
+      roles: ["condutor"],
+    });
+    expect(resolveProfileId(profile as never)).toBe(
+      "stg_health_readiness_homologator",
+    );
+  });
+
+  it("valid explicit profile does not fall back to condutor/operador_k9", () => {
+    const profile = authProfile({
+      access_profile_id: "stg_health_readiness_homologator",
+      roles: ["condutor"],
+    });
+    const resolved = resolveProfileId(profile as never);
+    expect(resolved).not.toBe("operador_k9");
+    expect(resolved).toBe("stg_health_readiness_homologator");
+  });
+
+  it("explicit dynamic profile resolves even with operador role present", () => {
+    const profile = authProfile({
+      access_profile_id: "custom_profile_123",
+      roles: ["operador_k9"],
+    });
+    expect(resolveProfileId(profile as never)).toBe("custom_profile_123");
+  });
+
+  it("invalid explicit ID fails safely to fallback (not to role)", () => {
+    const profile = authProfile({
+      access_profile_id: "ab",
+      roles: ["condutor"],
+    });
+    expect(resolveProfileId(profile as never)).toBe("operador_k9");
+  });
+
+  it("no explicit ID falls back to legacy role", () => {
+    const profile = authProfile({ roles: ["condutor"] });
+    expect(resolveProfileId(profile as never)).toBe("operador_k9");
+  });
+
+  it("legacy alias via explicit field still resolves", () => {
+    const profile = authProfile({ access_profile_id: "condutor" });
+    expect(resolveProfileId(profile as never)).toBe("operador_k9");
+  });
+
+  it("null profile returns fallback", () => {
+    expect(resolveProfileId(null)).toBe("operador_k9");
+  });
+});
+
+describe("operador_k9 permissions invariant", () => {
+  it("operador_k9 must NOT have health archive/approve/audit", () => {
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    expect(hasAccessPermission(operador, "health", "archive")).toBe(false);
+    expect(hasAccessPermission(operador, "health", "approve")).toBe(false);
+    expect(hasAccessPermission(operador, "health", "audit")).toBe(false);
+    expect(hasAccessPermission(operador, "health", "export")).toBe(false);
+  });
+
+  it("operador_k9 has only view/create/edit on health", () => {
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    expect(hasAccessPermission(operador, "health", "view")).toBe(true);
+    expect(hasAccessPermission(operador, "health", "create")).toBe(true);
+    expect(hasAccessPermission(operador, "health", "edit")).toBe(true);
+  });
+
+  it("capabilities come from resolved canonical profile", () => {
+    const homologator = {
+      id: "stg_health_readiness_homologator",
+      status: "active" as const,
+      permissions: {
+        health: { view: true, create: true, edit: true, archive: true, approve: true },
+      },
+      name: "Homologator",
+      description: "",
+      level: "test",
+      module_tags: [],
+      role_keys: [],
+      scope: "global" as const,
+      seed_version: 1,
+      slug: "stg_health_readiness_homologator",
+      tone: "cyan",
+    };
+    expect(hasAccessPermission(homologator, "health", "archive")).toBe(true);
+    expect(hasAccessPermission(homologator, "health", "approve")).toBe(true);
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    expect(hasAccessPermission(operador, "health", "archive")).toBe(false);
   });
 });

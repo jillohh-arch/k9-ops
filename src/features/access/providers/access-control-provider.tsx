@@ -14,6 +14,7 @@ import { useAuth, type AuthProfile } from "@/features/auth/providers/auth-provid
 import { db } from "@/lib/firebase/client";
 import {
   defaultAccessProfiles,
+  getCanonicalProfileId,
   getDefaultAccessProfile,
   getProfileIdFromLegacyValue,
   hasAccessPermission,
@@ -49,19 +50,21 @@ function getUserMirrorValue(
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function resolveProfileId(profile: AuthProfile | null) {
+export function resolveProfileId(profile: AuthProfile | null) {
   if (!profile) return fallbackProfile.id;
 
-  const explicitProfileId =
+  const explicitRaw =
     getUserMirrorValue(profile, "access_profile_id") ??
     getUserMirrorValue(profile, "accessProfileId") ??
     getUserMirrorValue(profile, "accessProfile") ??
     getUserMirrorValue(profile, "access_profile") ??
     getUserMirrorValue(profile, "accessLevel");
 
-  const explicit = getProfileIdFromLegacyValue(explicitProfileId);
-  if (explicit) return explicit;
-  if (explicitProfileId) return explicitProfileId;
+  if (explicitRaw) {
+    const canonical = getCanonicalProfileId(explicitRaw);
+    if (canonical) return canonical;
+    return fallbackProfile.id;
+  }
 
   for (const role of profile.roles) {
     const roleProfile = getProfileIdFromLegacyValue(role);

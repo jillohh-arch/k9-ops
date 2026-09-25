@@ -21,6 +21,7 @@ import {
 } from "@/lib/firebase/functions";
 import {
   defaultAccessProfiles,
+  getCanonicalProfileId,
   getProfileIdFromLegacyValue,
   normalizePermissionMap,
   type AccessProfile,
@@ -164,11 +165,11 @@ function isArchived(data: Record<string, unknown>) {
 }
 
 function normalizeAccessUser(id: string, data: Record<string, unknown>) {
-  const accessProfileId =
-    text(data, "access_profile_id", "accessProfileId") ??
-    getProfileIdFromLegacyValue(
-      text(data, "accessProfile", "access_profile", "accessLevel"),
-    );
+  const explicitRaw = text(data, "access_profile_id", "accessProfileId");
+  const legacyRaw = text(data, "accessProfile", "access_profile", "accessLevel");
+  const accessProfileId = explicitRaw
+    ? (getCanonicalProfileId(explicitRaw) ?? null)
+    : getProfileIdFromLegacyValue(legacyRaw);
 
   return {
     accessLevel: text(data, "accessLevel", "access_level"),

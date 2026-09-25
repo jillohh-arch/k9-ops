@@ -222,7 +222,7 @@ export function countModulesWithAccess(profile: AccessProfile) {
   ).length;
 }
 
-export function getProfileIdFromLegacyValue(value: string | null | undefined) {
+export function normalizeProfileId(value: string | null | undefined) {
   if (!value) return null;
   const normalized = value
     .trim()
@@ -231,33 +231,63 @@ export function getProfileIdFromLegacyValue(value: string | null | undefined) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
-
-  const aliases: Record<string, string> = {
-    administrador: "administrador",
-    admin: "administrador",
-    admin_master: "administrador",
-    almoxarifado: "almoxarifado",
-    comando: "gestor",
-    comando_canil: "gestor",
-    condutor: "operador_k9",
-    coordenador: "gestor",
-    estoque: "almoxarifado",
-    guarda_k9: "operador_k9",
-    gestor: "gestor",
-    gestor_canil: "gestor",
-    inventory_manager: "almoxarifado",
-    inspetor: "gestor",
-    operacional: "operador_k9",
-    operador: "operador_k9",
-    operador_k9: "operador_k9",
-    subinspetor: "gestor",
-    subinspetor_inspetor: "gestor",
-    instrutor: "instrutor_k9",
-    instrutor_k9: "instrutor_k9",
-    adestrador: "instrutor_k9",
-    adestrador_k9: "instrutor_k9",
-    ti: "administrador",
-  };
-
-  return aliases[normalized] ?? getDefaultAccessProfile(normalized)?.id ?? null;
+  return normalized || null;
 }
+
+export function isValidProfileIdFormat(id: string) {
+  return /^[a-z0-9][a-z0-9_]{2,63}$/.test(id);
+}
+
+const legacyAliases: Record<string, string> = {
+  administrador: "administrador",
+  admin: "administrador",
+  admin_master: "administrador",
+  almoxarifado: "almoxarifado",
+  comando: "gestor",
+  comando_canil: "gestor",
+  condutor: "operador_k9",
+  coordenador: "gestor",
+  estoque: "almoxarifado",
+  guarda_k9: "operador_k9",
+  gestor: "gestor",
+  gestor_canil: "gestor",
+  inventory_manager: "almoxarifado",
+  inspetor: "gestor",
+  operacional: "operador_k9",
+  operador: "operador_k9",
+  operador_k9: "operador_k9",
+  subinspetor: "gestor",
+  subinspetor_inspetor: "gestor",
+  instrutor: "instrutor_k9",
+  instrutor_k9: "instrutor_k9",
+  adestrador: "instrutor_k9",
+  adestrador_k9: "instrutor_k9",
+  ti: "administrador",
+};
+
+export function getProfileIdFromLegacyValue(value: string | null | undefined) {
+  if (!value) return null;
+  const normalized = normalizeProfileId(value);
+  if (!normalized) return null;
+
+  return (
+    legacyAliases[normalized] ?? getDefaultAccessProfile(normalized)?.id ?? null
+  );
+}
+
+export function getCanonicalProfileId(value: string | null | undefined) {
+  if (!value) return null;
+  const normalized = normalizeProfileId(value);
+  if (!normalized) return null;
+
+  const aliasResolved = legacyAliases[normalized];
+  if (aliasResolved) return aliasResolved;
+
+  const defaultResolved = getDefaultAccessProfile(normalized)?.id;
+  if (defaultResolved) return defaultResolved;
+
+  if (isValidProfileIdFormat(normalized)) return normalized;
+
+  return null;
+}
+

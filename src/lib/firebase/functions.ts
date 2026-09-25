@@ -519,3 +519,58 @@ export const callHealthRestrictionCancel = httpsCallable<
   { dogId: string; replayed: boolean; restrictionId: string; status: "cancelled" }
 >(functions, "healthRestrictionCancel");
 
+export type HealthDocumentType =
+  | "prescription"
+  | "report"
+  | "certificate"
+  | "exam_image"
+  | "exam_pdf"
+  | "photo"
+  | "vaccination_card"
+  | "surgical_report"
+  | "other";
+
+export type HealthDocumentPrepareUploadRequest = {
+  dogId: string;
+  operationId: string;
+};
+
+export type HealthDocumentPrepareUploadResult = {
+  dogId: string;
+  documentId: string;
+  max_bytes: number;
+  uploadPath: string;
+};
+
+export const callHealthDocumentPrepareUpload = httpsCallable<
+  HealthDocumentPrepareUploadRequest,
+  HealthDocumentPrepareUploadResult
+>(functions, "healthDocumentPrepareUpload");
+
+export type HealthDocumentFinalizeUploadRequest = {
+  caseId?: string;
+  description?: string;
+  dogId: string;
+  documentType: HealthDocumentType;
+  eventId?: string;
+  examId?: string;
+  expiryDate?: string;
+  issueDate?: string;
+  issuer?: string;
+  operationId: string;
+  title: string;
+};
+
+export type HealthDocumentFinalizeUploadResult = {
+  documentId: string;
+  dogId: string;
+  reference: string;
+  storagePath: string;
+  wasNoOp?: boolean;
+};
+
+export const callHealthDocumentFinalizeUpload = httpsCallable<
+  HealthDocumentFinalizeUploadRequest,
+  HealthDocumentFinalizeUploadResult
+>(functions, "healthDocumentFinalizeUpload");
+

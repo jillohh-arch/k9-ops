@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -19,18 +19,34 @@ import { useK9RosterDetail } from "@/features/effective/hooks/use-k9-roster-deta
 
 const mockCallEnd = vi.fn();
 const mockCallCancel = vi.fn();
+const mockCallPrepareUpload = vi.fn();
+const mockCallFinalizeUpload = vi.fn();
 
 vi.mock("@/lib/firebase/functions", () => ({
-  callHealthRestrictionEnd: (...args: unknown[]) => mockCallEnd(...args),
-  callHealthRestrictionCancel: (...args: unknown[]) => mockCallCancel(...args),
+  callHealthDocumentFinalizeUpload: (input: unknown) => mockCallFinalizeUpload(input),
+  callHealthDocumentPrepareUpload: (input: unknown) => mockCallPrepareUpload(input),
+  callHealthRestrictionCancel: (input: unknown) => mockCallCancel(input),
+  callHealthRestrictionEnd: (input: unknown) => mockCallEnd(input),
 }));
 
-// Mock firestore listeners for useK9RosterDetail
+const mockUploadBytes = vi.fn();
+const mockStorageRef = vi.fn((_storage, path) => ({ fullPath: path }));
+
+vi.mock("firebase/storage", () => ({
+  getStorage: vi.fn(),
+  ref: (storageInstance: unknown, path: string) => mockStorageRef(storageInstance, path),
+  uploadBytes: (storageRef: unknown, file: unknown, metadata?: unknown) =>
+    mockUploadBytes(storageRef, file, metadata),
+}));
+
+// Mock firestore listeners for useK9RosterDetail and health_documents
 let snapshotCallback: ((snapshot: unknown) => void) | null = null;
+let mockDocsData: Array<{ id: string; data: () => Record<string, unknown> }> = [];
 
 vi.mock("firebase/firestore", () => ({
-  collection: vi.fn(),
+  collection: vi.fn((_db, ...parts: string[]) => ({ kind: "collection", path: parts.join("/") })),
   doc: vi.fn((_db, _col, _id, sub) => ({ kind: "doc", sub })),
+  getDocs: vi.fn(() => Promise.resolve({ docs: mockDocsData })),
   onSnapshot: vi.fn((ref: { kind?: string }, cb: (snap: unknown) => void) => {
     if (ref?.kind === "doc") {
       snapshotCallback = cb;
@@ -69,6 +85,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mockAllowedCapabilities = [];
   snapshotCallback = null;
+  mockDocsData = [];
 });
 
 // ---------------------------------------------------------------------------
@@ -501,11 +518,33 @@ describe("4. CAPABILITY GATING (health.release_restriction & health.cancel_restr
   });
 });
 
-describe("5. MODAL: LIBERAR CLINICAMENTE (END) LIFECYCLE & FORM VALIDATION", () => {
-  it("abre modal, valida campos obrigatórios e submete payload clínico completo", async () => {
+describe("5. MODAL: LIBERAR CLINICAMENTE (END) LIFECYCLE & EVIDENCE FLOW", () => {
+  it("abre modal, não exige ID manual, processa upload canônico e submete END com health_document_id derivado", async () => {
     mockAllowedCapabilities = ["health.release_restriction"];
+    mockCallPrepareUpload.mockResolvedValueOnce({
+      data: {
+        dogId: "dog-bono",
+        documentId: "hd_canonico_alta_77",
+        max_bytes: 20971520,
+        uploadPath: "health_document_uploads/dog-bono/hd_canonico_alta_77",
+      },
+    });
+    mockUploadBytes.mockResolvedValueOnce({});
+    mockCallFinalizeUpload.mockResolvedValueOnce({
+      data: {
+        documentId: "hd_canonico_alta_77",
+        dogId: "dog-bono",
+        reference: "dogs/dog-bono/health_documents/hd_canonico_alta_77",
+        storagePath: "health_documents/dog-bono/hd_canonico_alta_77",
+      },
+    });
     mockCallEnd.mockResolvedValueOnce({
-      data: { dogId: "dog-bono", restrictionId: "rest-001", status: "ended", replayed: false },
+      data: {
+        dogId: "dog-bono",
+        replayed: false,
+        restrictionId: "rest-001",
+        status: "ended",
+      },
     });
 
     const onEnded = vi.fn();
@@ -523,7 +562,14 @@ describe("5. MODAL: LIBERAR CLINICAMENTE (END) LIFECYCLE & FORM VALIDATION", () 
     fireEvent.click(endBtn);
 
     expect(screen.getByTestId("modal-end-restriction")).toBeInTheDocument();
-    expect(screen.getByText("Liberar Restrição Clinicamente")).toBeInTheDocument();
+    expect(
+      screen.getByText("Liberar Restrição Clinicamente"),
+    ).toBeInTheDocument();
+
+    // Invariante: O usuário NORMAL NÃO deve digitar ou ver campo de ID bruto manual
+    expect(
+      screen.queryByLabelText(/ID do Documento de Saúde/i),
+    ).not.toBeInTheDocument();
 
     // Preenche campos do formulário
     fireEvent.change(screen.getByLabelText(/Motivo da Liberação Clínica/i), {
@@ -541,26 +587,61 @@ describe("5. MODAL: LIBERAR CLINICAMENTE (END) LIFECYCLE & FORM VALIDATION", () 
     fireEvent.change(screen.getByLabelText(/Especialidade/i), {
       target: { value: "Ortopedia Canina" },
     });
-    fireEvent.change(screen.getByLabelText(/ID do Documento de Saúde/i), {
-      target: { value: "doc-alta-laudo-001" },
+
+    // Anexa arquivo válido de laudo de alta
+    const fakeFile = new File(["dummy pdf content"], "termo-alta.pdf", {
+      type: "application/pdf",
     });
-    fireEvent.change(screen.getByLabelText(/Descrição do Documento/i), {
-      target: { value: "Laudo pericial de alta" },
-    });
+    const fileInput = screen.getByTestId("input-upload-file");
+    fireEvent.change(fileInput, { target: { files: [fakeFile] } });
 
     // Submete o formulário
     const submitBtn = screen.getByText("Confirmar Liberação");
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
+      expect(mockCallPrepareUpload).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockCallPrepareUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dogId: "dog-bono",
+        operationId: expect.any(String),
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockUploadBytes).toHaveBeenCalledTimes(1);
+    });
+    expect(mockUploadBytes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fullPath: "health_document_uploads/dog-bono/hd_canonico_alta_77",
+      }),
+      fakeFile,
+      { contentType: "application/pdf" },
+    );
+
+    await waitFor(() => {
+      expect(mockCallFinalizeUpload).toHaveBeenCalledTimes(1);
+    });
+    expect(mockCallFinalizeUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dogId: "dog-bono",
+        documentType: "report",
+        issuer: "Dra. Ana Paula Silveira",
+        operationId: expect.any(String),
+        title: expect.stringContaining("Laudo de Alta"),
+      }),
+    );
+
+    await waitFor(() => {
       expect(mockCallEnd).toHaveBeenCalledTimes(1);
     });
 
+    // O END deve receber automaticamente o health_document_id derivado do finalize
     expect(mockCallEnd).toHaveBeenCalledWith(
       expect.objectContaining({
         dogId: "dog-bono",
-        restrictionId: "rest-001",
-        endReason: "Recuperação total dos movimentos e alta concedida",
         endProfessional: {
           clinic: "Hospital Canil Central",
           name: "Dra. Ana Paula Silveira",
@@ -568,22 +649,291 @@ describe("5. MODAL: LIBERAR CLINICAMENTE (END) LIFECYCLE & FORM VALIDATION", () 
           registration_type: "CRMV",
           specialty: "Ortopedia Canina",
         },
+        endReason: "Recuperação total dos movimentos e alta concedida",
         endSourceDocument: {
-          description: "Laudo pericial de alta",
-          health_document_id: "doc-alta-laudo-001",
+          description: expect.any(String),
+          health_document_id: "hd_canonico_alta_77",
         },
+        restrictionId: "rest-001",
       }),
     );
 
     // Sucesso exibido
     await waitFor(() => {
-      expect(screen.getByText("Restrição liberada clinicamente com sucesso!")).toBeInTheDocument();
+      expect(
+        screen.getByText("Restrição liberada clinicamente com sucesso!"),
+      ).toBeInTheDocument();
     });
   });
 
-  it("trata erro na liberação clínica e exibe mensagem amigável sem quebrar UI", async () => {
+  it("impede submissão sem arquivo ou evidência documental selecionada", async () => {
     mockAllowedCapabilities = ["health.release_restriction"];
-    mockCallEnd.mockRejectedValueOnce(new Error("Permissão negada pelo backend F20."));
+
+    render(
+      <K9OperationalRestrictions
+        dogId="dog-bono"
+        initialRestrictions={[sampleActiveAbsolute]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("btn-end-restriction"));
+
+    fireEvent.change(screen.getByLabelText(/Motivo da Liberação Clínica/i), {
+      target: { value: "Alta médica" },
+    });
+    fireEvent.change(screen.getByLabelText(/Nome do Profissional/i), {
+      target: { value: "Dr. João" },
+    });
+    fireEvent.change(screen.getByLabelText(/Número do Registro/i), {
+      target: { value: "54321/SP" },
+    });
+
+    // Clica em submeter sem arquivo
+    fireEvent.click(screen.getByText("Confirmar Liberação"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Selecione o arquivo do laudo/termo de alta clínica para comprovação.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    expect(mockCallPrepareUpload).not.toHaveBeenCalled();
+    expect(mockCallEnd).not.toHaveBeenCalled();
+  });
+
+  it("rejeita arquivo com tamanho superior a 20 MB ou formato inválido", async () => {
+    mockAllowedCapabilities = ["health.release_restriction"];
+
+    render(
+      <K9OperationalRestrictions
+        dogId="dog-bono"
+        initialRestrictions={[sampleActiveAbsolute]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("btn-end-restriction"));
+
+    const hugeFile = new File(["huge content"], "laudo-gigante.pdf", {
+      type: "application/pdf",
+    });
+    Object.defineProperty(hugeFile, "size", { value: 25 * 1024 * 1024 }); // 25 MB
+
+    const fileInput = screen.getByTestId("input-upload-file");
+    fireEvent.change(fileInput, { target: { files: [hugeFile] } });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /O arquivo excede o tamanho máximo permitido de 20 MB/i,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    // Formato não suportado
+    const invalidFile = new File(["exe"], "virus.exe", {
+      type: "application/x-msdownload",
+    });
+    fireEvent.change(fileInput, { target: { files: [invalidFile] } });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Formato de arquivo não suportado/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("preserva documento canônico selado em caso de erro no END permitindo retry sem novo upload", async () => {
+    mockAllowedCapabilities = ["health.release_restriction"];
+
+    mockCallPrepareUpload.mockResolvedValueOnce({
+      data: {
+        dogId: "dog-bono",
+        documentId: "hd_alta_retry_88",
+        max_bytes: 20971520,
+        uploadPath: "health_document_uploads/dog-bono/hd_alta_retry_88",
+      },
+    });
+    mockUploadBytes.mockResolvedValueOnce({});
+    mockCallFinalizeUpload.mockResolvedValueOnce({
+      data: {
+        documentId: "hd_alta_retry_88",
+        dogId: "dog-bono",
+        reference: "dogs/dog-bono/health_documents/hd_alta_retry_88",
+        storagePath: "health_documents/dog-bono/hd_alta_retry_88",
+      },
+    });
+
+    // Primeira tentativa do END falha por transação / rede
+    mockCallEnd.mockRejectedValueOnce(
+      new Error("Erro transitório ao registrar encerramento."),
+    );
+
+    render(
+      <K9OperationalRestrictions
+        dogId="dog-bono"
+        initialRestrictions={[sampleActiveAbsolute]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("btn-end-restriction"));
+
+    fireEvent.change(screen.getByLabelText(/Motivo da Liberação Clínica/i), {
+      target: { value: "Alta concedida" },
+    });
+    fireEvent.change(screen.getByLabelText(/Nome do Profissional/i), {
+      target: { value: "Dr. André" },
+    });
+    fireEvent.change(screen.getByLabelText(/Número do Registro/i), {
+      target: { value: "999/SP" },
+    });
+
+    const file = new File(["doc"], "alta.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByTestId("input-upload-file"), {
+      target: { files: [file] },
+    });
+
+    fireEvent.click(screen.getByText("Confirmar Liberação"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Erro transitório ao registrar encerramento."),
+      ).toBeInTheDocument();
+    });
+
+    // A evidência documental foi selada e é preservada na tela
+    expect(
+      screen.getByTestId("evidence-finalized-summary"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ID: hd_alta_retry_88")).toBeInTheDocument();
+
+    // Segunda tentativa: o END é bem-sucedido
+    mockCallEnd.mockResolvedValueOnce({
+      data: {
+        dogId: "dog-bono",
+        replayed: false,
+        restrictionId: "rest-001",
+        status: "ended",
+      },
+    });
+
+    fireEvent.click(screen.getByText("Confirmar Liberação"));
+
+    await waitFor(() => {
+      expect(mockCallEnd).toHaveBeenCalledTimes(2);
+    });
+
+    // Verifica que prepare e finalize NÃO foram chamados uma segunda vez!
+    expect(mockCallPrepareUpload).toHaveBeenCalledTimes(1);
+    expect(mockCallFinalizeUpload).toHaveBeenCalledTimes(1);
+
+    // O END usou a evidência preservada
+    expect(mockCallEnd).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        endSourceDocument: expect.objectContaining({
+          health_document_id: "hd_alta_retry_88",
+        }),
+      }),
+    );
+  });
+
+  it("modo picker: lista documentos existentes do prontuário e exclui o documento de abertura da restrição", async () => {
+    mockAllowedCapabilities = ["health.release_restriction"];
+
+    // Configura documentos no Firestore: um é o de abertura, o outro é um laudo anterior legítimo
+    mockDocsData = [
+      {
+        id: "doc-orto-2026-881", // ID do documento que originou a restrição sampleActiveAbsolute
+        data: () => ({
+          document_type: "report",
+          issuer: "Hospital São Camilo",
+          title: "Laudo Original de Emissão da Restrição",
+          uploaded_at: new Date(2026, 8, 15),
+        }),
+      },
+      {
+        id: "hd_laudo_fisioterapia_alta",
+        data: () => ({
+          document_type: "certificate",
+          issuer: "Clínica Fisiovet",
+          title: "Atestado de Alta Fisioterápica",
+          uploaded_at: new Date(2026, 9, 20),
+        }),
+      },
+    ];
+
+    mockCallEnd.mockResolvedValueOnce({
+      data: {
+        dogId: "dog-bono",
+        replayed: false,
+        restrictionId: "rest-001",
+        status: "ended",
+      },
+    });
+
+    render(
+      <K9OperationalRestrictions
+        dogId="dog-bono"
+        initialRestrictions={[sampleActiveAbsolute]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("btn-end-restriction"));
+
+    // Alterna para o modo Picker
+    fireEvent.click(screen.getByTestId("tab-select-evidence"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Atestado de Alta Fisioterápica"),
+      ).toBeInTheDocument();
+    });
+
+    // Invariante 13: O documento de abertura da restrição NÃO é exibido no picker para seleção
+    const pickerContainer = screen.getByTestId("picker-existing-documents");
+    expect(
+      within(pickerContainer).queryByText("Laudo Original de Emissão da Restrição"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(pickerContainer).queryByText("doc-orto-2026-881"),
+    ).not.toBeInTheDocument();
+
+    // Seleciona o documento legítimo
+    fireEvent.click(
+      screen.getByTestId("doc-option-hd_laudo_fisioterapia_alta"),
+    );
+
+    fireEvent.change(screen.getByLabelText(/Motivo da Liberação Clínica/i), {
+      target: { value: "Alta após fisioterapia" },
+    });
+    fireEvent.change(screen.getByLabelText(/Nome do Profissional/i), {
+      target: { value: "Dra. Renata" },
+    });
+    fireEvent.change(screen.getByLabelText(/Número do Registro/i), {
+      target: { value: "777/SP" },
+    });
+
+    fireEvent.click(screen.getByText("Confirmar Liberação"));
+
+    await waitFor(() => {
+      expect(mockCallEnd).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockCallEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endSourceDocument: expect.objectContaining({
+          health_document_id: "hd_laudo_fisioterapia_alta",
+        }),
+      }),
+    );
+  });
+
+  it("trata erro no upload/prepare/finalize e exibe feedback amigável sem quebrar UI", async () => {
+    mockAllowedCapabilities = ["health.release_restriction"];
+    mockCallPrepareUpload.mockRejectedValueOnce(
+      new Error("Serviço de upload indisponível temporariamente."),
+    );
 
     render(
       <K9OperationalRestrictions
@@ -603,15 +953,23 @@ describe("5. MODAL: LIBERAR CLINICAMENTE (END) LIFECYCLE & FORM VALIDATION", () 
     fireEvent.change(screen.getByLabelText(/Número do Registro/i), {
       target: { value: "111" },
     });
-    fireEvent.change(screen.getByLabelText(/ID do Documento de Saúde/i), {
-      target: { value: "doc-1" },
+
+    const file = new File(["laudo"], "laudo.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByTestId("input-upload-file"), {
+      target: { files: [file] },
     });
 
     fireEvent.click(screen.getByText("Confirmar Liberação"));
 
     await waitFor(() => {
-      expect(screen.getByText("Permissão negada pelo backend F20.")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /Falha no upload do documento de alta: Serviço de upload indisponível temporariamente\./i,
+        ),
+      ).toBeInTheDocument();
     });
+
+    expect(mockCallEnd).not.toHaveBeenCalled();
   });
 });
 

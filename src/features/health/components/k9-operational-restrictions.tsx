@@ -7,12 +7,13 @@ import {
   CheckCircle2,
   FileCheck2,
   FileText,
+  FileUp,
   History,
   ShieldAlert,
   Stethoscope,
   User,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,14 @@ import {
   type OperationalRestriction,
   type RestrictionLevel,
 } from "@/features/health/data/health-restriction-service";
+import {
+  createAndUploadDischargeDocument,
+  fetchEligibleDischargeDocuments,
+  HEALTH_DOCUMENT_TYPE_LABELS,
+  validateHealthDocumentFile,
+  type CanonicalHealthDocument,
+  type HealthDocumentType,
+} from "@/features/health/data/health-document-service";
 import { useK9Restrictions } from "@/features/health/hooks/use-k9-restrictions";
 import type { AccessAction } from "@/lib/permissions/access-control";
 
@@ -421,18 +430,95 @@ function EndRestrictionDialog({
   open,
   restriction,
 }: EndRestrictionDialogProps) {
+  // Step 1: Detalhes da liberação clínica
   const [endReason, setEndReason] = useState("");
   const [professionalName, setProfessionalName] = useState("");
   const [registrationType, setRegistrationType] = useState("CRMV");
   const [registrationNumber, setRegistrationNumber] = useState("");
   const [clinic, setClinic] = useState("");
   const [specialty, setSpecialty] = useState("");
-  const [healthDocumentId, setHealthDocumentId] = useState("");
+
+  // Step 2: Modo de evidência ("upload" ou "picker")
+  const [evidenceMode, setEvidenceMode] = useState<"upload" | "picker">("upload");
+
+  // Estado do Upload
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [documentType, setDocumentType] = useState<HealthDocumentType>("report");
+  const [documentTitle, setDocumentTitle] = useState(
+    `Laudo de Alta Médica — ${restriction.category}`,
+  );
   const [documentDescription, setDocumentDescription] = useState("");
 
+  // Estado do Picker (documentos existentes)
+  const [availableDocs, setAvailableDocs] = useState<CanonicalHealthDocument[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+
+  // Evidência já finalizada (sobrevive a falhas de rede/transação do END para retry)
+  const [finalizedEvidence, setFinalizedEvidence] = useState<{
+    description?: string | null;
+    documentId: string;
+    title: string;
+  } | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
+  const [submittingStatus, setSubmittingStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Carrega documentos do prontuário ao alternar para o picker
+  useEffect(() => {
+    let active = true;
+    if (evidenceMode === "picker" && availableDocs.length === 0) {
+      fetchEligibleDischargeDocuments(
+        dogId,
+        restriction.source_document.health_document_id,
+      )
+        .then((docs) => {
+          if (active) {
+            setAvailableDocs(docs);
+            setLoadingDocs(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setLoadingDocs(false);
+          }
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [
+    evidenceMode,
+    dogId,
+    restriction.source_document.health_document_id,
+    availableDocs.length,
+  ]);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setError(null);
+    const file = e.target.files?.[0];
+    if (!file) {
+      setUploadFile(null);
+      return;
+    }
+    const val = validateHealthDocumentFile(file);
+    if (!val.valid) {
+      setError(val.error ?? "Arquivo inválido.");
+      setUploadFile(null);
+      e.target.value = "";
+      return;
+    }
+    setUploadFile(file);
+    if (
+      !documentTitle.trim() ||
+      documentTitle.startsWith("Laudo de Alta Médica")
+    ) {
+      const baseName = file.name.replace(/\.[^/.]+$/, "");
+      setDocumentTitle(`Laudo de Alta — ${baseName}`);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -450,13 +536,80 @@ function EndRestrictionDialog({
       setError("Informe o número de registro do CRMV.");
       return;
     }
-    if (!healthDocumentId.trim()) {
-      setError("Informe o ID do documento canônico comprobatório.");
-      return;
+
+    // Resolução da evidência documental canônica
+    let resolvedDocId = finalizedEvidence?.documentId ?? null;
+    let resolvedDocDesc =
+      finalizedEvidence?.description ?? (documentDescription.trim() || null);
+
+    if (!resolvedDocId) {
+      if (evidenceMode === "upload") {
+        if (!uploadFile) {
+          setError(
+            "Selecione o arquivo do laudo/termo de alta clínica para comprovação.",
+          );
+          return;
+        }
+        if (!documentTitle.trim()) {
+          setError("Informe um título para o documento de alta médica.");
+          return;
+        }
+
+        try {
+          setSubmitting(true);
+          setSubmittingStatus("Enviando documento e selando evidência clínica...");
+          const uploadResult = await createAndUploadDischargeDocument(
+            dogId,
+            uploadFile,
+            {
+              description: documentDescription.trim() || undefined,
+              documentType,
+              issuer: professionalName.trim(),
+              title: documentTitle.trim(),
+            },
+          );
+          resolvedDocId = uploadResult.documentId;
+          resolvedDocDesc =
+            documentDescription.trim() || uploadResult.title;
+          setFinalizedEvidence({
+            description: resolvedDocDesc,
+            documentId: uploadResult.documentId,
+            title: uploadResult.title,
+          });
+        } catch (uploadErr) {
+          setSubmitting(false);
+          setSubmittingStatus(null);
+          setError(
+            uploadErr instanceof Error
+              ? `Falha no upload do documento de alta: ${uploadErr.message}`
+              : "Erro ao enviar e selar documento de alta clínica.",
+          );
+          return;
+        }
+      } else {
+        // Modo Picker
+        if (!selectedDocId) {
+          setError("Selecione um documento comprobatório do prontuário.");
+          return;
+        }
+        if (
+          selectedDocId === restriction.source_document.health_document_id
+        ) {
+          setError(
+            "O documento de abertura da restrição não pode ser reutilizado como laudo de alta.",
+          );
+          return;
+        }
+        const selectedDoc = availableDocs.find((d) => d.id === selectedDocId);
+        resolvedDocId = selectedDocId;
+        resolvedDocDesc =
+          documentDescription.trim() || selectedDoc?.title || null;
+      }
     }
 
     try {
       setSubmitting(true);
+      setSubmittingStatus("Registrando liberação clínica no backend...");
       await endHealthRestriction({
         dogId,
         endProfessional: {
@@ -468,8 +621,8 @@ function EndRestrictionDialog({
         },
         endReason: endReason.trim(),
         endSourceDocument: {
-          description: documentDescription.trim() || null,
-          health_document_id: healthDocumentId.trim(),
+          description: resolvedDocDesc,
+          health_document_id: resolvedDocId,
         },
         restrictionId: restriction.id,
       });
@@ -480,10 +633,13 @@ function EndRestrictionDialog({
       }, 1200);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao liberar restrição clínica.",
+        err instanceof Error
+          ? err.message
+          : "Erro ao liberar restrição clínica.",
       );
     } finally {
       setSubmitting(false);
+      setSubmittingStatus(null);
     }
   }
 
@@ -603,36 +759,227 @@ function EndRestrictionDialog({
           </div>
         </div>
 
+        {/* COMPROVAÇÃO DOCUMENTAL (EVIDÊNCIA CANÔNICA) */}
         <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-slate-900/50 p-3.5">
-          <h5 className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
-            <FileCheck2 className="h-3.5 w-3.5 text-cyan-300" />
-            Documento Canônico Comprobatório
-          </h5>
-
-          <div className="space-y-1">
-            <Label htmlFor="healthDocumentId">
-              ID do Documento de Saúde <span className="text-red-400">*</span>
-            </Label>
-            <Input
-              id="healthDocumentId"
-              placeholder="Ex: doc_laudo_alta_2026_09"
-              value={healthDocumentId}
-              onChange={(e) => setHealthDocumentId(e.target.value)}
-              disabled={submitting || Boolean(success)}
-              required
-            />
+          <div className="flex items-center justify-between">
+            <h5 className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+              <FileCheck2 className="h-3.5 w-3.5 text-cyan-300" />
+              Comprovação Documental de Alta Clínica{" "}
+              <span className="text-red-400">*</span>
+            </h5>
+            {finalizedEvidence ? (
+              <Badge
+                tone="green"
+                className="text-[10px]"
+              >
+                Evidência Selada
+              </Badge>
+            ) : null}
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="documentDescription">Descrição do Documento</Label>
-            <Input
-              id="documentDescription"
-              placeholder="Ex: Laudo pericial e termo de alta clínica emitido"
-              value={documentDescription}
-              onChange={(e) => setDocumentDescription(e.target.value)}
-              disabled={submitting || Boolean(success)}
-            />
-          </div>
+          {finalizedEvidence ? (
+            <div
+              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"
+              data-testid="evidence-finalized-summary"
+            >
+              <p className="font-semibold text-emerald-300">
+                Documento Canônico Anexado:
+              </p>
+              <p className="text-white">{finalizedEvidence.title}</p>
+              <p className="font-mono text-[10px] text-emerald-400">
+                ID: {finalizedEvidence.documentId}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                A evidência foi selada no backend e será vinculada ao encerramento.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Seletor entre Upload e Picker */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEvidenceMode("upload");
+                    setError(null);
+                  }}
+                  disabled={submitting}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border p-2 text-xs font-semibold transition ${
+                    evidenceMode === "upload"
+                      ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-200"
+                      : "border-white/[0.06] bg-slate-800/40 text-slate-400 hover:text-slate-200"
+                  }`}
+                  data-testid="tab-upload-evidence"
+                >
+                  <FileUp className="h-3.5 w-3.5" />
+                  Anexar Novo Laudo / Alta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEvidenceMode("picker");
+                    setError(null);
+                    if (availableDocs.length === 0) {
+                      setLoadingDocs(true);
+                    }
+                  }}
+                  disabled={submitting}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border p-2 text-xs font-semibold transition ${
+                    evidenceMode === "picker"
+                      ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-200"
+                      : "border-white/[0.06] bg-slate-800/40 text-slate-400 hover:text-slate-200"
+                  }`}
+                  data-testid="tab-select-evidence"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Selecionar do Prontuário
+                </button>
+              </div>
+
+              {evidenceMode === "upload" ? (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1">
+                    <Label htmlFor="uploadFile">
+                      Arquivo do Laudo / Termo de Alta{" "}
+                      <span className="text-red-400">*</span>
+                    </Label>
+                    <Input
+                      id="uploadFile"
+                      type="file"
+                      accept=".pdf,image/*,.doc,.docx"
+                      onChange={handleFileChange}
+                      disabled={submitting || Boolean(success)}
+                      data-testid="input-upload-file"
+                      className="cursor-pointer file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-cyan-500/20 file:px-2.5 file:py-1 file:font-semibold file:text-cyan-200"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Formatos aceitos: PDF, imagem (PNG, JPG) ou Word (DOCX).
+                      Máximo: 20 MB.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="documentType">Natureza do Documento</Label>
+                      <select
+                        id="documentType"
+                        value={documentType}
+                        onChange={(e) =>
+                          setDocumentType(
+                            e.target.value as HealthDocumentType,
+                          )
+                        }
+                        disabled={submitting || Boolean(success)}
+                        className="w-full rounded-xl border border-white/[0.08] bg-slate-800 px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        data-testid="select-document-type"
+                      >
+                        <option value="report">Laudo Clínico / Relatório</option>
+                        <option value="certificate">
+                          Atestado / Certificado de Alta
+                        </option>
+                        <option value="surgical_report">
+                          Relatório Cirúrgico
+                        </option>
+                        <option value="exam_pdf">Laudo de Exame (PDF)</option>
+                        <option value="other">Outro Documento</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="documentTitle">
+                        Título do Documento{" "}
+                        <span className="text-red-400">*</span>
+                      </Label>
+                      <Input
+                        id="documentTitle"
+                        value={documentTitle}
+                        onChange={(e) => setDocumentTitle(e.target.value)}
+                        placeholder="Ex: Laudo de Alta Clínica e Retorno"
+                        disabled={submitting || Boolean(success)}
+                        data-testid="input-document-title"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="space-y-2 pt-1"
+                  data-testid="picker-existing-documents"
+                >
+                  <Label>
+                    Selecione um documento canônico emitido para este cão:
+                  </Label>
+                  {loadingDocs ? (
+                    <div className="py-4 text-center text-xs text-slate-400">
+                      Carregando documentos do prontuário...
+                    </div>
+                  ) : availableDocs.length === 0 ? (
+                    <div className="rounded-xl border border-white/[0.06] bg-slate-800/40 p-3 text-center text-xs text-slate-400">
+                      Nenhum outro documento canônico encontrado no prontuário.
+                      Utilize a aba &quot;Anexar Novo Laudo&quot;.
+                    </div>
+                  ) : (
+                    <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
+                      {availableDocs.map((doc) => {
+                        const isSelected = selectedDocId === doc.id;
+                        return (
+                          <div
+                            key={doc.id}
+                            onClick={() =>
+                              !submitting && setSelectedDocId(doc.id)
+                            }
+                            className={`flex cursor-pointer items-start justify-between rounded-xl border p-2.5 transition ${
+                              isSelected
+                                ? "border-cyan-400 bg-cyan-500/10 text-white"
+                                : "border-white/[0.06] bg-slate-800/40 text-slate-300 hover:border-white/[0.12]"
+                            }`}
+                            data-testid={`doc-option-${doc.id}`}
+                          >
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-semibold">
+                                {doc.title}
+                              </p>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                <span>
+                                  {HEALTH_DOCUMENT_TYPE_LABELS[
+                                    doc.document_type
+                                  ] ?? doc.document_type}
+                                </span>
+                                {doc.uploaded_at ? (
+                                  <span>
+                                    • {dateFormatter.format(doc.uploaded_at)}
+                                  </span>
+                                ) : null}
+                                {doc.issuer ? <span>• {doc.issuer}</span> : null}
+                              </div>
+                            </div>
+                            <span className="font-mono text-[10px] text-cyan-400">
+                              {doc.id}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-1 pt-1">
+                <Label htmlFor="documentDescription">
+                  Observações do Documento de Liberação
+                </Label>
+                <Input
+                  id="documentDescription"
+                  placeholder="Ex: Alta concedida após reavaliação clínica e exame de imagem"
+                  value={documentDescription}
+                  onChange={(e) => setDocumentDescription(e.target.value)}
+                  disabled={submitting || Boolean(success)}
+                  data-testid="input-document-description"
+                />
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-white/[0.06] pt-3">
@@ -648,7 +995,7 @@ function EndRestrictionDialog({
             variant="primary"
             disabled={submitting || Boolean(success)}
           >
-            {submitting ? "Processando Liberação..." : "Confirmar Liberação"}
+            {submitting ? submittingStatus || "Processando..." : "Confirmar Liberação"}
           </Button>
         </div>
       </form>

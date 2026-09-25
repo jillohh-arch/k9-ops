@@ -5,6 +5,7 @@ vi.mock("@/lib/firebase/functions", () => ({}));
 
 import {
   accessActions,
+  accessPolicyVersion,
   defaultAccessProfiles,
   getCanonicalProfileId,
   getDefaultAccessProfile,
@@ -107,10 +108,14 @@ describe("normalizePermissionMap", () => {
 });
 
 describe("hasAccessPermission", () => {
-  it("declares the canonical Health v1 actions in policy v6 (without read)", () => {
+  it("declares the canonical Health actions in policy v7 (without read)", () => {
+    expect(accessPolicyVersion).toBe(7);
     expect(accessActions.some((action) => (action.id as string) === "read")).toBe(false);
     expect(
       accessActions.some((action) => action.id === "manage_nutrition_plan"),
+    ).toBe(true);
+    expect(
+      accessActions.some((action) => action.id === "record_routine"),
     ).toBe(true);
   });
 
@@ -277,21 +282,24 @@ describe("CT3.AUTH-HEALTH-01 / CT3.F10.HEALTH-READ-ACTION-SCHEMA-CLOSURE-R2 — 
     expect(actionIds).toContain("audit");
     expect(actionIds).toContain("export");
     expect(actionIds).toContain("manage_nutrition_plan");
+    expect(actionIds).toContain("record_routine");
   });
 
-  it("2. default operador_k9 contains health.view=true, health.create=true, health.edit=true, health.read ABSENT", () => {
+  it("2. default operador_k9 contains health.view=true, health.create=true, health.edit=true, health.record_routine=true, health.read ABSENT", () => {
     const profile = getDefaultAccessProfile("operador_k9")!;
     expect(profile).toBeDefined();
     expect(profile.permissions.health).toEqual({
       view: true,
       create: true,
       edit: true,
+      record_routine: true,
     });
     expect("read" in (profile.permissions.health ?? {})).toBe(false);
     expect(profile.permissions.health?.["read" as unknown as AccessAction]).toBeUndefined();
     expect(hasAccessPermission(profile, "health", "view")).toBe(true);
     expect(hasAccessPermission(profile, "health", "create")).toBe(true);
     expect(hasAccessPermission(profile, "health", "edit")).toBe(true);
+    expect(hasAccessPermission(profile, "health", "record_routine")).toBe(true);
     expect(hasAccessPermission(profile, "health", "read" as AccessAction)).toBe(false);
   });
 
@@ -577,11 +585,12 @@ describe("operador_k9 permissions invariant", () => {
     expect(hasAccessPermission(operador, "health", "export")).toBe(false);
   });
 
-  it("operador_k9 has only view/create/edit on health", () => {
+  it("operador_k9 has routine operational recording on health (view/create/edit/record_routine)", () => {
     const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
     expect(hasAccessPermission(operador, "health", "view")).toBe(true);
     expect(hasAccessPermission(operador, "health", "create")).toBe(true);
     expect(hasAccessPermission(operador, "health", "edit")).toBe(true);
+    expect(hasAccessPermission(operador, "health", "record_routine")).toBe(true);
   });
 
   it("capabilities come from resolved canonical profile", () => {
@@ -605,5 +614,97 @@ describe("operador_k9 permissions invariant", () => {
     expect(hasAccessPermission(homologator, "health", "approve")).toBe(true);
     const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
     expect(hasAccessPermission(operador, "health", "archive")).toBe(false);
+  });
+});
+
+describe("CT3.F10.OPERATOR-HEALTH-ROUTINE-CAPABILITY-REPAIR-R1", () => {
+  it("operador_k9 contains health.record_routine = true", () => {
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    expect(operador).toBeDefined();
+    expect(operador.permissions.health?.record_routine).toBe(true);
+  });
+
+  it("operador_k9 hasAccessPermission(operador, 'health', 'record_routine') === true", () => {
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    expect(hasAccessPermission(operador, "health", "record_routine")).toBe(true);
+  });
+
+  it("operador_k9 does NOT gain issue_restriction, release_restriction, cancel_restriction or admin capabilities", () => {
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    expect(hasAccessPermission(operador, "health", "issue_restriction" as AccessAction)).toBe(false);
+    expect(hasAccessPermission(operador, "health", "release_restriction" as AccessAction)).toBe(false);
+    expect(hasAccessPermission(operador, "health", "cancel_restriction" as AccessAction)).toBe(false);
+    expect(hasAccessPermission(operador, "health", "archive")).toBe(false);
+    expect(hasAccessPermission(operador, "health", "approve")).toBe(false);
+    expect(hasAccessPermission(operador, "health", "audit")).toBe(false);
+    expect(hasAccessPermission(operador, "health", "export")).toBe(false);
+    expect(hasAccessPermission(operador, "health", "manage_nutrition_plan")).toBe(false);
+  });
+
+  it("defaultAccessProfiles includes record_routine in operador_k9 and administrador", () => {
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    const admin = defaultAccessProfiles.find((p) => p.id === "administrador")!;
+    const gestor = defaultAccessProfiles.find((p) => p.id === "gestor")!;
+    const almoxarifado = defaultAccessProfiles.find((p) => p.id === "almoxarifado")!;
+
+    expect(operador.permissions.health?.record_routine).toBe(true);
+    expect(admin.permissions.health?.record_routine).toBe(true);
+    expect(gestor.permissions.health?.record_routine).toBeUndefined();
+    expect(almoxarifado.permissions.health?.record_routine).toBeUndefined();
+  });
+
+  it("normalizePermissionMap preserves record_routine across array and map shapes", () => {
+    const fromArray = normalizePermissionMap({
+      health: ["view", "create", "edit", "record_routine"],
+    });
+    expect(fromArray.health).toEqual({
+      view: true,
+      create: true,
+      edit: true,
+      record_routine: true,
+    });
+
+    const fromMap = normalizePermissionMap({
+      health: {
+        view: true,
+        record_routine: true,
+      },
+    });
+    expect(fromMap.health?.record_routine).toBe(true);
+  });
+
+  it("seed payload simulation preserves record_routine (accessProfileForFunction)", () => {
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    const payload = accessProfileForFunction(operador);
+
+    expect(payload.permissions.health?.record_routine).toBe(true);
+    expect(payload.permissions.health?.view).toBe(true);
+    expect(payload.permissions.health?.create).toBe(true);
+    expect(payload.permissions.health?.edit).toBe(true);
+    expect("read" in (payload.permissions.health ?? {})).toBe(false);
+  });
+
+  it("dynamic profile resolution (stg_health_readiness_homologator) remains intact with canonical precedence", () => {
+    expect(getCanonicalProfileId("stg_health_readiness_homologator")).toBe(
+      "stg_health_readiness_homologator",
+    );
+
+    const userProfile = {
+      uid: "test-homologator-uid",
+      email: "homolog@gcm.com.br",
+      displayName: "Homologator",
+      photoUrl: null,
+      ra: "999999",
+      roles: ["condutor"],
+      isK9Instructor: false,
+      claims: {},
+      userMirror: {
+        access_profile_id: "stg_health_readiness_homologator",
+      },
+    };
+
+    expect(resolveProfileId(userProfile as never)).toBe(
+      "stg_health_readiness_homologator",
+    );
   });
 });

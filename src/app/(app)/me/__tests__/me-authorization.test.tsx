@@ -158,6 +158,9 @@ describe("CT3.F10.ME-SELF-PROFILE-AUTHORIZATION-FIX-R1 — Focused Test Suite", 
     mockAccessProfile = getDefaultAccessProfile("operador_k9");
     mockProfileDataState = {
       activeShift: null,
+      administrativeShift: null,
+      administrativeShiftGroup: null,
+      administrativeShiftLabel: null,
       certifications: [],
       documents: [],
       error: null,

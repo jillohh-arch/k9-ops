@@ -426,8 +426,8 @@ describe("HW-ACCESS-SEED-3A — V6 health.read frozen target set", () => {
     "almoxarifado",
   ] as const;
 
-  it("keeps the policy pinned at version 6 (no V7)", () => {
-    expect(accessPolicy.version).toBe(6);
+  it("keeps the policy pinned at version 7", () => {
+    expect(accessPolicy.version).toBe(7);
   });
 
   it("grants NO canonical health.read to any default profile under CT3.AUTH-HEALTH-01", () => {
@@ -460,6 +460,7 @@ describe("HW-ACCESS-SEED-3A — V6 health.read frozen target set", () => {
       "approve",
       "audit",
       "manage_nutrition_plan",
+      "record_routine",
     ]);
   });
 

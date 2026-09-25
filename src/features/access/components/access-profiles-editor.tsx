@@ -7,6 +7,7 @@ import {
   Check,
   Download,
   Eye,
+  HeartPulse,
   LayoutGrid,
   Lock,
   Shield,
@@ -505,6 +506,16 @@ export function PermissionsEditor({
         title="Ações sensíveis"
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <SensitiveToggle
+            active={hasPermission(draft, "health", "record_routine")}
+            icon={HeartPulse}
+            label="Pode registrar rotina de saúde (pesagem)"
+            onToggle={() =>
+              onChange(
+                togglePermission(draft, "health", "record_routine"),
+              )
+            }
+          />
           <SensitiveToggle
             active={hasPermission(draft, "health", "manage_nutrition_plan")}
             icon={ShieldCheck}

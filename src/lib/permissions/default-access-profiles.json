@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "actions": [
     {
       "id": "view",
@@ -40,6 +40,11 @@
       "id": "manage_nutrition_plan",
       "label": "Gerenciar planos alimentares",
       "description": "Permite criar, substituir, atualizar administrativamente e cancelar planos alimentares dos K9."
+    },
+    {
+      "id": "record_routine",
+      "label": "Registrar rotina de saúde",
+      "description": "Permite o registro de dados rotineiros de saúde do K9, incluindo pesagem."
     }
   ],
   "modules": [
@@ -159,7 +164,7 @@
         "vehicles": ["view"],
         "occurrences": ["view", "create", "edit"],
         "training": ["view", "create", "edit"],
-        "health": ["view", "create", "edit"],
+        "health": ["view", "create", "edit", "record_routine"],
         "inventory": ["view"],
         "reports": ["view"],
         "shifts": ["view", "create", "edit"],
@@ -260,7 +265,7 @@
         "occurrences": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "training": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "training_matrix": ["view", "create", "edit", "archive", "export", "approve", "audit"],
-        "health": ["view", "create", "edit", "archive", "export", "approve", "audit", "manage_nutrition_plan"],
+        "health": ["view", "create", "edit", "archive", "export", "approve", "audit", "manage_nutrition_plan", "record_routine"],
         "inventory": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "reports": ["view", "create", "edit", "archive", "export", "approve", "audit"],
         "audit": ["view", "create", "edit", "archive", "export", "approve", "audit"],

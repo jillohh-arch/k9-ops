@@ -8,6 +8,7 @@ export type AccessAction =
   | "edit"
   | "export"
   | "manage_nutrition_plan"
+  | "record_routine"
   | "view";
 
 export type AccessModuleId =

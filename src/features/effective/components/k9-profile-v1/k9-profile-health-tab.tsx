@@ -36,6 +36,7 @@ export function K9ProfileHealthTab({
 
   return (
     <K9ProfileHealth
+      dogId={dogId}
       error={health.errors.length ? health.errors.join(" | ") : null}
       events={events}
       loading={health.loading}

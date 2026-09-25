@@ -12,7 +12,10 @@ import { db } from "@/lib/firebase/client";
 type RawRecord = Record<string, unknown> & { _id: string };
 
 export type K9ReadinessSummary = {
+  activeRestrictions?: number | null;
   evaluatedAt: Date | null;
+  reason?: string | null;
+  reasonCode?: string | null;
   state: K9HealthReadiness;
 };
 
@@ -125,7 +128,10 @@ export function useK9RosterDetail(dogId: string | null): K9RosterDetail {
       (snapshot) => {
         const data = snapshot.exists() ? snapshot.data() : null;
         const state = parseHealthReadiness(
-          data?.readiness ?? data?.readiness_state ?? data?.state,
+          data?.readiness_status ??
+            data?.readiness ??
+            data?.readiness_state ??
+            data?.state,
         );
 
         setReadinessState({
@@ -133,6 +139,11 @@ export function useK9RosterDetail(dogId: string | null): K9RosterDetail {
           unavailable: !state,
           value: state
             ? {
+                activeRestrictions: Array.isArray(data?.active_restrictions)
+                  ? data.active_restrictions.length
+                  : typeof data?.active_restrictions === "number"
+                    ? data.active_restrictions
+                    : null,
                 evaluatedAt:
                   dateValue(
                     data?.evaluated_at ??
@@ -140,6 +151,8 @@ export function useK9RosterDetail(dogId: string | null): K9RosterDetail {
                       data?.updated_at ??
                       data?.updatedAt,
                   ) ?? null,
+                reason: text(data?.readiness_reason) ?? null,
+                reasonCode: text(data?.readiness_reason_code) ?? null,
                 state,
               }
             : null,

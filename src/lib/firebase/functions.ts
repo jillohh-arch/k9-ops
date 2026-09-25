@@ -487,3 +487,35 @@ export const callDecidePromotionRequest = httpsCallable<
   },
   { id?: string; status?: string }
 >(functions, "decidePromotionRequest");
+
+export const callHealthRestrictionEnd = httpsCallable<
+  {
+    dogId: string;
+    endProfessional: {
+      clinic?: string | null;
+      name: string;
+      registration_number: string;
+      registration_type: string;
+      specialty?: string | null;
+    };
+    endReason: string;
+    endSourceDocument: {
+      description?: string | null;
+      health_document_id: string;
+    };
+    idempotencyKey?: string;
+    restrictionId: string;
+  },
+  { dogId: string; replayed: boolean; restrictionId: string; status: "ended" }
+>(functions, "healthRestrictionEnd");
+
+export const callHealthRestrictionCancel = httpsCallable<
+  {
+    cancelReason: string;
+    dogId: string;
+    idempotencyKey?: string;
+    restrictionId: string;
+  },
+  { dogId: string; replayed: boolean; restrictionId: string; status: "cancelled" }
+>(functions, "healthRestrictionCancel");
+

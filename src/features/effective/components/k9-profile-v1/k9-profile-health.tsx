@@ -14,6 +14,7 @@ import {
   healthEventType,
 } from "@/features/effective/lib/k9-profile-activity";
 import type { buildK9ProfileStatus } from "@/features/effective/lib/k9-profile-status";
+import { K9OperationalRestrictions } from "@/features/health/components/k9-operational-restrictions";
 import { paths } from "@/lib/routes/paths";
 
 import {
@@ -61,6 +62,7 @@ const WEIGHT_TONE: Record<HealthDogSummary["weight"], "amber" | "green" | "viole
 };
 
 export type K9ProfileHealthProps = {
+  dogId?: string | null;
   /** Erro do módulo Health; degradação é local. */
   error: string | null;
   events: ProfileRecord[];
@@ -82,6 +84,7 @@ export type K9ProfileHealthProps = {
  * conformidade administrativa (vacina + peso), não avaliação clínica.
  */
 export function K9ProfileHealth({
+  dogId,
   error,
   events,
   loading,
@@ -200,6 +203,8 @@ export function K9ProfileHealth({
           )}
         </ProfileCard>
       </div>
+
+      {dogId ? <K9OperationalRestrictions dogId={dogId} /> : null}
 
       {summary?.issues.length ? (
         <ProfileCard title="Pendências registradas pelo módulo Saúde">

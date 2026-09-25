@@ -26,6 +26,10 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/features/health/components/k9-operational-restrictions", () => ({
+  K9OperationalRestrictions: () => null,
+}));
+
 afterEach(cleanup);
 
 const emptyDetail: K9RosterDetail = {

@@ -24,6 +24,9 @@ import { useAccessControl } from "@/features/access/providers/access-control-pro
 import {
   cancelHealthRestriction,
   endHealthRestriction,
+  formatRestrictionCategory,
+  formatRestrictionLevel,
+  formatRestrictionStatus,
   type OperationalRestriction,
   type RestrictionLevel,
 } from "@/features/health/data/health-restriction-service";
@@ -48,12 +51,6 @@ const levelTone: Record<RestrictionLevel, "red" | "yellow"> = {
   absolute: "red",
   attention: "yellow",
   partial: "yellow",
-};
-
-const levelLabel: Record<RestrictionLevel, string> = {
-  absolute: "Restrição Absoluta",
-  attention: "Atenção Operacional",
-  partial: "Restrição Parcial",
 };
 
 export type K9OperationalRestrictionsProps = {
@@ -153,15 +150,15 @@ export function K9OperationalRestrictions({
               }`}
               data-testid="active-restriction-card"
             >
-              <div className="flex flex-wrap items-start justify-between gap-2 border-b border-white/[0.08] pb-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.08] pb-3.5">
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={levelTone[restriction.level]}>
-                      {levelLabel[restriction.level]}
+                      {formatRestrictionLevel(restriction.level)}
                     </Badge>
-                    <span className="text-xs font-semibold text-slate-300">
-                      Categoria: {restriction.category}
-                    </span>
+                    <Badge tone="cyan">
+                      {formatRestrictionCategory(restriction.category)}
+                    </Badge>
                   </div>
                   <p className="text-sm font-semibold text-white">
                     {restriction.description}
@@ -170,11 +167,11 @@ export function K9OperationalRestrictions({
               </div>
 
               {/* METADATA GRID */}
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs text-slate-300">
+              <div className="mt-3.5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs text-slate-300">
                 <div className="flex items-start gap-2">
                   <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
                   <div>
-                    <span className="block text-[10px] uppercase text-slate-500">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Emissão
                     </span>
                     <span className="font-medium text-slate-200">
@@ -186,7 +183,7 @@ export function K9OperationalRestrictions({
                 <div className="flex items-start gap-2">
                   <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
                   <div>
-                    <span className="block text-[10px] uppercase text-slate-500">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Previsão de Término
                     </span>
                     <span className="font-medium text-slate-200">
@@ -200,7 +197,7 @@ export function K9OperationalRestrictions({
                 <div className="flex items-start gap-2">
                   <Stethoscope className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
                   <div className="min-w-0">
-                    <span className="block text-[10px] uppercase text-slate-500">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Profissional
                     </span>
                     <span className="block truncate font-medium text-slate-200">
@@ -222,17 +219,15 @@ export function K9OperationalRestrictions({
                 <div className="flex items-start gap-2">
                   <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
                   <div className="min-w-0">
-                    <span className="block text-[10px] uppercase text-slate-500">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Documento Comprobatório
                     </span>
-                    <span className="block truncate font-mono text-[11px] font-medium text-cyan-200">
-                      {restriction.source_document.health_document_id}
+                    <span className="block truncate font-medium text-slate-200">
+                      {restriction.source_document.description || "Laudo / Termo de Emissão"}
                     </span>
-                    {restriction.source_document.description ? (
-                      <span className="block truncate text-[11px] text-slate-400">
-                        {restriction.source_document.description}
-                      </span>
-                    ) : null}
+                    <span className="block truncate text-[10px] text-slate-500">
+                      (ID: <span className="font-mono">{restriction.source_document.health_document_id}</span>)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -301,16 +296,14 @@ export function K9OperationalRestrictions({
                 data-testid="history-restriction-card"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.05] pb-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={item.status === "ended" ? "green" : "slate"}>
-                      {item.status === "ended"
-                        ? "Liberada Clinicamente"
-                        : "Registro Invalidado"}
+                      {formatRestrictionStatus(item.status)}
                     </Badge>
-                    <span className="font-bold text-slate-200">
-                      {item.category}
-                    </span>
-                    <span className="text-slate-400">— {item.description}</span>
+                    <Badge tone="cyan">
+                      {formatRestrictionCategory(item.category)}
+                    </Badge>
+                    <span className="font-medium text-slate-300">— {item.description}</span>
                   </div>
 
                   <span className="font-mono text-[11px] text-slate-400">
@@ -318,7 +311,7 @@ export function K9OperationalRestrictions({
                   </span>
                 </div>
 
-                <div className="mt-2.5 space-y-1 text-slate-300">
+                <div className="mt-2.5 space-y-1.5 text-slate-300">
                   {item.status === "ended" ? (
                     <>
                       <p>
@@ -335,17 +328,20 @@ export function K9OperationalRestrictions({
                           {item.end_professional.clinic
                             ? ` • ${item.end_professional.clinic}`
                             : ""}
+                          {item.end_professional.specialty
+                            ? ` • ${item.end_professional.specialty}`
+                            : ""}
                         </p>
                       ) : null}
                       {item.end_source_document ? (
                         <p className="text-[11px] text-slate-400">
                           Documento de liberação:{" "}
-                          <span className="font-mono text-cyan-300">
-                            {item.end_source_document.health_document_id}
+                          <span className="font-medium text-slate-200">
+                            {item.end_source_document.description || "Laudo / Termo de liberação clínica"}
+                          </span>{" "}
+                          <span className="text-[10px] text-slate-500">
+                            (ID: <span className="font-mono">{item.end_source_document.health_document_id}</span>)
                           </span>
-                          {item.end_source_document.description
-                            ? ` (${item.end_source_document.description})`
-                            : ""}
                         </p>
                       ) : null}
                       {item.actual_end ? (
@@ -445,7 +441,7 @@ function EndRestrictionDialog({
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState<HealthDocumentType>("report");
   const [documentTitle, setDocumentTitle] = useState(
-    `Laudo de Alta Médica — ${restriction.category}`,
+    `Laudo de Alta Médica — ${formatRestrictionCategory(restriction.category)}`,
   );
   const [documentDescription, setDocumentDescription] = useState("");
 
@@ -649,17 +645,29 @@ function EndRestrictionDialog({
       onClose={submitting ? () => {} : onClose}
       title="Liberar Restrição Clinicamente"
       description="Encerramento clínico formal de restrição com emissão de alta pelo médico veterinário."
-      className="max-w-lg"
+      className="max-w-3xl lg:max-w-4xl"
     >
       <form
         onSubmit={handleSubmit}
         className="space-y-4"
         data-testid="modal-end-restriction"
       >
-        <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-3 text-xs text-cyan-200">
-          <p className="font-bold">Restrição selecionada:</p>
-          <p className="text-white">
-            {restriction.category} — {restriction.description}
+        <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.05] p-3.5 text-xs text-cyan-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-300/10 pb-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">
+              Restrição Selecionada
+            </span>
+            <div className="flex items-center gap-2">
+              <Badge tone={levelTone[restriction.level]} className="text-[10px]">
+                {formatRestrictionLevel(restriction.level)}
+              </Badge>
+              <Badge tone="cyan" className="text-[10px]">
+                {formatRestrictionCategory(restriction.category)}
+              </Badge>
+            </div>
+          </div>
+          <p className="mt-2 text-sm font-semibold text-white">
+            {restriction.description}
           </p>
         </div>
 
@@ -689,14 +697,14 @@ function EndRestrictionDialog({
           />
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-slate-900/50 p-3.5">
+        <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-slate-900/50 p-4">
           <h5 className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
             <User className="h-3.5 w-3.5 text-cyan-300" />
             Profissional que Concedeu a Liberação
           </h5>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1 sm:col-span-2">
+            <div className="space-y-1">
               <Label htmlFor="professionalName">
                 Nome do Profissional <span className="text-red-400">*</span>
               </Label>
@@ -710,29 +718,30 @@ function EndRestrictionDialog({
               />
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="registrationType">Tipo de Registro</Label>
-              <Input
-                id="registrationType"
-                placeholder="CRMV"
-                value={registrationType}
-                onChange={(e) => setRegistrationType(e.target.value)}
-                disabled={submitting || Boolean(success)}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="registrationNumber">
-                Número do Registro <span className="text-red-400">*</span>
-              </Label>
-              <Input
-                id="registrationNumber"
-                placeholder="Ex: 12345/SP"
-                value={registrationNumber}
-                onChange={(e) => setRegistrationNumber(e.target.value)}
-                disabled={submitting || Boolean(success)}
-                required
-              />
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-1 space-y-1">
+                <Label htmlFor="registrationType">Tipo de Registro</Label>
+                <Input
+                  id="registrationType"
+                  placeholder="CRMV"
+                  value={registrationType}
+                  onChange={(e) => setRegistrationType(e.target.value)}
+                  disabled={submitting || Boolean(success)}
+                />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label htmlFor="registrationNumber">
+                  Número do Registro <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="registrationNumber"
+                  placeholder="Ex: 12345/SP"
+                  value={registrationNumber}
+                  onChange={(e) => setRegistrationNumber(e.target.value)}
+                  disabled={submitting || Boolean(success)}
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -760,7 +769,7 @@ function EndRestrictionDialog({
         </div>
 
         {/* COMPROVAÇÃO DOCUMENTAL (EVIDÊNCIA CANÔNICA) */}
-        <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-slate-900/50 p-3.5">
+        <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-slate-900/50 p-4">
           <div className="flex items-center justify-between">
             <h5 className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
               <FileCheck2 className="h-3.5 w-3.5 text-cyan-300" />
@@ -779,13 +788,13 @@ function EndRestrictionDialog({
 
           {finalizedEvidence ? (
             <div
-              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"
+              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-200"
               data-testid="evidence-finalized-summary"
             >
               <p className="font-semibold text-emerald-300">
                 Documento Canônico Anexado:
               </p>
-              <p className="text-white">{finalizedEvidence.title}</p>
+              <p className="font-medium text-white">{finalizedEvidence.title}</p>
               <p className="font-mono text-[10px] text-emerald-400">
                 ID: {finalizedEvidence.documentId}
               </p>
@@ -804,7 +813,7 @@ function EndRestrictionDialog({
                     setError(null);
                   }}
                   disabled={submitting}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border p-2 text-xs font-semibold transition ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border p-2.5 text-xs font-semibold transition ${
                     evidenceMode === "upload"
                       ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-200"
                       : "border-white/[0.06] bg-slate-800/40 text-slate-400 hover:text-slate-200"
@@ -824,7 +833,7 @@ function EndRestrictionDialog({
                     }
                   }}
                   disabled={submitting}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border p-2 text-xs font-semibold transition ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border p-2.5 text-xs font-semibold transition ${
                     evidenceMode === "picker"
                       ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-200"
                       : "border-white/[0.06] bg-slate-800/40 text-slate-400 hover:text-slate-200"
@@ -852,7 +861,7 @@ function EndRestrictionDialog({
                       data-testid="input-upload-file"
                       className="cursor-pointer file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-cyan-500/20 file:px-2.5 file:py-1 file:font-semibold file:text-cyan-200"
                     />
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-slate-400">
                       Formatos aceitos: PDF, imagem (PNG, JPG) ou Word (DOCX).
                       Máximo: 20 MB.
                     </p>
@@ -915,12 +924,12 @@ function EndRestrictionDialog({
                       Carregando documentos do prontuário...
                     </div>
                   ) : availableDocs.length === 0 ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-slate-800/40 p-3 text-center text-xs text-slate-400">
+                    <div className="rounded-xl border border-white/[0.06] bg-slate-800/40 p-4 text-center text-xs text-slate-400">
                       Nenhum outro documento canônico encontrado no prontuário.
                       Utilize a aba &quot;Anexar Novo Laudo&quot;.
                     </div>
                   ) : (
-                    <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
+                    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                       {availableDocs.map((doc) => {
                         const isSelected = selectedDocId === doc.id;
                         return (
@@ -929,33 +938,33 @@ function EndRestrictionDialog({
                             onClick={() =>
                               !submitting && setSelectedDocId(doc.id)
                             }
-                            className={`flex cursor-pointer items-start justify-between rounded-xl border p-2.5 transition ${
+                            className={`flex cursor-pointer items-start justify-between rounded-xl border p-3 transition ${
                               isSelected
-                                ? "border-cyan-400 bg-cyan-500/10 text-white"
-                                : "border-white/[0.06] bg-slate-800/40 text-slate-300 hover:border-white/[0.12]"
+                                ? "border-cyan-400 bg-cyan-500/10 text-white shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                                : "border-white/[0.06] bg-slate-800/40 text-slate-300 hover:border-white/[0.12] hover:bg-slate-800/60"
                             }`}
                             data-testid={`doc-option-${doc.id}`}
                           >
-                            <div className="space-y-0.5">
-                              <p className="text-xs font-semibold">
+                            <div className="min-w-0 pr-3 space-y-1">
+                              <p className="truncate text-xs font-semibold text-white">
                                 {doc.title}
                               </p>
-                              <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                                <span>
+                              <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                                <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-medium text-slate-300">
                                   {HEALTH_DOCUMENT_TYPE_LABELS[
                                     doc.document_type
                                   ] ?? doc.document_type}
                                 </span>
                                 {doc.uploaded_at ? (
                                   <span>
-                                    • {dateFormatter.format(doc.uploaded_at)}
+                                    Emissão: {dateFormatter.format(doc.uploaded_at)}
                                   </span>
                                 ) : null}
                                 {doc.issuer ? <span>• {doc.issuer}</span> : null}
                               </div>
                             </div>
-                            <span className="font-mono text-[10px] text-cyan-400">
-                              {doc.id}
+                            <span className="shrink-0 text-[10px] text-slate-500 font-medium">
+                              (ID: <span className="font-mono text-cyan-400/80">{doc.id}</span>)
                             </span>
                           </div>
                         );
@@ -1065,7 +1074,7 @@ function CancelRestrictionDialog({
       onClose={submitting ? () => {} : onClose}
       title="Invalidar Registro de Restrição"
       description="Invalidação puramente administrativa por duplicidade, cão incorreto ou erro formal."
-      className="max-w-lg"
+      className="max-w-xl"
     >
       <form
         onSubmit={handleSubmit}
@@ -1073,21 +1082,33 @@ function CancelRestrictionDialog({
         data-testid="modal-cancel-restriction"
       >
         {/* DISCLAIMER OBRIGATÓRIO */}
-        <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-          <div>
-            <p className="font-bold">Aviso Administrativo:</p>
-            <p className="mt-0.5">
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+          <div className="space-y-1">
+            <p className="font-bold text-amber-300">Aviso Administrativo:</p>
+            <p className="leading-relaxed">
               Esta ação invalida um registro incorreto (duplicado, cão errado ou
               erro formal). NÃO constitui alta ou liberação clínica.
             </p>
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/[0.08] bg-slate-900/60 p-3 text-xs text-slate-300">
-          <p className="font-bold text-slate-400">Restrição a invalidar:</p>
-          <p className="text-white">
-            {restriction.category} — {restriction.description}
+        <div className="rounded-2xl border border-white/[0.08] bg-slate-900/60 p-3.5 text-xs text-slate-300">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Restrição a invalidar:
+            </span>
+            <div className="flex items-center gap-2">
+              <Badge tone={levelTone[restriction.level]} className="text-[10px]">
+                {formatRestrictionLevel(restriction.level)}
+              </Badge>
+              <Badge tone="slate" className="text-[10px]">
+                {formatRestrictionCategory(restriction.category)}
+              </Badge>
+            </div>
+          </div>
+          <p className="mt-2 text-sm font-semibold text-white">
+            {restriction.description}
           </p>
         </div>
 

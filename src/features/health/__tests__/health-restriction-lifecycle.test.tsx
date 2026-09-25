@@ -6,6 +6,9 @@ import type { AccessAction, AccessModuleId } from "@/lib/permissions/access-cont
 import {
   cancelHealthRestriction,
   endHealthRestriction,
+  formatRestrictionCategory,
+  formatRestrictionLevel,
+  formatRestrictionStatus,
   generateIdempotencyKey,
   parseOperationalRestriction,
   type OperationalRestriction,
@@ -219,6 +222,76 @@ const sampleCancelled: OperationalRestriction = {
   status: "cancelled",
 };
 
+const sampleActiveMedicationEffect: OperationalRestriction = {
+  category: "medication_effect",
+  description: "Sonolência pós sedativo para procedimento odontológico",
+  dogId: "dog-bono",
+  expected_end: new Date(2026, 9, 26),
+  id: "rest-med-001",
+  issued_at: new Date(2026, 8, 25),
+  level: "attention",
+  professional: {
+    clinic: "Clínica Vet Canil",
+    name: "Dr. André Santos",
+    registration_number: "44123/SP",
+    registration_type: "CRMV",
+    specialty: "Odontologia Veterinária",
+  },
+  recorded_by: {
+    internal_role: "Veterinário de Plantão",
+    name: "Dr. André",
+    uid: "user-andre",
+  },
+  source_document: {
+    description: "Ficha clínica e termo de sedação odontológica",
+    health_document_id: "hd_62381_prescricao",
+  },
+  status: "active",
+};
+
+const sampleEndedMedication: OperationalRestriction = {
+  actual_end: new Date(2026, 8, 26),
+  category: "medication_effect",
+  description: "Recuperado após término de efeito anestésico",
+  dogId: "dog-bono",
+  end_professional: {
+    clinic: "Clínica Vet Canil",
+    name: "Dr. Carlos Eduardo Lima",
+    registration_number: "28491/SP",
+    registration_type: "CRMV",
+    specialty: "Anestesiologia",
+  },
+  end_reason: "Cão totalmente ativo e alerta sem resquícios de sedação",
+  end_source_document: {
+    description: "Termo de liberação anestésica",
+    health_document_id: "hd_9921_alta_anestesia",
+  },
+  ended_by: {
+    internal_role: "Veterinário Responsável",
+    name: "Dr. Carlos",
+    uid: "user-carlos",
+  },
+  expected_end: new Date(2026, 8, 26),
+  id: "rest-ended-med-1",
+  issued_at: new Date(2026, 8, 25),
+  level: "attention",
+  professional: {
+    clinic: "Clínica Vet Canil",
+    name: "Dr. Carlos Eduardo Lima",
+    registration_number: "28491/SP",
+    registration_type: "CRMV",
+    specialty: "Anestesiologia",
+  },
+  recorded_by: {
+    name: "Dr. Carlos",
+    uid: "user-carlos",
+  },
+  source_document: {
+    health_document_id: "hd_inicio_anestesia",
+  },
+  status: "ended",
+};
+
 // ===========================================================================
 // TEST SUITES
 // ===========================================================================
@@ -406,6 +479,27 @@ describe("2. SERVICE LAYER & PAYLOAD CONSTRUCTIONS", () => {
     expect(parsed.professional.name).toBe("Dr. João");
     expect(parsed.source_document.health_document_id).toBe("doc-1");
   });
+
+  it("mapeia categorias canônicas, níveis e status para rótulos legíveis em pt-BR com fallback", () => {
+    expect(formatRestrictionCategory("medication_effect")).toBe("Efeito de medicação");
+    expect(formatRestrictionCategory("injury")).toBe("Lesão / Trauma");
+    expect(formatRestrictionCategory("post_surgical")).toBe("Pós-cirúrgico");
+    expect(formatRestrictionCategory("behavioral")).toBe("Comportamental");
+    expect(formatRestrictionCategory("infectious")).toBe("Infecciosa");
+    expect(formatRestrictionCategory("chronic")).toBe("Condição crônica");
+    expect(formatRestrictionCategory("preventive_pending")).toBe("Pendente preventivo");
+    expect(formatRestrictionCategory("other")).toBe("Outro");
+    expect(formatRestrictionCategory("custom_unknown_category")).toBe("custom_unknown_category");
+    expect(formatRestrictionCategory(null)).toBe("Não informada");
+
+    expect(formatRestrictionStatus("active")).toBe("Ativa");
+    expect(formatRestrictionStatus("ended")).toBe("Liberada Clinicamente");
+    expect(formatRestrictionStatus("cancelled")).toBe("Registro Invalidado");
+
+    expect(formatRestrictionLevel("absolute")).toBe("Restrição Absoluta");
+    expect(formatRestrictionLevel("partial")).toBe("Restrição Parcial");
+    expect(formatRestrictionLevel("attention")).toBe("Atenção Operacional");
+  });
 });
 
 describe("3. UI RENDERING & ACTIVE RESTRICTIONS DISPLAY", () => {
@@ -446,6 +540,39 @@ describe("3. UI RENDERING & ACTIVE RESTRICTIONS DISPLAY", () => {
     expect(
       screen.getByText("Nenhuma restrição operacional ativa para este K9."),
     ).toBeInTheDocument();
+  });
+
+  it("renderiza rótulo amigável 'Efeito de medicação' para medication_effect e não exibe snake_case na UI", () => {
+    render(
+      <K9OperationalRestrictions
+        dogId="dog-bono"
+        initialRestrictions={[sampleActiveMedicationEffect]}
+      />,
+    );
+
+    // Categoria mapeada com sucesso
+    expect(screen.getByText("Efeito de medicação")).toBeInTheDocument();
+    expect(screen.queryByText("medication_effect")).not.toBeInTheDocument();
+
+    // Nível mapeado com sucesso
+    expect(screen.getByText("Atenção Operacional")).toBeInTheDocument();
+  });
+
+  it("exibe descrição amigável do documento como texto primário e ID técnico como detalhe secundário", () => {
+    render(
+      <K9OperationalRestrictions
+        dogId="dog-bono"
+        initialRestrictions={[sampleActiveMedicationEffect]}
+      />,
+    );
+
+    // Descrição primária exibida de forma destacada
+    expect(
+      screen.getByText("Ficha clínica e termo de sedação odontológica"),
+    ).toBeInTheDocument();
+
+    // ID técnico preservado como detalhe secundário
+    expect(screen.getByText("hd_62381_prescricao")).toBeInTheDocument();
   });
 });
 
@@ -971,6 +1098,89 @@ describe("5. MODAL: LIBERAR CLINICAMENTE (END) LIFECYCLE & EVIDENCE FLOW", () =>
 
     expect(mockCallEnd).not.toHaveBeenCalled();
   });
+
+  it("preserva categoria canônica no payload e inicializa título amigável no modal para medication_effect", async () => {
+    mockAllowedCapabilities = ["health.release_restriction"];
+    mockCallPrepareUpload.mockResolvedValueOnce({
+      data: {
+        dogId: "dog-bono",
+        documentId: "hd_canonico_alta_med",
+        max_bytes: 20971520,
+        uploadPath: "health_document_uploads/dog-bono/hd_canonico_alta_med",
+      },
+    });
+    mockUploadBytes.mockResolvedValueOnce({});
+    mockCallFinalizeUpload.mockResolvedValueOnce({
+      data: {
+        documentId: "hd_canonico_alta_med",
+        dogId: "dog-bono",
+        reference: "dogs/dog-bono/health_documents/hd_canonico_alta_med",
+        storagePath: "health_documents/dog-bono/hd_canonico_alta_med",
+      },
+    });
+    mockCallEnd.mockResolvedValueOnce({
+      data: {
+        dogId: "dog-bono",
+        replayed: false,
+        restrictionId: "rest-med-001",
+        status: "ended",
+      },
+    });
+
+    render(
+      <K9OperationalRestrictions
+        dogId="dog-bono"
+        initialRestrictions={[sampleActiveMedicationEffect]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("btn-end-restriction"));
+
+    // Modal aberto com labels amigáveis
+    expect(screen.getByTestId("modal-end-restriction")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("modal-end-restriction")).getByText("Efeito de medicação"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("modal-end-restriction")).queryByText("medication_effect"),
+    ).not.toBeInTheDocument();
+
+    // Título inicial do documento usa label amigável
+    const titleInput = screen.getByTestId("input-document-title") as HTMLInputElement;
+    expect(titleInput.value).toBe("Laudo de Alta Médica — Efeito de medicação");
+
+    // Preenche campos
+    fireEvent.change(screen.getByLabelText(/Motivo da Liberação Clínica/i), {
+      target: { value: "Alta concedida após fim do efeito sedativo" },
+    });
+    fireEvent.change(screen.getByLabelText(/Nome do Profissional/i), {
+      target: { value: "Dr. André Santos" },
+    });
+    fireEvent.change(screen.getByLabelText(/Número do Registro/i), {
+      target: { value: "44123/SP" },
+    });
+
+    const file = new File(["alta"], "alta-sedacao.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByTestId("input-upload-file"), {
+      target: { files: [file] },
+    });
+
+    fireEvent.click(screen.getByText("Confirmar Liberação"));
+
+    await waitFor(() => {
+      expect(mockCallEnd).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockCallEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dogId: "dog-bono",
+        restrictionId: "rest-med-001",
+        endSourceDocument: expect.objectContaining({
+          health_document_id: "hd_canonico_alta_med",
+        }),
+      }),
+    );
+  });
 });
 
 describe("6. MODAL: INVALIDAR REGISTRO (CANCEL) DISCLAIMER & BEHAVIOR", () => {
@@ -1077,5 +1287,30 @@ describe("7. RESTRICTION HISTORY DISPLAY", () => {
     expect(
       screen.getByText(/Registro duplicado lançado por engano no cão Bono/),
     ).toBeInTheDocument();
+  });
+
+  it("renderiza histórico com categoria amigável e documento de liberação com título amigável primário", () => {
+    render(
+      <K9OperationalRestrictions
+        dogId="dog-bono"
+        initialRestrictions={[sampleEndedMedication, sampleCancelled]}
+      />,
+    );
+
+    expect(
+      screen.getByText("Histórico de Restrições Encerradas / Invalidadas"),
+    ).toBeInTheDocument();
+
+    // Item liberado com medication_effect
+    expect(screen.getByText("Liberada Clinicamente")).toBeInTheDocument();
+    expect(screen.getByText("Efeito de medicação")).toBeInTheDocument();
+    expect(screen.queryByText("medication_effect")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Recuperado após término de efeito anestésico/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Termo de liberação anestésica"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("hd_9921_alta_anestesia")).toBeInTheDocument();
   });
 });

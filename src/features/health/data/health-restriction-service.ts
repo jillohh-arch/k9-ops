@@ -7,6 +7,61 @@ export type RestrictionStatus = "active" | "ended" | "cancelled";
 
 export type RestrictionLevel = "absolute" | "partial" | "attention";
 
+export type RestrictionCategory =
+  | "medication_effect"
+  | "injury"
+  | "post_surgical"
+  | "behavioral"
+  | "infectious"
+  | "chronic"
+  | "preventive_pending"
+  | "other"
+  | (string & {});
+
+export const RESTRICTION_CATEGORY_LABELS: Record<string, string> = {
+  behavioral: "Comportamental",
+  chronic: "Condição crônica",
+  infectious: "Infecciosa",
+  injury: "Lesão / Trauma",
+  medication_effect: "Efeito de medicação",
+  other: "Outro",
+  post_surgical: "Pós-cirúrgico",
+  preventive_pending: "Pendente preventivo",
+};
+
+export function formatRestrictionCategory(
+  category: string | undefined | null,
+): string {
+  if (!category) return "Não informada";
+  return RESTRICTION_CATEGORY_LABELS[category] ?? category;
+}
+
+export const RESTRICTION_STATUS_LABELS: Record<RestrictionStatus, string> = {
+  active: "Ativa",
+  cancelled: "Registro Invalidado",
+  ended: "Liberada Clinicamente",
+};
+
+export function formatRestrictionStatus(
+  status: RestrictionStatus | string | undefined | null,
+): string {
+  if (!status) return "";
+  return RESTRICTION_STATUS_LABELS[status as RestrictionStatus] ?? String(status);
+}
+
+export const RESTRICTION_LEVEL_LABELS: Record<RestrictionLevel, string> = {
+  absolute: "Restrição Absoluta",
+  attention: "Atenção Operacional",
+  partial: "Restrição Parcial",
+};
+
+export function formatRestrictionLevel(
+  level: RestrictionLevel | string | undefined | null,
+): string {
+  if (!level) return "";
+  return RESTRICTION_LEVEL_LABELS[level as RestrictionLevel] ?? String(level);
+}
+
 export type RestrictionProfessional = {
   clinic?: string | null;
   name: string;

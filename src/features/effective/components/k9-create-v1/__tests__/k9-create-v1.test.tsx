@@ -272,4 +272,70 @@ describe("K9 Create V1", () => {
     fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
     expect(back).toHaveBeenCalledTimes(2);
   });
+
+  describe("exibição de erros de submissão do formulário", () => {
+    it("exibe erro de matrícula duplicada no banner de erro do form", async () => {
+      saveNewK9V1.mockRejectedValueOnce(
+        new Error("Essa matrícula já está cadastrada."),
+      );
+      render(<K9CreateForm />);
+      fillRequired();
+
+      fireEvent.click(screen.getByRole("button", { name: /Cadastrar K9/ }));
+
+      expect(
+        await screen.findByText("Essa matrícula já está cadastrada."),
+      ).toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("exibe erro de permissão no banner de erro do form", async () => {
+      saveNewK9V1.mockRejectedValueOnce(
+        new Error("Seu perfil não tem permissão para cadastrar K9."),
+      );
+      render(<K9CreateForm />);
+      fillRequired();
+
+      fireEvent.click(screen.getByRole("button", { name: /Cadastrar K9/ }));
+
+      expect(
+        await screen.findByText("Seu perfil não tem permissão para cadastrar K9."),
+      ).toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("exibe erro de upload de foto no banner de erro do form", async () => {
+      saveNewK9V1.mockRejectedValueOnce(
+        new Error(
+          "Não foi possível enviar a foto. Tente outro arquivo ou continue sem foto.",
+        ),
+      );
+      render(<K9CreateForm />);
+      fillRequired();
+
+      fireEvent.click(screen.getByRole("button", { name: /Cadastrar K9/ }));
+
+      expect(
+        await screen.findByText(
+          "Não foi possível enviar a foto. Tente outro arquivo ou continue sem foto.",
+        ),
+      ).toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("exibe mensagem acionável do backend no banner de erro do form", async () => {
+      saveNewK9V1.mockRejectedValueOnce(
+        new Error("Data de nascimento do K9 invalida."),
+      );
+      render(<K9CreateForm />);
+      fillRequired();
+
+      fireEvent.click(screen.getByRole("button", { name: /Cadastrar K9/ }));
+
+      expect(
+        await screen.findByText("Data de nascimento do K9 invalida."),
+      ).toBeInTheDocument();
+      expect(push).not.toHaveBeenCalled();
+    });
+  });
 });

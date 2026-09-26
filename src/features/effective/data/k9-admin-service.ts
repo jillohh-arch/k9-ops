@@ -112,14 +112,25 @@ function inferImageContentType(file: File): string {
 }
 
 async function uploadProfilePhoto(dogId: string, file: File) {
-  const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-  const contentType = inferImageContentType(file);
-  const fileRef = ref(
-    storage,
-    `profile_photos/${dogId}-${Date.now()}.${extension}`,
-  );
-  await uploadBytes(fileRef, file, { contentType });
-  return getDownloadURL(fileRef);
+  try {
+    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const contentType = inferImageContentType(file);
+    const fileRef = ref(
+      storage,
+      `profile_photos/${dogId}-${Date.now()}.${extension}`,
+    );
+    await uploadBytes(fileRef, file, { contentType });
+    return await getDownloadURL(fileRef);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error) {
+      throw error;
+    }
+    const uploadError = new Error(
+      `Falha no upload da foto: ${error instanceof Error ? error.message : "erro de armazenamento"}`,
+    );
+    (uploadError as unknown as { code: string }).code = "storage/upload-failed";
+    throw uploadError;
+  }
 }
 
 function specialtyModality(data: DocumentData, id: string) {

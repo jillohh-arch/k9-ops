@@ -32,7 +32,14 @@ const toggleInstructorRole = vi.fn();
 const deactivateUser = vi.fn();
 const reactivateUser = vi.fn();
 const getUserStatus = vi.fn();
+const refresh = vi.fn();
+const push = vi.fn();
+const back = vi.fn();
 let authProfile: { ra: string | null } | null = null;
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ back, push, refresh }),
+}));
 
 vi.mock("@/features/access/providers/access-control-provider", () => ({
   useAccessControl: () => ({ can }),
@@ -434,6 +441,58 @@ describe("W1 — desativacao", () => {
     const textarea = await screen.findByLabelText(/motivo/i);
     expect((textarea as HTMLTextAreaElement).value).toBe("");
   });
+
+  it("sucesso fecha o modal de desativação, limpa o motivo e chama router.refresh()", async () => {
+    grant({ archive: true });
+    renderPanel();
+    await openDeactivateWithReason("Motivo válido de teste");
+    const confirm = screen.getByRole("button", { name: /desativar agente/i });
+    fireEvent.click(confirm);
+
+    expect(
+      await screen.findByText(/agente desativado com sucesso/i),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /desativar agente/i })).toBeNull();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("falha mantém o diálogo aberto, preserva o motivo digitado e exibe o erro dentro do diálogo", async () => {
+    grant({ archive: true });
+    deactivateHumanLifecycle.mockRejectedValueOnce(
+      new HumanLifecycleError("ACTIVE_SHIFT", "Turno ativo."),
+    );
+    renderPanel();
+    await openDeactivateWithReason("Motivo preservado para retry");
+    const confirm = screen.getByRole("button", { name: /desativar agente/i });
+    fireEvent.click(confirm);
+
+    expect(await screen.findByRole("heading", { name: /desativar agente/i })).toBeTruthy();
+    expect(screen.getByText(/Não é possível desativar este agente enquanto houver turno ativo/i)).toBeTruthy();
+    const textarea = screen.getByLabelText(/motivo/i) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("Motivo preservado para retry");
+    expect(confirm.hasAttribute("disabled")).toBe(false);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("cancelar após erro no modal limpa o erro e o motivo para a próxima abertura", async () => {
+    grant({ archive: true });
+    deactivateHumanLifecycle.mockRejectedValueOnce(
+      new HumanLifecycleError("PERMISSION_DENIED", "Permissão negada."),
+    );
+    renderPanel();
+    await openDeactivateWithReason("Tentativa sem permissão");
+    fireEvent.click(screen.getByRole("button", { name: /desativar agente/i }));
+
+    expect(await screen.findByText(/Seu perfil não permite alterar o estado de agentes/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(screen.queryByRole("heading", { name: /desativar agente/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /desativar/i }));
+    expect(screen.queryByText(/Seu perfil não permite alterar o estado de agentes/i)).toBeNull();
+    const textarea = screen.getByLabelText(/motivo/i) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -486,6 +545,7 @@ describe("W1 — reativacao", () => {
       await screen.findByText(/agente reativado com sucesso/i),
     ).toBeTruthy();
     expect(reactivateUser).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });
 

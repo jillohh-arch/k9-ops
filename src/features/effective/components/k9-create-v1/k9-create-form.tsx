@@ -162,6 +162,8 @@ export function K9CreateForm() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
+    if (saving) return;
+
     if (photoError) {
       setErrors((current) => ({
         ...current,

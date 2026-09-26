@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { useAccessControl } from "@/features/access/providers/access-control-provider";
 import { useAccessProfiles } from "@/features/access/hooks/use-access-profiles";
@@ -99,6 +100,7 @@ export function HumanManagementPanel({
   record,
   userName,
 }: HumanManagementPanelProps) {
+  const router = useRouter();
   const { can } = useAccessControl();
   const { profile } = useAuth();
 
@@ -141,6 +143,7 @@ export function HumanManagementPanel({
   // State
   const [isInstructor, setIsInstructor] = useState(false);
   const [deactivateReason, setDeactivateReason] = useState("");
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
   /**
    * Carregamento das roles de instrutor (dominio de ACESSO).
    *
@@ -253,6 +256,47 @@ export function HumanManagementPanel({
   }
 
   /**
+   * Resolve a mensagem descritiva e acionável para erros de lifecycle.
+   */
+  function resolveLifecycleErrorMessage(error: unknown): string {
+    if (error && typeof error === "object") {
+      const category = (error as { category?: unknown }).category;
+      if (typeof category === "string") {
+        switch (category) {
+          case "ALREADY_IN_STATE":
+            return "O estado deste agente já está atualizado. Nenhuma alteração era necessária.";
+          case "ACTIVE_SHIFT":
+            return "Não é possível desativar este agente enquanto houver turno ativo. Regularize o turno primeiro.";
+          case "STALE_WRITE":
+            return "Este cadastro foi alterado por outra sessão. Nada foi sobrescrito — revise os dados atualizados antes de tentar novamente.";
+          case "SELF_DEACTIVATION_FORBIDDEN":
+            return "Não é possível desativar o seu próprio cadastro.";
+          case "PERMISSION_DENIED":
+            return "Seu perfil não permite alterar o estado de agentes.";
+          case "NOT_FOUND":
+            return "Cadastro não encontrado.";
+          case "AUTH_IDENTITY_BROKEN":
+            return "O vínculo com a conta de acesso deste agente está inconsistente. Regularize o provisionamento antes de alterar o estado.";
+          case "AUTH_APPLIED_AUDIT_FAILED":
+            return "O acesso do agente foi suspenso, mas não foi possível registrar a auditoria. Confira os dados atualizados antes de nova ação.";
+          case "AUTH_ENABLE_REVERTED_AUDIT_FAILED":
+            return "Não foi possível concluir a reativação do acesso. A alteração foi revertida e a conta permanece bloqueada. Confira os dados atualizados.";
+          case "COMPENSATION_FAILED":
+            return "A operação não pôde ser concluída com segurança e o estado pode estar inconsistente. Confira os dados atualizados antes de qualquer nova ação.";
+          case "INVALID_INPUT":
+            return (error as { message?: string }).message || "Dados inválidos para alterar o estado do agente.";
+          default:
+            return (error as { message?: string }).message || "Falha ao alterar o estado do agente.";
+        }
+      }
+    }
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return "Falha ao alterar o estado do agente.";
+  }
+
+  /**
    * Feedback de erro de lifecycle.
    *
    * A categoria vem de `details.reason`, e a distincao mais importante e entre
@@ -261,73 +305,10 @@ export function HumanManagementPanel({
    * que a pessoa continua com acesso.
    */
   function showLifecycleError(error: HumanLifecycleError) {
-    switch (error.category) {
-      case "ALREADY_IN_STATE":
-        // Estado global (Personnel + Auth) ja convergido: informativo.
-        showFeedback(
-          "O estado deste agente já está atualizado. Nenhuma alteração era necessária.",
-          "info",
-        );
-        return;
-      case "ACTIVE_SHIFT":
-        showFeedback(
-          "Não é possível desativar este agente enquanto houver turno ativo. Regularize o turno primeiro.",
-          "error",
-        );
-        return;
-      case "STALE_WRITE":
-        showFeedback(
-          "Este cadastro foi alterado por outra sessão. Nada foi sobrescrito — revise os dados atualizados antes de tentar novamente.",
-          "error",
-        );
-        return;
-      case "SELF_DEACTIVATION_FORBIDDEN":
-        showFeedback(
-          "Não é possível desativar o seu próprio cadastro.",
-          "error",
-        );
-        return;
-      case "PERMISSION_DENIED":
-        showFeedback(
-          "Seu perfil não permite alterar o estado de agentes.",
-          "error",
-        );
-        return;
-      case "NOT_FOUND":
-        showFeedback("Cadastro não encontrado.", "error");
-        return;
-      case "AUTH_IDENTITY_BROKEN":
-        showFeedback(
-          "O vínculo com a conta de acesso deste agente está inconsistente. Regularize o provisionamento antes de alterar o estado.",
-          "error",
-        );
-        return;
-      case "AUTH_APPLIED_AUDIT_FAILED":
-        // O acesso FOI suspenso. NAO dizer que a desativacao falhou.
-        showFeedback(
-          "O acesso do agente foi suspenso, mas não foi possível registrar a auditoria. Confira os dados atualizados antes de nova ação.",
-          "error",
-        );
-        return;
-      case "AUTH_ENABLE_REVERTED_AUDIT_FAILED":
-        showFeedback(
-          "Não foi possível concluir a reativação do acesso. A alteração foi revertida e a conta permanece bloqueada. Confira os dados atualizados.",
-          "error",
-        );
-        return;
-      case "COMPENSATION_FAILED":
-        // Estado potencialmente divergente: nao presumir nada.
-        showFeedback(
-          "A operação não pôde ser concluída com segurança e o estado pode estar inconsistente. Confira os dados atualizados antes de qualquer nova ação.",
-          "error",
-        );
-        return;
-      case "INVALID_INPUT":
-        showFeedback(error.message, "error");
-        return;
-      default:
-        showFeedback("Falha ao alterar o estado do agente.", "error");
-    }
+    const message = resolveLifecycleErrorMessage(error);
+    const type: FeedbackType =
+      error?.category === "ALREADY_IN_STATE" ? "info" : "error";
+    showFeedback(message, type);
   }
 
   async function handleDeactivate() {
@@ -335,6 +316,7 @@ export function HumanManagementPanel({
     if (actionLoading) return;
     setActionLoading("deactivate");
     setFeedback(null);
+    setDeactivateError(null);
     try {
       // O backend escreve o lifecycle canonico (active/status/deleted_*) e
       // audita no servidor. O painel nao escreve Firestore e nao sintetiza
@@ -346,6 +328,8 @@ export function HumanManagementPanel({
       });
       setDeactivateDialogOpen(false);
       setDeactivateReason("");
+      setDeactivateError(null);
+      router.refresh();
       showFeedback(
         result.authState === "not_provisioned"
           ? "Agente desativado. Não havia conta de acesso provisionada para suspender."
@@ -355,7 +339,8 @@ export function HumanManagementPanel({
         "success",
       );
     } catch (error) {
-      showLifecycleError(error as HumanLifecycleError);
+      const message = resolveLifecycleErrorMessage(error);
+      setDeactivateError(message);
     } finally {
       setActionLoading(null);
     }
@@ -369,6 +354,7 @@ export function HumanManagementPanel({
       // `reason` e OMITIDO no V1 — nunca enviado como string vazia.
       const result = await reactivateHumanLifecycle({ ra, record });
       setReactivateDialogOpen(false);
+      router.refresh();
       showFeedback(
         result.authState === "not_provisioned"
           ? "Agente reativado. Não há conta de acesso provisionada — o acesso depende de provisionamento."
@@ -589,7 +575,10 @@ export function HumanManagementPanel({
               aria-describedby={isSelf ? SELF_GUARD_HINT_ID : undefined}
               className="rounded-lg border border-red-400/20 bg-red-400/[0.06] px-3 py-2 text-sm font-medium text-red-300 transition hover:bg-red-400/[0.12] disabled:opacity-50"
               disabled={!!actionLoading || isSelf}
-              onClick={() => setDeactivateDialogOpen(true)}
+              onClick={() => {
+                setDeactivateError(null);
+                setDeactivateDialogOpen(true);
+              }}
               title={
                 isSelf
                   ? "Você não pode desativar seu próprio cadastro."
@@ -691,22 +680,34 @@ export function HumanManagementPanel({
               provisionada, o acesso ao sistema será suspenso. Informe o motivo
               da desativação.
             </p>
+
+            {deactivateError ? (
+              <div className="mt-4">
+                <Feedback message={deactivateError} type="error" />
+              </div>
+            ) : null}
+
             <label className="mt-4 block text-xs font-semibold text-slate-300" htmlFor="deactivate-reason">
               Motivo (mínimo 5 caracteres)
             </label>
             <textarea
               id="deactivate-reason"
               className="mt-1 h-20 w-full resize-none rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/35 focus:bg-white/[0.05]"
-              onChange={(event) => setDeactivateReason(event.target.value)}
+              onChange={(event) => {
+                setDeactivateReason(event.target.value);
+                if (deactivateError) setDeactivateError(null);
+              }}
               placeholder="Informe o motivo da desativação"
               value={deactivateReason}
             />
             <div className="mt-5 flex gap-3">
               <button
-                className="flex-1 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12]"
+                className="flex-1 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-200 hover:bg-cyan-300/[0.12] disabled:opacity-50"
+                disabled={Boolean(actionLoading)}
                 onClick={() => {
                   setDeactivateDialogOpen(false);
                   setDeactivateReason("");
+                  setDeactivateError(null);
                 }}
                 type="button"
               >

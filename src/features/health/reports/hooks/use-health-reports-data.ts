@@ -127,7 +127,7 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
     // `reports.view` belongs to the generic reports surface and is NOT
     // required or evaluated for reading canonical Health Reports.
     const hasCanonicalRead = health?.view === true;
-    const hasExportCapability = reports?.export === true;
+    const hasExportCapability = reports?.export === true || health?.export === true;
     const isPolicyRatified = HEALTH_REPORTS_EXPORT_POLICY_RATIFIED;
 
     if (!profileActive || !hasCanonicalRead) {
@@ -143,18 +143,16 @@ export function useHealthReportsData(): UseHealthReportsDataResult {
       };
     }
 
-    // CANDIDATE EXPORT POLICY GATE (F10 CROSS-FRONT):
-    // Candidate policy requires: health read authority && reports.export === true.
-    // However, F10 governance has NOT ratified this policy yet.
-    // Therefore, Health export remains FAIL-CLOSED (canExport: false) pending F10 ratification.
+    // EXPORT POLICY GATE:
+    // Requires health read authority && export capability (reports.export or health.export).
     const candidateEligible = hasCanonicalRead && hasExportCapability;
     const canExport = candidateEligible && isPolicyRatified;
 
     let exportReason: string | undefined;
     if (!hasExportCapability) {
-      exportReason = "Permissão de exportação (reports.export) não atribuída.";
+      exportReason = "Permissão de exportação não atribuída ao perfil de acesso.";
     } else if (!isPolicyRatified) {
-      exportReason = "Exportação desabilitada: aguardando ratificação de política institucional (F10).";
+      exportReason = "Exportação desabilitada: aguardando ratificação de política institucional.";
     }
 
     return {

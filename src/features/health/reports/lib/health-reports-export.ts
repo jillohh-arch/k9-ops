@@ -304,7 +304,7 @@ export function executeHealthReportExport(
   if (!exportAuthority.canExport) {
     throw new Error(
       exportAuthority.reason ??
-        "Acesso negado: exportação desabilitada aguardando ratificação de política institucional (F10)."
+        "Acesso negado: exportação de relatórios não autorizada para este perfil."
     );
   }
 

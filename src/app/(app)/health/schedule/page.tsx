@@ -23,6 +23,13 @@ export default function HealthSchedulePage() {
       title="Agenda"
       description="Planejamento preventivo e operacional"
       activeNavKey="schedule"
+      /*
+       * ScheduleView composes a dedicated K9 Ops identity header (ScheduleHeader)
+       * with operational metrics and quick actions. The shell's plain title row
+       * is suppressed here to avoid stacked duplicate titles, matching /health
+       * and /health/readiness.
+       */
+      hideModuleHeading
     >
       <ScheduleView />
     </HealthModuleShell>

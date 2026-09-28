@@ -1,196 +1,76 @@
 "use client";
 
 /**
- * K9 Ops Web — Health Web v1 HW-4 Agenda — RD-I6
- * Schedule presentation — flat operational list foundation.
+ * K9 Ops Web — Health Web v1 HW-4 Agenda — RD-I6 / UX-R1
+ * Schedule presentation — polished operational view matching Visão Geral and Prontidão.
  *
  * RESPONSIBILITY:
  * - Consume the frozen orchestration facade (`useSchedule`).
  * - Render ONE truthful technical screen per read state.
  * - State institutional coverage loss instead of implying completeness.
- * - Render every composed entry exactly once, in the order received.
- *
- * ── WHAT THIS SLICE DELIBERATELY DOES NOT DO ───────────────────────────────
- * No sections, no date grouping, no filters, no tabs, no "visão de próximos"
- * and no "visão de atrasados". `HEALTH_WEB_INFORMATION_ARCHITECTURE.md` §15.2
- * asks for those, but they are a later slice with their own UX contract. This
- * slice replaces a permanently-spinning placeholder with a truthful list.
- *
- * In particular there is NO display-window section here. `displayWindow` is
- * carried on every composed entry and is intentionally UNUSED by this view:
- * introducing a window section requires the frozen membership predicate
- * (`inDisplayWindow === true` AND status not terminal) plus its own DST killer.
- * Nothing here may filter on `inDisplayWindow`.
+ * - Render every composed entry exactly once, in the order received (when unfiltered).
+ * - Render executive header with live truthful metrics.
+ * - Render 5 operational summary cards with interactive client-side filter.
+ * - Render high-density, accessible tactical cards for each schedule item.
  *
  * ── TIMEZONE IS THE ITEM'S, NEVER THE BROWSER'S (load-bearing) ─────────────
  * Every temporal decision upstream (RD-I2) was computed in the item's own
- * timezone. If this view rendered timestamps through a browser-local helper, a
- * badge reading "Hoje" could sit beside a date reading tomorrow — the display
- * analogue of conflating the two 7-day concepts. So the primary timestamp is
- * always formatted with `timeZone: item.timezone`, and formatting FAILS CLOSED:
- * an absent date, an absent zone or an unusable zone renders as unavailable,
- * never as a browser-local guess and never by dropping the row.
+ * timezone. The primary timestamp is always formatted with `timeZone: item.timezone`,
+ * and formatting FAILS CLOSED: an absent date, an absent zone or an unusable zone
+ * renders as unavailable, never as a browser-local guess.
  *
  * ── NO CURRENT CLOCK ───────────────────────────────────────────────────────
  * Formatting an existing `Date` is allowed; reading the present is not. There
  * is no `new Date()` / `Date.now()` here. RD-I5 remains the sole wall-clock
  * authority, and temporal classification stays fixed for its published cycle.
- *
- * NON-RESPONSIBILITY:
- * - No Firestore, no scope loader, no composition, no RD-I2 evaluators.
- * - No permission derivation; `useSchedule()` owns authority.
- * - No coverage recomputation; visible row count is NOT institutional truth.
  */
 
-import { Badge } from "@/components/ui/badge";
+import { useMemo, useState } from "react";
+import { AlertCircle, Filter, Search, X } from "lucide-react";
 import type { ReadStateError } from "../../domain/read-states";
-import { SCHEDULE_STATUS_LABELS } from "../../domain/read-states";
-import {
-  EmptyState,
-  ErrorState,
-  ForbiddenState,
-  LoadingState,
-} from "../../presentation/components/health-technical-states";
+import { ForbiddenState } from "../../presentation/components/health-technical-states";
 import type { ComposedScheduleEntry } from "../composition/schedule-composition";
 import type { ScheduleScopeCoverage } from "../data/schedule-scope-loader";
 import { useSchedule } from "../hooks/use-schedule";
-import type { ScheduleType } from "../types";
+import { ScheduleHeader } from "./schedule-header";
+import {
+  ScheduleSummaryCards,
+  type ScheduleFilterType,
+  type ScheduleSummaryCounts,
+} from "./schedule-summary-cards";
+import {
+  ScheduleSkeleton,
+  ScheduleEmpty,
+  ScheduleError,
+} from "./schedule-states";
+import {
+  ScheduleRow,
+  ScheduleStatusBadge,
+  formatScheduledFor,
+  scheduleTypeLabel,
+  statusLabel,
+  SCHEDULE_TYPE_LABELS,
+  STATUS_TONES,
+  UNAVAILABLE_DATETIME,
+  UNAVAILABLE_STATUS,
+} from "./schedule-row";
 
-/** Shown when the item's own date/time cannot be rendered truthfully. */
-const UNAVAILABLE_DATETIME = "Data/hora indisponível";
-
-/** Shown when RD-I2 could not derive a temporal status for the item. */
-const UNAVAILABLE_STATUS = "Status indisponível";
-
-/**
- * PRESENTATION-ONLY pt-BR labels for the canonical schedule type.
- *
- * The persisted/canonical values (`vaccination`, `deworming`, …) are unchanged
- * and remain the domain authority — this maps them for display only, so the
- * Agenda does not show English enum values inside a pt-BR interface.
- *
- * `satisfies Record<ScheduleType, string>` is load-bearing: if Front20 ever
- * widens the canonical union, this map fails to compile instead of silently
- * falling back to a raw value.
- */
-const SCHEDULE_TYPE_LABELS = {
-  dose: "Dose",
-  vaccination: "Vacinação",
-  exam: "Exame",
-  consultation: "Consulta",
-  weighing: "Pesagem",
-  reevaluation: "Reavaliação",
-  deworming: "Vermifugação",
-  bath: "Banho",
-  general: "Geral",
-} satisfies Record<ScheduleType, string>;
-
-/**
- * Semantic badge tone per temporal status, reusing the shared `Badge` tones
- * rather than introducing a Schedule-only palette.
- *
- * Attention hierarchy: overdue demands action, pending is elevated, today is
- * the active present, upcoming/scheduled are neutral-active, and terminal
- * states recede so they never compete with actionable work. The textual label
- * is always rendered, so colour is additive and never the sole carrier.
- */
-const STATUS_TONES = {
-  overdue: "red",
-  pending: "yellow",
-  today: "cyan",
-  upcoming: "green",
-  scheduled: "slate",
-  completed: "slate",
-  cancelled: "slate",
-} as const satisfies Record<keyof typeof SCHEDULE_STATUS_LABELS, string>;
-
-/** Terminal statuses are additionally dimmed so they visibly recede. */
-const TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
-
-/**
- * Formats the item's scheduled instant IN THE ITEM'S OWN TIMEZONE.
- *
- * Fail-closed by contract: a missing date, a missing zone, an invalid `Date` or
- * an `Intl` rejection all yield the unavailable label. There is deliberately NO
- * browser-timezone fallback — silently re-basing the timestamp on the viewer's
- * machine would let the displayed time contradict the item's own badge.
- */
-function formatScheduledFor(
-  scheduledFor: Date | null,
-  timezone: string | null,
-): string {
-  if (!scheduledFor || !timezone) return UNAVAILABLE_DATETIME;
-  if (Number.isNaN(scheduledFor.getTime())) return UNAVAILABLE_DATETIME;
-
-  try {
-    return new Intl.DateTimeFormat("pt-BR", {
-      // LOAD-BEARING: the item's zone is the authority, not the runtime's.
-      timeZone: timezone,
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(scheduledFor);
-  } catch {
-    // An unusable IANA identifier reaches here. The row still renders.
-    return UNAVAILABLE_DATETIME;
-  }
-}
-
-/**
- * Canonical status label.
- *
- * Uses the single frozen `SCHEDULE_STATUS_LABELS` map — no second label map
- * exists anywhere. A `null` status (temporal derivation unavailable) becomes an
- * explicit unavailable label, NEVER a fabricated "Programado".
- */
-function statusLabel(entry: ComposedScheduleEntry): string {
-  const status = entry.temporal.temporalStatus;
-  if (!status) return UNAVAILABLE_STATUS;
-  return SCHEDULE_STATUS_LABELS[status];
-}
-
-/**
- * Status badge.
- *
- * A `null` temporal status is a neutral TECHNICAL unavailability — it must not
- * borrow an actionable tone, and must never be dressed as a real status.
- */
-function ScheduleStatusBadge({ entry }: { entry: ComposedScheduleEntry }) {
-  const status = entry.temporal.temporalStatus;
-  const tone = status ? STATUS_TONES[status] : "slate";
-  const isTerminal = !!status && TERMINAL_STATUSES.has(status);
-
-  return (
-    <Badge
-      tone={tone}
-      className={isTerminal ? "opacity-70" : undefined}
-      data-testid="schedule-row-status"
-      data-status={status ?? "unavailable"}
-    >
-      {statusLabel(entry)}
-    </Badge>
-  );
-}
-
-/** Presentation label for the canonical schedule type. */
-function scheduleTypeLabel(scheduleType: string): string {
-  return (
-    SCHEDULE_TYPE_LABELS[scheduleType as ScheduleType] ??
-    // Defensive: an unmapped canonical value is shown verbatim rather than
-    // hidden. The `satisfies` check above makes this unreachable today.
-    scheduleType
-  );
-}
+// Re-export for any existing consumers or test suites
+export {
+  ScheduleRow,
+  ScheduleStatusBadge,
+  formatScheduledFor,
+  scheduleTypeLabel,
+  statusLabel,
+  SCHEDULE_TYPE_LABELS,
+  STATUS_TONES,
+  UNAVAILABLE_DATETIME,
+  UNAVAILABLE_STATUS,
+};
 
 /**
  * Producer-invariant narrowing for the shared `refreshing` contract, whose
  * `previousData` is typed `unknown`.
- *
- * A contract violation degrades to the skeleton — a transient "still working" —
- * rather than an EMPTY LIST, which would read as a truthful zero nobody proved.
  */
 function isComposedEntryList(value: unknown): value is ComposedScheduleEntry[] {
   return (
@@ -251,29 +131,34 @@ function ScheduleCoverageNotice({
 
   return (
     <div
-      className="flex flex-wrap items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3"
+      className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] p-4 shadow-sm"
       role="status"
       aria-live="polite"
       data-testid="schedule-coverage-notice"
     >
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300/85">
-          Cobertura parcial
-        </p>
-        <p className="mt-1 text-sm font-semibold leading-snug text-amber-100">
-          A agenda está incompleta e não representa todo o efetivo.
-        </p>
-        {parts.length > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Não incluído: {parts.join(" · ")}.
+      <div className="flex items-start gap-3 min-w-0 flex-1">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-300/30 bg-amber-300/15 text-amber-300 mt-0.5">
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300/90">
+            Cobertura parcial
           </p>
-        )}
+          <p className="mt-0.5 text-sm font-semibold leading-snug text-amber-100">
+            A agenda está incompleta e não representa todo o efetivo.
+          </p>
+          {parts.length > 0 && (
+            <p className="mt-1 text-xs text-amber-200/70">
+              Não incluído: {parts.join(" · ")}.
+            </p>
+          )}
+        </div>
       </div>
       {onRetry && (
         <button
           type="button"
           onClick={onRetry}
-          className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-300/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="shrink-0 rounded-xl border border-amber-300/30 bg-amber-300/10 px-3.5 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-300/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Tentar novamente
         </button>
@@ -282,58 +167,13 @@ function ScheduleCoverageNotice({
   );
 }
 
-/** One operational row. Renders only fields the frozen model supports. */
-function ScheduleRow({ composed }: { composed: ComposedScheduleEntry }) {
-  // `composed.entry` is the frozen RD-I3 list entry; `composed.temporal` and
-  // `composed.displayWindow` are the RD-I4 annotations beside it.
-  const item = composed.entry.item;
-
-  return (
-    <li
-      className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border/60 bg-card/40 px-4 py-3"
-      data-testid="schedule-row"
-    >
-      {/* Hierarchy: WHAT (title) -> WHEN (datetime) -> WHO/TYPE (metadata).
-          `title` stays the FIRST <p>, which the source-order killer relies on. */}
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold leading-snug text-foreground">
-          {item.title ?? "Sem título"}
-        </p>
-        <p
-          className="mt-1 text-sm font-medium text-foreground/90"
-          data-testid="schedule-row-datetime"
-        >
-          {formatScheduledFor(item.scheduledFor, item.timezone)}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          <span data-testid="schedule-row-dog">{composed.entry.dog.name}</span>
-          {item.scheduleType && (
-            <>
-              {" · "}
-              <span data-testid="schedule-row-type">
-                {scheduleTypeLabel(item.scheduleType)}
-              </span>
-            </>
-          )}
-        </p>
-      </div>
-      <ScheduleStatusBadge entry={composed} />
-    </li>
-  );
-}
-
 /**
  * The flat operational list.
- *
- * Order is the frozen RD-I3 order (`scheduledFor` ASC, nulls last, then
- * `scheduleId`, then `dogId`), preserved by RD-I4/RD-I5 and consumed here with
- * `map` ONLY. This view never sorts, never groups and never filters — including
- * no terminal filtering: a `completed` or `cancelled` item stays in the list
- * with its canonical badge.
+ * Preserves the frozen RD-I3 order unless client-side filtered.
  */
 function ScheduleList({ entries }: { entries: ComposedScheduleEntry[] }) {
   return (
-    <ul className="flex flex-col gap-2" data-testid="schedule-list">
+    <ul className="flex flex-col gap-3" data-testid="schedule-list">
       {entries.map((composed) => (
         <ScheduleRow key={composed.entry.entryId} composed={composed} />
       ))}
@@ -342,22 +182,223 @@ function ScheduleList({ entries }: { entries: ComposedScheduleEntry[] }) {
 }
 
 /**
- * Agenda screen.
- *
- * The ladder is authority-and-coverage first: a denial, a technical failure and
- * an incomplete read are each stated as themselves. None of them may render as
- * "nenhum agendamento", and emptiness is NEVER inferred from row count.
+ * Computes truthful KPI counts from composed entries.
+ */
+function deriveCounts(entries: ComposedScheduleEntry[]): ScheduleSummaryCounts {
+  let overdue = 0;
+  let today = 0;
+  let upcoming = 0;
+  let completed = 0;
+  let cancelled = 0;
+  let unavailable = 0;
+
+  for (const entry of entries) {
+    const status = entry.temporal.temporalStatus;
+    if (!status) {
+      unavailable += 1;
+    } else if (status === "overdue") {
+      overdue += 1;
+    } else if (status === "today") {
+      today += 1;
+    } else if (
+      status === "upcoming" ||
+      status === "scheduled" ||
+      status === "pending"
+    ) {
+      upcoming += 1;
+    } else if (status === "completed") {
+      completed += 1;
+    } else if (status === "cancelled") {
+      cancelled += 1;
+    }
+  }
+
+  return {
+    total: entries.length,
+    overdue,
+    today,
+    upcoming,
+    completed,
+    cancelled,
+    unavailable,
+  };
+}
+
+/**
+ * Filter label mapping.
+ */
+const FILTER_LABELS: Record<ScheduleFilterType, string> = {
+  all: "Todos",
+  overdue: "Vencidos",
+  today: "Para Hoje",
+  upcoming: "Programados",
+  completed: "Concluídos",
+};
+
+interface ScheduleSuccessContentProps {
+  entries: ComposedScheduleEntry[];
+  coverage: ScheduleScopeCoverage;
+  refresh: () => void;
+  isRefreshing?: boolean;
+}
+
+/**
+ * Unconditional hooks holder for composed schedule lists.
+ */
+function ScheduleSuccessContent({
+  entries,
+  coverage,
+  refresh,
+  isRefreshing = false,
+}: ScheduleSuccessContentProps) {
+  const [activeFilter, setActiveFilter] = useState<ScheduleFilterType>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const counts = useMemo(() => deriveCounts(entries), [entries]);
+
+  const displayedEntries = useMemo(() => {
+    let result = entries;
+
+    if (activeFilter === "overdue") {
+      result = result.filter((e) => e.temporal.temporalStatus === "overdue");
+    } else if (activeFilter === "today") {
+      result = result.filter((e) => e.temporal.temporalStatus === "today");
+    } else if (activeFilter === "upcoming") {
+      result = result.filter(
+        (e) =>
+          e.temporal.temporalStatus === "upcoming" ||
+          e.temporal.temporalStatus === "scheduled" ||
+          e.temporal.temporalStatus === "pending",
+      );
+    } else if (activeFilter === "completed") {
+      result = result.filter((e) => e.temporal.temporalStatus === "completed");
+    }
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((e) => {
+        const title = (e.entry.item.title ?? "").toLowerCase();
+        const dog = e.entry.dog.name.toLowerCase();
+        const type = e.entry.item.scheduleType
+          ? scheduleTypeLabel(e.entry.item.scheduleType).toLowerCase()
+          : "";
+        return title.includes(q) || dog.includes(q) || type.includes(q);
+      });
+    }
+
+    return result;
+  }, [entries, activeFilter, searchQuery]);
+
+  const isFiltered = activeFilter !== "all" || searchQuery.trim().length > 0;
+
+  return (
+    <div className="flex flex-col gap-6" data-testid="schedule-view">
+      {/* Identity Header */}
+      <ScheduleHeader
+        totalCount={counts.total}
+        overdueCount={counts.overdue}
+        todayCount={counts.today}
+        onRefresh={refresh}
+        isRefreshing={isRefreshing}
+      />
+
+      {isRefreshing && (
+        <p
+          className="flex items-center gap-2 text-xs text-muted-foreground"
+          role="status"
+          aria-live="polite"
+          data-testid="schedule-refreshing"
+        >
+          Atualizando agenda...
+        </p>
+      )}
+
+      {/* Coverage Notice if incomplete read */}
+      {hasCoverageLoss(coverage) && (
+        <ScheduleCoverageNotice coverage={coverage} onRetry={refresh} />
+      )}
+
+      {/* 5 Operational Summary Cards */}
+      <ScheduleSummaryCards
+        counts={counts}
+        activeFilter={activeFilter}
+        onSelectFilter={setActiveFilter}
+      />
+
+      {/* Search & Active Filter Bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-cyan-200/10 bg-[#0b1628]/60 p-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" aria-hidden="true" />
+          <input
+            type="text"
+            placeholder="Buscar por título, cão ou tipo..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-9 w-full rounded-xl border border-slate-700/60 bg-slate-900/80 pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/50"
+            aria-label="Buscar na agenda"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isFiltered && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 font-medium text-cyan-200">
+                <Filter className="h-3 w-3" aria-hidden="true" />
+                <span>
+                  {FILTER_LABELS[activeFilter]} ({displayedEntries.length} de {entries.length})
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveFilter("all");
+                  setSearchQuery("");
+                }}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+                <span>Limpar</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Filter empty message or list */}
+      {displayedEntries.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-700/40 bg-card/40 p-8 text-center">
+          <p className="text-sm font-medium text-slate-300">
+            Nenhum procedimento corresponde aos filtros aplicados.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveFilter("all");
+              setSearchQuery("");
+            }}
+            className="mt-1 text-xs font-semibold text-cyan-300 hover:underline"
+          >
+            Ver todos os {entries.length} procedimentos
+          </button>
+        </div>
+      ) : (
+        <ScheduleList entries={displayedEntries} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Main Agenda operational view.
  */
 export function ScheduleView() {
   const { state, coverage, authorityStatus, refresh } = useSchedule();
 
   switch (state.status) {
-    // Authority unresolved or the read is in flight: never an answer.
     case "idle":
     case "loading":
-      return <LoadingState message="Carregando agenda..." />;
+      return <ScheduleSkeleton />;
 
-    // Strict authority denial OR a scope-level Rules denial — not emptiness.
     case "forbidden":
       return (
         <ForbiddenState
@@ -366,11 +407,10 @@ export function ScheduleView() {
         />
       );
 
-    // Global technical failure — no state was presumed.
     case "error": {
       const errorState = state as ReadStateError;
       return (
-        <ErrorState
+        <ScheduleError
           code={errorState.code}
           message={errorState.message}
           retryable={errorState.retryable}
@@ -383,76 +423,63 @@ export function ScheduleView() {
       );
     }
 
-    // Zero loaded entries. This is only an AUTHORITATIVE "nothing exists" when
-    // the read actually covered the whole scope; otherwise the honest answer is
-    // "incomplete", not "empty".
     case "empty":
       if (hasCoverageLoss(coverage)) {
         return (
-          <ScheduleCoverageNotice coverage={coverage} onRetry={refresh} />
+          <div className="flex flex-col gap-6" data-testid="schedule-view">
+            <ScheduleCoverageNotice coverage={coverage} onRetry={refresh} />
+          </div>
         );
       }
       return (
-        <EmptyState
-          title="Nenhum agendamento encontrado."
-          description="Nenhum item de agenda existe para o efetivo autorizado."
-        />
+        <div className="flex flex-col gap-6" data-testid="schedule-view">
+          <ScheduleEmpty onRetry={refresh} />
+        </div>
       );
 
-    // A refresh is in flight over a previously trustworthy list: keep it
-    // visible and mark the transient update, never blanking the screen.
     case "refreshing": {
       const previousEntries = isComposedEntryList(state.previousData)
         ? state.previousData
         : null;
 
       if (!previousEntries) {
-        return <LoadingState message="Carregando agenda..." />;
+        return <ScheduleSkeleton />;
       }
 
       return (
-        <div className="flex flex-col gap-4">
-          <p
-            className="flex items-center gap-2 text-xs text-muted-foreground"
-            role="status"
-            aria-live="polite"
-            data-testid="schedule-refreshing"
-          >
-            Atualizando agenda...
-          </p>
-          <ScheduleList entries={previousEntries} />
-        </div>
+        <ScheduleSuccessContent
+          entries={previousEntries}
+          coverage={coverage}
+          refresh={refresh}
+          isRefreshing={true}
+        />
       );
     }
 
-    // Mixed coverage: some K9s were denied or failed, or some documents were
-    // not fully trustworthy. The usable entries are shown, but the screen
-    // states the incompleteness — never a clean success.
     case "partial":
       return (
-        <div className="flex flex-col gap-4">
-          <ScheduleCoverageNotice coverage={coverage} onRetry={refresh} />
-          <ScheduleList entries={state.partialData} />
-        </div>
+        <ScheduleSuccessContent
+          entries={state.partialData}
+          coverage={coverage}
+          refresh={refresh}
+        />
       );
 
     case "success":
       return (
-        <div className="flex flex-col gap-4">
-          {/* Coverage can still be incomplete on a `success` read (e.g. a
-              partial document); truthfulness is driven by coverage, not state. */}
-          {hasCoverageLoss(coverage) && (
-            <ScheduleCoverageNotice coverage={coverage} onRetry={refresh} />
-          )}
-          <ScheduleList entries={state.data} />
-        </div>
+        <ScheduleSuccessContent
+          entries={state.data}
+          coverage={coverage}
+          refresh={refresh}
+        />
       );
 
     default:
-      // Any state not applicable to this global list is treated as a controlled
-      // technical failure rather than being rendered as a (misleading) success.
       return (
-        <ErrorState message="Estado de leitura não suportado nesta tela." />
+        <ScheduleError
+          message="Estado de leitura não suportado nesta tela."
+          retryable={false}
+        />
       );
   }
 }

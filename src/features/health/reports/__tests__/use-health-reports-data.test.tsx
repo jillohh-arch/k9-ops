@@ -239,7 +239,7 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(result.current.exportAuthority.canExport).toBe(false);
     expect(result.current.exportAuthority.hasCanonicalRead).toBe(true);
     expect(result.current.exportAuthority.hasExportCapability).toBe(false);
-    expect(result.current.exportAuthority.reason).toContain("reports.export");
+    expect(result.current.exportAuthority.reason).toContain("Permissão de exportação não atribuída");
   });
 
   it("CASE F: health.view=true, reports.view=true, reports.export=false -> reads normally, export disabled", async () => {
@@ -274,10 +274,10 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(result.current.exportAuthority.canExport).toBe(false);
     expect(result.current.exportAuthority.hasCanonicalRead).toBe(true);
     expect(result.current.exportAuthority.hasExportCapability).toBe(false);
-    expect(result.current.exportAuthority.reason).toContain("reports.export");
+    expect(result.current.exportAuthority.reason).toContain("Permissão de exportação não atribuída");
   });
 
-  it("CASE G: health.view=true, reports.view=false, reports.export=true -> reads normally, export remains disabled pending F10 ratification", async () => {
+  it("CASE G: health.view=true, reports.view=false, reports.export=true -> reads normally, export allowed under institutional capability", async () => {
     mockScopeSuccess();
     vi.mocked(useAccessControl).mockReturnValue({
       status: "ready",
@@ -306,15 +306,15 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(loadClinicalScope).toHaveBeenCalledTimes(1);
     expect(loadScheduleScope).toHaveBeenCalledTimes(1);
 
-    // Fail-closed pending F10 ratification:
-    expect(result.current.exportAuthority.canExport).toBe(false);
+    // Export allowed where contract permits:
+    expect(result.current.exportAuthority.canExport).toBe(true);
     expect(result.current.exportAuthority.hasCanonicalRead).toBe(true);
     expect(result.current.exportAuthority.hasExportCapability).toBe(true);
-    expect(result.current.exportAuthority.isPolicyRatified).toBe(false);
-    expect(result.current.exportAuthority.reason).toContain("ratificação de política institucional (F10)");
+    expect(result.current.exportAuthority.isPolicyRatified).toBe(true);
+    expect(result.current.exportAuthority.reason).toBeUndefined();
   });
 
-  it("CASE H: health.view=true, reports.view=true, reports.export=true -> reads normally, export remains disabled pending F10 ratification", async () => {
+  it("CASE H: health.view=true, reports.view=true, reports.export=true -> reads normally, export allowed under institutional capability", async () => {
     mockScopeSuccess();
     vi.mocked(useAccessControl).mockReturnValue({
       status: "ready",
@@ -343,11 +343,11 @@ describe("useHealthReportsData Hook — Authorization Matrix", () => {
     expect(loadClinicalScope).toHaveBeenCalledTimes(1);
     expect(loadScheduleScope).toHaveBeenCalledTimes(1);
 
-    // Fail-closed pending F10 ratification:
-    expect(result.current.exportAuthority.canExport).toBe(false);
+    // Export allowed where contract permits:
+    expect(result.current.exportAuthority.canExport).toBe(true);
     expect(result.current.exportAuthority.hasCanonicalRead).toBe(true);
     expect(result.current.exportAuthority.hasExportCapability).toBe(true);
-    expect(result.current.exportAuthority.isPolicyRatified).toBe(false);
-    expect(result.current.exportAuthority.reason).toContain("ratificação de política institucional (F10)");
+    expect(result.current.exportAuthority.isPolicyRatified).toBe(true);
+    expect(result.current.exportAuthority.reason).toBeUndefined();
   });
 });

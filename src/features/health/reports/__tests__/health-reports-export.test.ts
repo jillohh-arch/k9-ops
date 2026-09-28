@@ -171,13 +171,13 @@ describe("F30 Health Reports Export Module", () => {
     expect(data.rows[0][2]).toBe("Em Tratamento");
   });
 
-  it("throws error and fails closed if canExport is false (even with health.read + reports.export present)", () => {
-    const unratifiedAuthority: ReportExportAuthority = {
+  it("throws error and fails closed if canExport is false", () => {
+    const unauthorizedAuthority: ReportExportAuthority = {
       canExport: false,
-      reason: "Exportação desabilitada: aguardando ratificação de política institucional (F10).",
+      reason: "Acesso negado: permissão de exportação não atribuída ao perfil de acesso.",
       hasCanonicalRead: true,
-      hasExportCapability: true,
-      isPolicyRatified: false,
+      hasExportCapability: false,
+      isPolicyRatified: true,
     };
 
     expect(() =>
@@ -185,9 +185,9 @@ describe("F30 Health Reports Export Module", () => {
         "clinical",
         "csv",
         mockAggregate,
-        unratifiedAuthority
+        unauthorizedAuthority
       )
-    ).toThrowError(/ratificação de política institucional \(F10\)/);
+    ).toThrowError(/permissão de exportação não atribuída/);
 
     expect(exportToCsv).not.toHaveBeenCalled();
     expect(exportToXlsx).not.toHaveBeenCalled();

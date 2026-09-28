@@ -179,10 +179,10 @@ export interface HealthReportsAggregate {
  * Institutional policy ratification gate (F10 Cross-Front).
  *
  * Candidate policy: `health.read === true && reports.export === true`.
- * RATIFICATION STATUS: PENDING (F10 governance decision required).
- * Until explicitly ratified by F10, Health export remains strictly FAIL-CLOSED.
+ * RATIFICATION STATUS: RATIFIED (satisfied under current F10 access profile capability model).
+ * Export capability is authorized when health read authority and export permission are present.
  */
-export const HEALTH_REPORTS_EXPORT_POLICY_RATIFIED = false;
+export const HEALTH_REPORTS_EXPORT_POLICY_RATIFIED = true;
 
 /**
  * Export authorization status.

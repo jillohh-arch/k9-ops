@@ -17,6 +17,7 @@ import type { jsPDF } from 'jspdf';
 import {
   ARCHETYPE_CONFIGS,
   getCachedOfficialLogo,
+  loadOfficialLogo,
   ReportTemplateBuilder,
   type MetricCardData,
   type ReportImageSlot,
@@ -152,29 +153,29 @@ export function generateHealthKpiSummaryPdf(
     const alerts: string[] = [];
     if (s.overdueCount > 0) {
       alerts.push(
-        `Procedimentos com prazo expirado: ${s.overdueCount} item(ns) aguardando execução ou reagendamento imediato.`,
+        `Procedimentos com estado temporal atrasado: ${s.overdueCount} item(ns).`,
       );
     }
     if (r.statusCounts.temporarily_unfit > 0) {
       alerts.push(
-        `Cães temporariamente inaptos: ${r.statusCounts.temporarily_unfit} cão(ães) fora de prontidão para missões policiais.`,
+        `Cães temporariamente inaptos: ${r.statusCounts.temporarily_unfit} cão(ães).`,
       );
     }
     if (r.activeRestrictionsCount > 0) {
       alerts.push(
-        `Restrições operacionais ativas: ${r.activeRestrictionsCount} restrição(ões) em vigor limitando o emprego de ${r.dogsWithRestrictionsCount} cão(ães).`,
+        `Restrições operacionais ativas: ${r.activeRestrictionsCount} restrição(ões) em vigor em ${r.dogsWithRestrictionsCount} cão(ães).`,
       );
     }
     if (!r.isCoverageComplete) {
       alerts.push(
-        `Cobertura degradada: ${r.unevaluatedCount} cão(ães) sem projeção válida de prontidão registrada.`,
+        `Cobertura com pendência: ${r.unevaluatedCount} cão(ães) sem projeção válida de prontidão.`,
       );
     }
 
     builder.addSummary({
-      title: 'ATENÇÃO OPERACIONAL — PONTOS DE VIGILÂNCIA SANITÁRIA',
+      title: 'CONDIÇÕES QUE REQUEREM ATENÇÃO',
       description:
-        'Foram identificadas demandas prioritárias que requerem intervenção do comando ou da equipe médica:',
+        'Registros que apresentam condições de atenção no período consultado:',
       bulletItems: alerts,
       tone: s.overdueCount > 0 ? 'critical' : 'attention',
     });
@@ -291,7 +292,7 @@ export function generateHealthKpiSummaryPdf(
         modulo: 'Agenda de Procedimentos',
         indicador: 'Procedimentos Atrasados (Atenção)',
         valor: String(s.overdueCount),
-        status: s.overdueCount > 0 ? 'Ação requerida imediata' : 'Em dia',
+        status: s.overdueCount > 0 ? 'Atrasado no período' : 'Em dia',
       },
       {
         modulo: 'Agenda de Procedimentos',
@@ -399,16 +400,16 @@ export function generateHealthReadinessPdf(
   // 3. Tabela de Classificação de Aptidão Operacional
   builder.addStyledSectionTitle('CLASSIFICAÇÃO DE APTIDÃO OPERACIONAL', {
     codeText: 'EFET',
-    subtitle: 'Distribuição do efetivo por estado canônico e diretriz de emprego tático',
+    subtitle: 'Distribuição do efetivo por estado canônico de prontidão',
   });
 
   builder.addDataTable({
     columns: [
-      { header: 'Status de Prontidão', key: 'status', width: 55 },
-      { header: 'Classificação Operacional', key: 'classificacao', width: 65 },
+      { header: 'Status de Prontidão', key: 'status', width: 60 },
+      { header: 'Classificação Operacional', key: 'classificacao', width: 60 },
       { header: 'Quantidade', key: 'quantidade', width: 30, alignment: 'right', isMonospace: true },
       { header: '% Efetivo', key: 'percentual', width: 35, alignment: 'right', isMonospace: true },
-      { header: 'Diretriz de Emprego Tático', key: 'diretriz', width: 88 },
+      { header: 'Condição Canônica de Operação', key: 'condicao', width: 88 },
     ],
     rows: [
       {
@@ -416,28 +417,28 @@ export function generateHealthReadinessPdf(
         classificacao: 'Aptidão Plena',
         quantidade: String(r.statusCounts.operational),
         percentual: `${Math.round((r.statusCounts.operational / totalDogs) * 100)}%`,
-        diretriz: 'Disponível para qualquer missão policial, patrulhamento ou intervenção tática.',
+        condicao: 'K9 apto sem restrições / pode operar.',
       },
       {
         status: 'Operacional com Atenção',
-        classificacao: 'Monitoramento Preventivo',
+        classificacao: 'Ponto de Atenção',
         quantidade: String(r.statusCounts.operational_attention),
         percentual: `${Math.round((r.statusCounts.operational_attention / totalDogs) * 100)}%`,
-        diretriz: 'Emprego autorizado com acompanhamento pré e pós-turno pela guarnição condutora.',
+        condicao: 'K9 apto com ponto de atenção / pode operar com alerta.',
       },
       {
         status: 'Apto com Restrições',
-        classificacao: 'Emprego Condicionado',
+        classificacao: 'Restrições Ativas',
         quantidade: String(r.statusCounts.fit_with_restrictions),
         percentual: `${Math.round((r.statusCounts.fit_with_restrictions / totalDogs) * 100)}%`,
-        diretriz: 'Emprego estritamente condicionado às restrições veterinárias ativas do prontuário.',
+        condicao: 'K9 pode operar apenas conforme atividades permitidas pelas restrições ativas.',
       },
       {
         status: 'Temporariamente Inapto',
-        classificacao: 'Afastamento Médico',
+        classificacao: 'Inaptidão Temporária',
         quantidade: String(r.statusCounts.temporarily_unfit),
         percentual: `${Math.round((r.statusCounts.temporarily_unfit / totalDogs) * 100)}%`,
-        diretriz: 'Vedado qualquer emprego operacional até reavaliação médica e alta clínica formal.',
+        condicao: 'K9 não pode operar enquanto existir restrição absoluta ativa.',
       },
     ],
   });
@@ -650,10 +651,10 @@ export function generateHealthSchedulePdf(
 
   if (s.overdueCount > 0) {
     builder.addSummary({
-      title: 'ALERTA SANITÁRIO — PROCEDIMENTOS PENDENTES COM ATRASO',
-      description: `Existe(m) ${s.overdueCount} procedimento(s) vencido(s) aguardando execução ou reagendamento urgente.`,
+      title: 'PROCEDIMENTOS COM ESTADO TEMPORAL ATRASADO',
+      description: `Existe(m) ${s.overdueCount} procedimento(s) com data prevista anterior à data de referência.`,
       bulletItems: [
-        `Procedimentos com prazo expirado: ${s.overdueCount}`,
+        `Procedimentos com estado temporal atrasado: ${s.overdueCount}`,
         `Procedimentos agendados para hoje: ${s.todayCount}`,
         `Procedimentos futuros na janela (${periodLabel}): ${s.upcomingCount}`,
       ],
@@ -734,16 +735,21 @@ export function generateHealthReportPdf(
   aggregate: HealthReportsAggregate,
   options?: HealthReportPdfOptions,
 ): jsPDF {
+  const resolvedOptions: HealthReportPdfOptions = {
+    ...options,
+    logoSlot: options?.logoSlot ?? getCachedOfficialLogo(),
+  };
+
   switch (dataset) {
     case 'readiness':
-      return generateHealthReadinessPdf(aggregate, options);
+      return generateHealthReadinessPdf(aggregate, resolvedOptions);
     case 'clinical':
-      return generateHealthClinicalCasesPdf(aggregate, options);
+      return generateHealthClinicalCasesPdf(aggregate, resolvedOptions);
     case 'schedule':
-      return generateHealthSchedulePdf(aggregate, options);
+      return generateHealthSchedulePdf(aggregate, resolvedOptions);
     case 'kpi_summary':
     default:
-      return generateHealthKpiSummaryPdf(aggregate, options);
+      return generateHealthKpiSummaryPdf(aggregate, resolvedOptions);
   }
 }
 
@@ -754,8 +760,12 @@ export function exportHealthReportPdf(
   dataset: ReportExportDataset,
   aggregate: HealthReportsAggregate,
   options?: HealthReportPdfOptions,
-): void {
-  const doc = generateHealthReportPdf(dataset, aggregate, options);
+): jsPDF {
+  const logo = options?.logoSlot ?? getCachedOfficialLogo();
+  const doc = generateHealthReportPdf(dataset, aggregate, {
+    ...options,
+    logoSlot: logo,
+  });
   const dateStr = aggregate.referenceDate.toISOString().slice(0, 10);
   const filename =
     dataset === 'kpi_summary'
@@ -767,4 +777,17 @@ export function exportHealthReportPdf(
           : `relatorio-agenda-${aggregate.period}-${dateStr}.pdf`;
 
   doc.save(filename);
+  return doc;
+}
+
+export async function exportHealthReportPdfAsync(
+  dataset: ReportExportDataset,
+  aggregate: HealthReportsAggregate,
+  options?: HealthReportPdfOptions,
+): Promise<jsPDF> {
+  const logo = options?.logoSlot ?? (await loadOfficialLogo()) ?? getCachedOfficialLogo();
+  return exportHealthReportPdf(dataset, aggregate, {
+    ...options,
+    logoSlot: logo,
+  });
 }

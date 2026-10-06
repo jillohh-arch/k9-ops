@@ -11,7 +11,9 @@ export const OFFICIAL_LOGO_PATH = 'public/brand/logo-app.png';
 export async function loadOfficialLogo(): Promise<ReportImageSlot | null> {
   if (cachedLogo) return cachedLogo;
 
-  if (typeof window === 'undefined') {
+  const isNode = typeof process !== 'undefined' && Boolean(process.versions?.node);
+
+  if (isNode) {
     try {
       const fs = await import('node:fs/promises');
       const path = await import('node:path');
@@ -38,35 +40,39 @@ export async function loadOfficialLogo(): Promise<ReportImageSlot | null> {
     } catch {
       // ignore
     }
-  } else {
+  }
+
+  if (typeof window !== 'undefined' && typeof fetch === 'function') {
     // Browser environment
     try {
       const resp = await fetch('/brand/logo-app.png');
-      const blob = await resp.blob();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const res = reader.result as string;
-          const b64 = res.split(',')[1] ?? res;
-          resolve(b64);
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = reader.result as string;
+            const b64 = res.split(',')[1] ?? res;
+            resolve(b64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        cachedLogo = {
+          base64,
+          format: 'PNG',
+          width: 818,
+          height: 952,
+          aspectRatio: 818 / 952,
         };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      cachedLogo = {
-        base64,
-        format: 'PNG',
-        width: 818,
-        height: 952,
-        aspectRatio: 818 / 952,
-      };
-      return cachedLogo;
+        return cachedLogo;
+      }
     } catch {
       // ignore
     }
   }
 
-  return null;
+  return cachedLogo;
 }
 
 export function setCachedOfficialLogo(slot: ReportImageSlot | null): void {

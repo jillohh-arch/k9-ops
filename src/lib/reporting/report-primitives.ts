@@ -1334,15 +1334,15 @@ export function renderDarkTacticalHeader(
   if (brandSlot?.dataUrl || brandSlot?.base64) {
     const imgData = brandSlot.dataUrl ?? `data:image/png;base64,${brandSlot.base64}`;
     const format = brandSlot.format ?? 'PNG';
-    const logoMaxW = 12;
-    const logoMaxH = 14;
+    const logoMaxW = 14;
+    const logoMaxH = 16;
     const { renderW, renderH } = calculateContainedDimensions(
       logoMaxW,
       logoMaxH,
       brandSlot,
       818 / 952,
     );
-    doc.addImage(imgData, format, leftX, currY - 2, renderW, renderH);
+    doc.addImage(imgData, format, leftX, currY - 2.5, renderW, renderH);
     textStartX = leftX + renderW + 4;
   }
 
@@ -1563,6 +1563,7 @@ export function renderDarkReportFooter(
 
 /**
  * Título de Seção Estilizado com badge de código tático e acento ciano.
+ * O subtítulo é posicionado abaixo do título para eliminar qualquer risco de colisão horizontal.
  */
 export function renderStyledSectionTitle(
   ctx: ReportRenderContext,
@@ -1572,7 +1573,8 @@ export function renderStyledSectionTitle(
     subtitle?: string;
   } = {},
 ): void {
-  ctx.checkPageBreak(14);
+  const hasSubtitle = Boolean(options.subtitle);
+  ctx.checkPageBreak(hasSubtitle ? 18 : 14);
   const { doc } = ctx;
   const startY = ctx.y;
 
@@ -1593,21 +1595,26 @@ export function renderStyledSectionTitle(
     titleX = ctx.marginLeft + 5;
   }
 
+  // Título da seção em negrito
   doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
   doc.setFontSize(10.5);
   doc.setTextColor(...REPORT_COLORS_RGB.textPrimary);
   doc.text(title.toUpperCase(), titleX, startY + 3.5);
 
+  let lineY = startY + 6.5;
+
+  // Subtítulo posicionado abaixo do título (evita colisão ou truncamento)
   if (options.subtitle) {
     doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...REPORT_COLORS_RGB.textMuted);
-    const subtitleX = titleX + doc.getTextWidth(title.toUpperCase()) + 5;
-    doc.text(`·  ${options.subtitle}`, subtitleX, startY + 3.5);
+    const maxSubW = ctx.pageWidth - ctx.marginRight - titleX;
+    const splitSub = doc.splitTextToSize(options.subtitle, maxSubW);
+    doc.text(splitSub, titleX, startY + 7.5);
+    lineY = startY + 7.5 + (splitSub.length - 1) * 3.2 + 2.5;
   }
 
   // Linha separadora horizontal
-  const lineY = startY + 6;
   doc.setDrawColor(...REPORT_COLORS_RGB.borderSoft);
   doc.setLineWidth(0.2);
   doc.line(ctx.marginLeft, lineY, ctx.pageWidth - ctx.marginRight, lineY);

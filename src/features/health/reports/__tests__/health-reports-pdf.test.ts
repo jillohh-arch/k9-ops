@@ -13,7 +13,7 @@ import type { DogIdentityReadModel } from '../../domain/readiness-types';
 import type { ClinicalCaseListEntry } from '../../clinical/data/clinical-scope-loader';
 import type { ComposedScheduleEntry } from '../../schedule/composition/schedule-composition';
 import type { ScheduleItemReadModel } from '../../schedule/types';
-import { loadOfficialLogo } from '@/lib/reporting';
+import { loadOfficialLogo, setCachedOfficialLogo } from '@/lib/reporting';
 
 const baseDog1: DogIdentityReadModel = {
   id: 'dog-1',
@@ -84,6 +84,9 @@ describe('F70 Web Health Reports PDF Migration V1', () => {
 
   beforeAll(async () => {
     sampleLogoSlot = await loadOfficialLogo();
+    expect(sampleLogoSlot).not.toBeNull();
+    expect(sampleLogoSlot?.base64).toBeDefined();
+    setCachedOfficialLogo(sampleLogoSlot);
   });
 
   const baseAggregate: HealthReportsAggregate = {
@@ -638,10 +641,14 @@ describe('F70 Web Health Reports PDF Migration V1', () => {
       expect(fs.existsSync(clinicalPath)).toBe(true);
       expect(fs.existsSync(schedulePath)).toBe(true);
 
-      expect(fs.statSync(kpiPath).size).toBeGreaterThan(15000);
-      expect(fs.statSync(readinessPath).size).toBeGreaterThan(15000);
-      expect(fs.statSync(clinicalPath).size).toBeGreaterThan(15000);
-      expect(fs.statSync(schedulePath).size).toBeGreaterThan(15000);
+      expect(fs.statSync(kpiPath).size).toBeGreaterThan(500000);
+      expect(fs.statSync(readinessPath).size).toBeGreaterThan(500000);
+      expect(fs.statSync(clinicalPath).size).toBeGreaterThan(500000);
+      expect(fs.statSync(schedulePath).size).toBeGreaterThan(500000);
+
+      // Confirma que o PDF contém o asset de imagem embutido (XObject / Image)
+      const kpiContent = fs.readFileSync(kpiPath).toString('latin1');
+      expect(kpiContent).toContain('/Image');
     });
   });
 });

@@ -79,7 +79,7 @@ export type ReportArchetype =
   | 'analytical'
   | 'tabular';
 
-export type HeaderVariant = 'institutional' | 'standard' | 'compact';
+export type HeaderVariant = 'institutional' | 'standard' | 'compact' | 'darkTactical';
 export type PageOrientation = 'portrait' | 'landscape';
 
 /**

@@ -8,6 +8,7 @@ import {
   REPORT_PAGE_METRICS,
   REPORT_TONE_COLORS,
   REPORT_TYPOGRAPHY,
+  type ReportTone,
 } from './report-tokens';
 import {
   resolveBrandingScenario,
@@ -1291,4 +1292,351 @@ export function renderReportFooter(
     const pageWStr = doc.getTextWidth(pageStr);
     doc.text(pageStr, pageW - right - pageWStr, footerY);
   }
+}
+
+/**
+ * Cabeçalho Tático K9 Ops V2 (Dark Navy #0A1A24).
+ * Adota a linguagem visual e hierarquia aprovada para a família de relatórios.
+ */
+export function renderDarkTacticalHeader(
+  ctx: ReportRenderContext,
+  options: {
+    title: string;
+    subtitle?: string;
+    organization?: string;
+    category?: string;
+    motto?: string;
+    metadata: ReportMetadata;
+    branding?: ReportBranding;
+    statusLabel?: string;
+    statusTone?: ReportTone;
+  },
+): void {
+  ctx.checkPageBreak(38);
+  const { doc } = ctx;
+  const startY = ctx.y;
+  const headerW = ctx.contentWidth;
+  const totalH = 34; // Altura compacta elegante em mm
+
+  // Fundo Dark Navy
+  doc.setFillColor(...REPORT_COLORS_RGB.darkNavy);
+  doc.roundedRect(ctx.marginLeft, startY, headerW, totalH, 2, 2, 'F');
+
+  const padX = 6;
+  let currY = startY + 6;
+
+  // 1. Linha Superior: Logo oficial K9 Ops + Nome da marca + Categoria (à esquerda) | Motto / Organização (à direita)
+  const leftX = ctx.marginLeft + padX;
+  let textStartX = leftX;
+
+  // Se houver imagem do ProductMark (logo oficial):
+  const brandSlot = options.branding?.productMarkImage;
+  if (brandSlot?.dataUrl || brandSlot?.base64) {
+    const imgData = brandSlot.dataUrl ?? `data:image/png;base64,${brandSlot.base64}`;
+    const format = brandSlot.format ?? 'PNG';
+    const logoMaxW = 12;
+    const logoMaxH = 14;
+    const { renderW, renderH } = calculateContainedDimensions(
+      logoMaxW,
+      logoMaxH,
+      brandSlot,
+      818 / 952,
+    );
+    doc.addImage(imgData, format, leftX, currY - 2, renderW, renderH);
+    textStartX = leftX + renderW + 4;
+  }
+
+  // "K9 OPS®"
+  doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(...REPORT_COLORS_RGB.surface);
+  doc.text('K9 OPS®', textStartX, currY + 2.5);
+  const brandW = doc.getTextWidth('K9 OPS®');
+
+  // "SISTEMA DE GESTÃO CANINA"
+  doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(...REPORT_COLORS_RGB.cyanAccent);
+  doc.text('SISTEMA DE GESTÃO CANINA', textStartX, currY + 6);
+
+  // Badge da categoria (ao lado da marca)
+  if (options.category) {
+    const catX = textStartX + brandW + 5;
+    const catText = options.category.toUpperCase();
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+    doc.setFontSize(6.8);
+    const catW = doc.getTextWidth(catText) + 6;
+    doc.setFillColor(...REPORT_COLORS_RGB.darkNavySurface);
+    doc.setDrawColor(...REPORT_COLORS_RGB.darkNavyBorder);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(catX, currY - 1, catW, 4.5, 1, 1, 'FD');
+    doc.setTextColor(...REPORT_COLORS_RGB.cyanAccent);
+    doc.text(catText, catX + 3, currY + 2.2);
+  }
+
+  // Motto / Organização no topo à direita
+  const mottoText = (
+    options.organization ||
+    options.motto ||
+    'DISCIPLINA · PROTEÇÃO · RESULTADO'
+  ).toUpperCase();
+  doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(...REPORT_COLORS_RGB.textMuted);
+  const mottoW = doc.getTextWidth(mottoText);
+  doc.text(mottoText, ctx.pageWidth - ctx.marginRight - padX - mottoW, currY + 2.5);
+
+  currY += 9;
+
+  // 2. Linha do Título Principal e Status Badge
+  doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...REPORT_COLORS_RGB.surface);
+  doc.text(options.title.toUpperCase(), leftX, currY + 2);
+
+  if (options.subtitle) {
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...REPORT_COLORS_RGB.cyanAccent);
+    doc.text(options.subtitle, leftX, currY + 6);
+  }
+
+  if (options.statusLabel && options.statusTone) {
+    renderStatusBadge(
+      ctx,
+      ctx.pageWidth - ctx.marginRight - padX - 35,
+      currY - 1,
+      { label: options.statusLabel, tone: options.statusTone },
+    );
+  }
+
+  currY += 8;
+
+  // 3. Barra de Metadados em Dark Navy Surface
+  const barY = currY;
+  const barH = 5.5;
+  const barW = headerW - padX * 2;
+  doc.setFillColor(...REPORT_COLORS_RGB.darkNavySurface);
+  doc.roundedRect(leftX, barY, barW, barH, 1, 1, 'F');
+
+  let metaX = leftX + 4;
+  function drawMeta(label: string, val: string, isMono = false) {
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+    doc.setFontSize(6.8);
+    doc.setTextColor(...REPORT_COLORS_RGB.textMuted);
+    const lbl = label.toUpperCase() + ': ';
+    doc.text(lbl, metaX, barY + 3.8);
+    metaX += doc.getTextWidth(lbl);
+
+    doc.setFont(
+      isMono ? REPORT_TYPOGRAPHY.fontFamilies.pdfMono : REPORT_TYPOGRAPHY.fontFamilies.pdfSans,
+      isMono ? 'normal' : 'bold',
+    );
+    doc.setFontSize(7.2);
+    doc.setTextColor(...REPORT_COLORS_RGB.surface);
+    doc.text(val, metaX, barY + 3.8);
+    metaX += doc.getTextWidth(val) + 6;
+  }
+
+  drawMeta('EMISSÃO', formatDateTime(options.metadata.generatedAt), true);
+
+  if (options.metadata.period) {
+    drawMeta('PERÍODO', options.metadata.period);
+  }
+
+  if (options.metadata.documentId) {
+    drawMeta('ID', options.metadata.documentId, true);
+  }
+
+  // Linha de acento decorativa inferior (ciano e escuro)
+  const lineY = startY + totalH - 1.2;
+  doc.setFillColor(...REPORT_COLORS_RGB.cyanAccent);
+  doc.rect(ctx.marginLeft + 6, lineY, Math.min(60, headerW / 3), 1.2, 'F');
+  doc.setFillColor(...REPORT_COLORS_RGB.accent);
+  doc.rect(ctx.marginLeft + 6 + Math.min(60, headerW / 3), lineY, 30, 1.2, 'F');
+
+  ctx.y = startY + totalH + 5;
+}
+
+/**
+ * Cabeçalho Tático Compacto para páginas de continuação (2..N).
+ */
+export function renderDarkCompactContinuationHeader(
+  ctx: ReportRenderContext,
+  options: {
+    title: string;
+    documentId?: string;
+    branding?: ReportBranding;
+  },
+): void {
+  const { doc } = ctx;
+  const h = 6;
+  const startY = ctx.y;
+  const left = ctx.marginLeft;
+  const w = ctx.contentWidth;
+
+  doc.setFillColor(...REPORT_COLORS_RGB.darkNavy);
+  doc.roundedRect(left, startY, w, h, 1, 1, 'F');
+
+  let textX = left + 3;
+  const brandSlot = options.branding?.productMarkImage;
+  if (brandSlot?.dataUrl || brandSlot?.base64) {
+    const imgData = brandSlot.dataUrl ?? `data:image/png;base64,${brandSlot.base64}`;
+    const format = brandSlot.format ?? 'PNG';
+    doc.addImage(imgData, format, textX, startY + 0.8, 4, 4.4);
+    textX += 6;
+  }
+
+  doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...REPORT_COLORS_RGB.cyanAccent);
+  doc.text('K9 OPS® · ', textX, startY + 4.2);
+  textX += doc.getTextWidth('K9 OPS® · ');
+
+  doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+  doc.setTextColor(...REPORT_COLORS_RGB.surface);
+  doc.text(options.title.toUpperCase(), textX, startY + 4.2);
+
+  if (options.documentId) {
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfMono, 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...REPORT_COLORS_RGB.textMuted);
+    const idText = `ID: ${options.documentId}`;
+    const idW = doc.getTextWidth(idText);
+    doc.text(idText, ctx.pageWidth - ctx.marginRight - idW - 3, startY + 4.2);
+  }
+
+  ctx.y = startY + h + 4;
+}
+
+/**
+ * Rodapé Tático K9 Ops V2 (Dark Navy #0A1A24).
+ */
+export function renderDarkReportFooter(
+  doc: jsPDF,
+  options: {
+    title: string;
+    documentId?: string;
+    margins?: { left: number; right: number; bottom: number };
+  },
+): void {
+  const pageCount = doc.getNumberOfPages();
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const left = options.margins?.left ?? 12;
+  const right = options.margins?.right ?? 12;
+  const barH = 5.5;
+  const barY = pageH - barH - 3;
+  const barW = pageW - left - right;
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+
+    // Barra Dark Navy
+    doc.setFillColor(...REPORT_COLORS_RGB.darkNavy);
+    doc.roundedRect(left, barY, barW, barH, 1, 1, 'F');
+
+    // Texto K9 OPS à esquerda
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...REPORT_COLORS_RGB.cyanAccent);
+    doc.text('K9 OPS®', left + 3, barY + 3.8);
+    const k9w = doc.getTextWidth('K9 OPS®');
+
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'normal');
+    doc.setTextColor(...REPORT_COLORS_RGB.surfaceSubtle);
+    let titleStr = ` · ${options.title}`;
+    if (options.documentId) {
+      titleStr += ` · ID: ${options.documentId}`;
+    }
+    doc.text(titleStr, left + 3 + k9w, barY + 3.8);
+
+    // Paginação à direita
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfMono, 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...REPORT_COLORS_RGB.surfaceSubtle);
+    const pageStr = `Página ${i} de ${pageCount}`;
+    const pageWStr = doc.getTextWidth(pageStr);
+    doc.text(pageStr, left + barW - pageWStr - 3, barY + 3.8);
+  }
+}
+
+/**
+ * Título de Seção Estilizado com badge de código tático e acento ciano.
+ */
+export function renderStyledSectionTitle(
+  ctx: ReportRenderContext,
+  title: string,
+  options: {
+    codeText?: string;
+    subtitle?: string;
+  } = {},
+): void {
+  ctx.checkPageBreak(14);
+  const { doc } = ctx;
+  const startY = ctx.y;
+
+  let titleX = ctx.marginLeft;
+
+  if (options.codeText) {
+    const codeW = doc.getTextWidth(options.codeText) + 6;
+    doc.setFillColor(...REPORT_COLORS_RGB.darkNavy);
+    doc.roundedRect(ctx.marginLeft, startY - 0.5, codeW, 5, 1, 1, 'F');
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...REPORT_COLORS_RGB.cyanAccent);
+    doc.text(options.codeText, ctx.marginLeft + 3, startY + 3.2);
+    titleX = ctx.marginLeft + codeW + 4;
+  } else {
+    doc.setFillColor(...REPORT_COLORS_RGB.accent);
+    doc.roundedRect(ctx.marginLeft, startY - 0.5, 2, 5, 0.5, 0.5, 'F');
+    titleX = ctx.marginLeft + 5;
+  }
+
+  doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(...REPORT_COLORS_RGB.textPrimary);
+  doc.text(title.toUpperCase(), titleX, startY + 3.5);
+
+  if (options.subtitle) {
+    doc.setFont(REPORT_TYPOGRAPHY.fontFamilies.pdfSans, 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...REPORT_COLORS_RGB.textMuted);
+    const subtitleX = titleX + doc.getTextWidth(title.toUpperCase()) + 5;
+    doc.text(`·  ${options.subtitle}`, subtitleX, startY + 3.5);
+  }
+
+  // Linha separadora horizontal
+  const lineY = startY + 6;
+  doc.setDrawColor(...REPORT_COLORS_RGB.borderSoft);
+  doc.setLineWidth(0.2);
+  doc.line(ctx.marginLeft, lineY, ctx.pageWidth - ctx.marginRight, lineY);
+
+  ctx.y = lineY + 3.5;
+}
+
+/**
+ * Renderiza uma linha de MetricCards distribuídos uniformemente ao longo da largura útil.
+ */
+export function renderMetricCardRow(
+  ctx: ReportRenderContext,
+  cards: MetricCardData[],
+  gapMm = 3,
+): void {
+  ctx.checkPageBreak(25);
+  const totalW = ctx.contentWidth;
+  const count = cards.length;
+  if (count === 0) return;
+
+  const cardW = (totalW - (count - 1) * gapMm) / count;
+  let currX = ctx.marginLeft;
+  let maxH = 0;
+
+  for (const card of cards) {
+    const h = renderMetricCard(ctx, currX, ctx.y, cardW, card);
+    maxH = Math.max(maxH, h);
+    currX += cardW + gapMm;
+  }
+
+  ctx.y += maxH + 4;
 }

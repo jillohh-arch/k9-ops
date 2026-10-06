@@ -13,6 +13,12 @@ export const REPORT_COLORS = {
   borderSoft: '#E2E8F0',
   borderStrong: '#94A3B8',
   accent: '#0A8E9D',
+  // Cores táticas compartilhadas (família visual K9 Ops)
+  darkNavy: '#0A1A24',
+  darkNavySurface: '#0E1F2C',
+  darkNavyBorder: '#1A3345',
+  cyanAccent: '#2BB6C4',
+  goldAccent: '#E5A93C',
 } as const;
 
 export type ReportColorKey = keyof typeof REPORT_COLORS;
@@ -38,6 +44,11 @@ export const REPORT_COLORS_RGB: Record<ReportColorKey, [number, number, number]>
   borderSoft: hexToRgb(REPORT_COLORS.borderSoft),
   borderStrong: hexToRgb(REPORT_COLORS.borderStrong),
   accent: hexToRgb(REPORT_COLORS.accent),
+  darkNavy: hexToRgb(REPORT_COLORS.darkNavy),
+  darkNavySurface: hexToRgb(REPORT_COLORS.darkNavySurface),
+  darkNavyBorder: hexToRgb(REPORT_COLORS.darkNavyBorder),
+  cyanAccent: hexToRgb(REPORT_COLORS.cyanAccent),
+  goldAccent: hexToRgb(REPORT_COLORS.goldAccent),
 };
 
 /**

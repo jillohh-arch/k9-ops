@@ -4,18 +4,24 @@ import {
   renderAttachmentBlock,
   renderAuditBlock,
   renderCoSignatureBlock,
+  renderDarkCompactContinuationHeader,
+  renderDarkReportFooter,
+  renderDarkTacticalHeader,
   renderDataTable,
   renderEntityIdentityBlock,
   renderEvidenceBlock,
   renderInformationSection,
   renderInstitutionalHeader,
+  renderMetricCardRow,
   renderObservationBlock,
   renderReportFooter,
   renderStandardReportHeader,
+  renderStyledSectionTitle,
   renderSummaryCard,
   renderTimelineSection,
   ReportRenderContext,
 } from './report-primitives';
+import type { ReportTone } from './report-tokens';
 import {
   ARCHETYPE_CONFIGS,
   type AttachmentItemData,
@@ -23,6 +29,7 @@ import {
   type DataTableData,
   type EntityIdentityData,
   type EvidenceItemData,
+  type MetricCardData,
   type ObservationBlockData,
   type PageOrientation,
   type ReportArchetype,
@@ -40,6 +47,10 @@ export interface ReportTemplateBuilderOptions {
   organization?: string;
   category?: string;
   disclaimer?: string;
+  motto?: string;
+  useDarkFooter?: boolean;
+  statusLabel?: string;
+  statusTone?: ReportTone;
   metadata: ReportMetadata;
   branding?: ReportBranding;
   archetypeConfig?: ReportArchetypeConfig;
@@ -57,6 +68,10 @@ export class ReportTemplateBuilder {
   public organization?: string;
   public category?: string;
   public disclaimer?: string;
+  public motto?: string;
+  public useDarkFooter?: boolean;
+  public statusLabel?: string;
+  public statusTone?: ReportTone;
   public metadata: ReportMetadata;
   public branding: ReportBranding;
   public archetypeConfig: ReportArchetypeConfig;
@@ -69,6 +84,10 @@ export class ReportTemplateBuilder {
     this.organization = options.organization;
     this.category = options.category;
     this.disclaimer = options.disclaimer;
+    this.motto = options.motto;
+    this.useDarkFooter = options.useDarkFooter ?? false;
+    this.statusLabel = options.statusLabel;
+    this.statusTone = options.statusTone;
     this.metadata = options.metadata;
     this.branding = options.branding ?? {};
     this.archetypeConfig =
@@ -144,6 +163,19 @@ export class ReportTemplateBuilder {
     return this;
   }
 
+  public addMetricCardRow(cards: MetricCardData[], gapMm = 3): this {
+    this.operations.push((ctx) => renderMetricCardRow(ctx, cards, gapMm));
+    return this;
+  }
+
+  public addStyledSectionTitle(
+    title: string,
+    options?: { codeText?: string; subtitle?: string },
+  ): this {
+    this.operations.push((ctx) => renderStyledSectionTitle(ctx, title, options));
+    return this;
+  }
+
   public addCustom(fn: (ctx: ReportRenderContext) => void): this {
     this.operations.push(fn);
     return this;
@@ -162,7 +194,19 @@ export class ReportTemplateBuilder {
     const ctx = new ReportRenderContext(doc, this.archetypeConfig.orientation);
 
     // 1. Cabeçalho Primário da Página 1
-    if (this.archetypeConfig.headerVariant === 'institutional') {
+    if (this.archetypeConfig.headerVariant === 'darkTactical') {
+      renderDarkTacticalHeader(ctx, {
+        title: this.title,
+        subtitle: this.subtitle,
+        organization: this.organization,
+        category: this.category,
+        motto: this.motto,
+        metadata: this.metadata,
+        branding: this.branding,
+        statusLabel: this.statusLabel,
+        statusTone: this.statusTone,
+      });
+    } else if (this.archetypeConfig.headerVariant === 'institutional') {
       renderInstitutionalHeader(ctx, {
         title: this.title,
         subtitle: this.subtitle,
@@ -185,17 +229,46 @@ export class ReportTemplateBuilder {
       op(ctx);
     }
 
-    // 3. Rodapés e paginação universal em todas as páginas
-    renderReportFooter(doc, {
-      title: this.title,
-      documentId: this.metadata.documentId,
-      disclaimer: this.disclaimer,
-      margins: {
-        left: ctx.marginLeft,
-        right: ctx.marginRight,
-        bottom: ctx.marginBottom,
-      },
-    });
+    // 3. Cabeçalhos compactos de continuação nas páginas 2..N se houver múltiplas páginas
+    const totalPages = doc.getNumberOfPages();
+    if (totalPages > 1) {
+      for (let p = 2; p <= totalPages; p++) {
+        doc.setPage(p);
+        const contCtx = new ReportRenderContext(doc, this.archetypeConfig.orientation);
+        contCtx.y = contCtx.marginTop;
+        if (this.archetypeConfig.headerVariant === 'darkTactical') {
+          renderDarkCompactContinuationHeader(contCtx, {
+            title: this.title,
+            documentId: this.metadata.documentId,
+            branding: this.branding,
+          });
+        }
+      }
+    }
+
+    // 4. Rodapés e paginação universal em todas as páginas
+    if (this.useDarkFooter) {
+      renderDarkReportFooter(doc, {
+        title: this.title,
+        documentId: this.metadata.documentId,
+        margins: {
+          left: ctx.marginLeft,
+          right: ctx.marginRight,
+          bottom: ctx.marginBottom,
+        },
+      });
+    } else {
+      renderReportFooter(doc, {
+        title: this.title,
+        documentId: this.metadata.documentId,
+        disclaimer: this.disclaimer,
+        margins: {
+          left: ctx.marginLeft,
+          right: ctx.marginRight,
+          bottom: ctx.marginBottom,
+        },
+      });
+    }
 
     return doc;
   }

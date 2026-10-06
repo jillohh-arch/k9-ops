@@ -11,7 +11,7 @@
 
 import { exportToCsv } from "@/lib/export/export-csv";
 import { exportToXlsx } from "@/lib/export/export-xlsx";
-import { exportToPdf } from "@/lib/export/export-pdf";
+import { exportHealthReportPdf } from "./health-reports-pdf";
 import {
   CLINICAL_CASE_STATUS_LABELS,
   SCHEDULE_STATUS_LABELS,
@@ -300,10 +300,10 @@ export function executeHealthReportExport(
   aggregate: HealthReportsAggregate,
   exportAuthority: ReportExportAuthority
 ): void {
-  // Fail-closed authorization gate
-  if (!exportAuthority.canExport) {
+  // Fail-closed authorization gate: strictly requires exportAuthority.canExport === true
+  if (!exportAuthority || exportAuthority.canExport !== true) {
     throw new Error(
-      exportAuthority.reason ??
+      exportAuthority?.reason ??
         "Acesso negado: exportação de relatórios não autorizada para este perfil."
     );
   }
@@ -315,13 +315,6 @@ export function executeHealthReportExport(
   } else if (format === "xlsx") {
     exportToXlsx(data.filename, data.headers, data.rows, data.title.slice(0, 31));
   } else if (format === "pdf") {
-    exportToPdf({
-      filename: data.filename,
-      title: data.title,
-      subtitle: data.subtitle,
-      headers: data.headers,
-      rows: data.rows,
-      orientation: "landscape",
-    });
+    exportHealthReportPdf(dataset, aggregate);
   }
 }

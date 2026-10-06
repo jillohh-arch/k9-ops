@@ -9,7 +9,7 @@ import type {
 } from "../domain/health-reports-types";
 import { exportToCsv } from "@/lib/export/export-csv";
 import { exportToXlsx } from "@/lib/export/export-xlsx";
-import { exportToPdf } from "@/lib/export/export-pdf";
+import { exportHealthReportPdf } from "../lib/health-reports-pdf";
 
 vi.mock("@/lib/export/export-csv", () => ({
   exportToCsv: vi.fn(),
@@ -19,8 +19,8 @@ vi.mock("@/lib/export/export-xlsx", () => ({
   exportToXlsx: vi.fn(),
 }));
 
-vi.mock("@/lib/export/export-pdf", () => ({
-  exportToPdf: vi.fn(),
+vi.mock("../lib/health-reports-pdf", () => ({
+  exportHealthReportPdf: vi.fn(),
 }));
 
 describe("F30 Health Reports Export Module", () => {
@@ -191,7 +191,49 @@ describe("F30 Health Reports Export Module", () => {
 
     expect(exportToCsv).not.toHaveBeenCalled();
     expect(exportToXlsx).not.toHaveBeenCalled();
-    expect(exportToPdf).not.toHaveBeenCalled();
+    expect(exportHealthReportPdf).not.toHaveBeenCalled();
+  });
+
+  it("throws error and fails closed if canExport is undefined or authority is missing", () => {
+    // 1. undefined canExport
+    const undefinedCanExport = {
+      canExport: undefined,
+      reason: undefined,
+      hasCanonicalRead: true,
+      hasExportCapability: false,
+      isPolicyRatified: false,
+    } as unknown as ReportExportAuthority;
+
+    expect(() =>
+      executeHealthReportExport(
+        "clinical",
+        "pdf",
+        mockAggregate,
+        undefinedCanExport
+      )
+    ).toThrowError(/Acesso negado: exportação de relatórios não autorizada/);
+
+    // 2. completely missing/undefined authority
+    expect(() =>
+      executeHealthReportExport(
+        "clinical",
+        "pdf",
+        mockAggregate,
+        undefined as unknown as ReportExportAuthority
+      )
+    ).toThrowError(/Acesso negado: exportação de relatórios não autorizada/);
+
+    // 3. null authority
+    expect(() =>
+      executeHealthReportExport(
+        "clinical",
+        "pdf",
+        mockAggregate,
+        null as unknown as ReportExportAuthority
+      )
+    ).toThrowError(/Acesso negado: exportação de relatórios não autorizada/);
+
+    expect(exportHealthReportPdf).not.toHaveBeenCalled();
   });
 
   it("executes CSV, XLSX, and PDF exports when canExport is true (upon hypothetical future ratification)", () => {
@@ -209,6 +251,6 @@ describe("F30 Health Reports Export Module", () => {
     expect(exportToXlsx).toHaveBeenCalledTimes(1);
 
     executeHealthReportExport("clinical", "pdf", mockAggregate, ratifiedAuthority);
-    expect(exportToPdf).toHaveBeenCalledTimes(1);
+    expect(exportHealthReportPdf).toHaveBeenCalledTimes(1);
   });
 });

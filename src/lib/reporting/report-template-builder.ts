@@ -4,6 +4,7 @@ import {
   renderAttachmentBlock,
   renderAuditBlock,
   renderCoSignatureBlock,
+  renderCompactContinuationHeader,
   renderDarkCompactContinuationHeader,
   renderDarkReportFooter,
   renderDarkTacticalHeader,
@@ -241,6 +242,11 @@ export class ReportTemplateBuilder {
             title: this.title,
             documentId: this.metadata.documentId,
             branding: this.branding,
+          });
+        } else {
+          renderCompactContinuationHeader(contCtx, {
+            title: this.title,
+            documentId: this.metadata.documentId,
           });
         }
       }

@@ -630,21 +630,131 @@ describe('F70 Web Health Reports PDF Migration V1', () => {
       const readinessPath = path.join(outDir, 'health_readiness.pdf');
       const clinicalPath = path.join(outDir, 'health_clinical_cases.pdf');
       const schedulePath = path.join(outDir, 'health_schedule.pdf');
+      const clinicalMultiPath = path.join(outDir, 'health_clinical_cases_multipage.pdf');
+      const scheduleMultiPath = path.join(outDir, 'health_schedule_multipage.pdf');
 
       fs.writeFileSync(kpiPath, Buffer.from(kpiDoc.output('arraybuffer')));
       fs.writeFileSync(readinessPath, Buffer.from(readinessDoc.output('arraybuffer')));
       fs.writeFileSync(clinicalPath, Buffer.from(clinicalDoc.output('arraybuffer')));
       fs.writeFileSync(schedulePath, Buffer.from(scheduleDoc.output('arraybuffer')));
 
+      // Gera e grava também fixtures multipágina com tabelas extensas
+      const manyClinicalCases: ClinicalCaseListEntry[] = Array.from({ length: 25 }, (_, i) => ({
+        entryId: `dog-${i}:c${i}`,
+        dogId: `dog-${i}`,
+        caseId: `c${i}`,
+        dog: {
+          id: `dog-${i}`,
+          name: `K9 Operacional ${i + 1}`,
+          registrationNumber: `K9-REG-${i}`,
+          photoUrl: null,
+          breed: 'Pastor Belga Malinois',
+          sex: 'Macho',
+          dateOfBirth: null,
+          conductor: null,
+          specialties: [],
+        },
+        case: {
+          dogId: `dog-${i}`,
+          caseId: `c${i}`,
+          clinicalStatus: 'under_treatment' as const,
+          rawClinicalStatus: 'under_treatment',
+          title: `Acompanhamento Terapêutico Contínuo #${i + 1}`,
+          openedAt: new Date('2026-09-15T10:00:00.000Z'),
+          openedBy: null,
+          recordedBy: null,
+          openingEventId: null,
+          openingType: null,
+          primaryProfessional: null,
+          closedAt: null,
+          closedBy: null,
+          closureType: null,
+          closureReason: null,
+          hasActiveRestriction: i % 2 === 0,
+          hasPendingSchedule: true,
+          activeTreatmentsCount: 1,
+          lastEventAt: null,
+          eventCount: 2,
+          schemaVersion: 1,
+          dataQuality: 'complete',
+          issues: [],
+        },
+      }));
+      const clinicalMultiDoc = generateHealthClinicalCasesPdf({
+        ...baseAggregate,
+        filteredClinicalCases: manyClinicalCases,
+        clinical: {
+          ...baseAggregate.clinical,
+          totalCases: 25,
+          activeCasesCount: 25,
+        },
+      }, { logoSlot: sampleLogoSlot });
+      fs.writeFileSync(clinicalMultiPath, Buffer.from(clinicalMultiDoc.output('arraybuffer')));
+
+      const manyScheduleItems: ComposedScheduleEntry[] = Array.from({ length: 25 }, (_, i) => ({
+        entry: {
+          entryId: `dog-${i}:s${i}`,
+          dogId: `dog-${i}`,
+          scheduleId: `s${i}`,
+          dog: {
+            id: `dog-${i}`,
+            name: `K9 Canil ${i + 1}`,
+            registrationNumber: `K9-2023-${i}`,
+            photoUrl: null,
+            breed: 'Pastor Belga Malinois',
+            sex: 'Macho',
+            dateOfBirth: null,
+            conductor: null,
+            specialties: [],
+          },
+          item: createMockScheduleItem({
+            scheduleId: `s${i}`,
+            dogId: `dog-${i}`,
+            title: `Procedimento Sanitário Específico #${i + 1}`,
+            scheduleType: 'vaccination',
+            scheduledFor: new Date('2026-10-06T08:00:00.000Z'),
+          }),
+        },
+        temporal: {
+          temporalStatus: i === 0 ? 'overdue' : i < 4 ? 'today' : 'upcoming',
+          temporalAvailability: 'available',
+          effectiveDueUntil: new Date('2026-10-07T08:00:00.000Z'),
+        },
+        displayWindow: {
+          inDisplayWindow: true,
+          offsetDays: i === 0 ? -1 : 0,
+          availability: 'available',
+        },
+      }));
+      const scheduleMultiDoc = generateHealthSchedulePdf({
+        ...baseAggregate,
+        filteredScheduleItems: manyScheduleItems,
+        schedule: {
+          ...baseAggregate.schedule,
+          itemsInPeriodCount: 25,
+          overdueCount: 1,
+          todayCount: 3,
+          upcomingCount: 21,
+        },
+      }, { logoSlot: sampleLogoSlot });
+      fs.writeFileSync(scheduleMultiPath, Buffer.from(scheduleMultiDoc.output('arraybuffer')));
+
       expect(fs.existsSync(kpiPath)).toBe(true);
       expect(fs.existsSync(readinessPath)).toBe(true);
       expect(fs.existsSync(clinicalPath)).toBe(true);
       expect(fs.existsSync(schedulePath)).toBe(true);
+      expect(fs.existsSync(clinicalMultiPath)).toBe(true);
+      expect(fs.existsSync(scheduleMultiPath)).toBe(true);
+
+      expect(clinicalMultiDoc.getNumberOfPages()).toBeGreaterThanOrEqual(2);
+      expect(scheduleMultiDoc.getNumberOfPages()).toBeGreaterThanOrEqual(2);
 
       expect(fs.statSync(kpiPath).size).toBeGreaterThan(500000);
       expect(fs.statSync(readinessPath).size).toBeGreaterThan(500000);
       expect(fs.statSync(clinicalPath).size).toBeGreaterThan(500000);
       expect(fs.statSync(schedulePath).size).toBeGreaterThan(500000);
+      expect(fs.statSync(clinicalMultiPath).size).toBeGreaterThan(500000);
+      expect(fs.statSync(scheduleMultiPath).size).toBeGreaterThan(500000);
 
       // Confirma que o PDF contém o asset de imagem embutido (XObject / Image)
       const kpiContent = fs.readFileSync(kpiPath).toString('latin1');

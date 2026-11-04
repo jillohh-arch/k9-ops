@@ -12,7 +12,10 @@ export function evaluateCapability(input: { identity?: TrustedIdentity; capabili
   if (!identity.active || !identity.confirmed) return { state: 'denied', capability, reason: 'identity_not_active_confirmed' };
   if (!evidence || evidence.capability !== capability || evidence.identity.uid !== identity.uid || evidence.identity.ra !== identity.ra || !Number.isInteger(evidence.grantRevision) || evidence.grantRevision <= 0 || !Number.isInteger(evidence.authorityRevision) || evidence.authorityRevision < evidence.grantRevision) return { state: 'unknown', capability, reason: 'missing_or_untrusted_evidence' };
   if (evidence.revokedAt || (evidence.revocationRevision !== undefined && evidence.revocationRevision >= evidence.grantRevision)) return { state: 'denied', capability, reason: 'capability_revoked', evidence };
-  if (!f40 || !f40.activeMembership || !f40.confirmed || !f40.incomingCrewMember || !f40.generation) return { state: 'unknown', capability, reason: 'f40_eligibility_missing', evidence };
-  if (capability === EXCEPTIONAL_RECONCILE && (!evidence.designation || !evidence.justification?.trim() || !evidence.evidenceRefs?.length || evidence.evidenceRefs.some((ref) => !ref.trim()))) return { state: 'denied', capability, reason: 'designation_evidence_or_justification_missing', evidence };
+  if (capability === SELF_REGULARIZE) {
+    if (!f40 || !f40.activeMembership || !f40.confirmed || !f40.incomingCrewMember || !f40.generation) return { state: 'unknown', capability, reason: 'f40_eligibility_missing', evidence };
+  } else if (capability === EXCEPTIONAL_RECONCILE) {
+    if (!evidence.designation || (evidence.designation !== 'operational_inspector' && evidence.designation !== 'supervisor') || !evidence.justification?.trim() || !evidence.evidenceRefs?.length || evidence.evidenceRefs.some((ref) => !ref.trim())) return { state: 'denied', capability, reason: 'designation_evidence_or_justification_missing', evidence };
+  }
   return { state: 'allowed', capability, reason: 'explicit_evidence_and_eligibility', evidence };
 }

@@ -77,7 +77,7 @@ export interface ScheduleEvidence {
 export interface AuthorityEnvelope {
   actor: ActorBindingEvidence;
   grant: GrantEvidence;
-  f40: F40Eligibility;
+  f40?: F40Eligibility;
   schedule: ScheduleEvidence;
   /** Ignored for authority decisions — present only to verify it cannot grant access. */
   trusted?: unknown;
@@ -172,8 +172,12 @@ export function evaluateStructuralValidity(input: AuthorityEnvelope): Structural
   validateActor(errors, input.actor);
   if (!input.grant || typeof input.grant !== 'object') { errors.push('missing_grant'); return { valid: false, errors }; }
   validateGrant(errors, input.grant);
-  if (!input.f40 || typeof input.f40 !== 'object') { errors.push('missing_f40'); return { valid: false, errors }; }
-  validateF40(errors, input.f40);
+  if (input.grant.capability === SELF_REGULARIZE) {
+    if (!input.f40 || typeof input.f40 !== 'object') { errors.push('missing_f40'); return { valid: false, errors }; }
+    validateF40(errors, input.f40);
+  } else if (input.f40) {
+    validateF40(errors, input.f40);
+  }
   if (!input.schedule || typeof input.schedule !== 'object') { errors.push('missing_schedule'); return { valid: false, errors }; }
   validateSchedule(errors, input.schedule);
   return { valid: errors.length === 0, errors };
@@ -231,14 +235,22 @@ export function evaluateTrustedAuthority(
     return decision('denied_stale_authority', 'authority_revision_mismatch', structural);
   }
 
-  // F40 eligibility required.
-  if (!f40.activeMembership || !f40.confirmed || !f40.incomingCrewMember || !f40.generation) {
-    return decision('denied_capability_not_granted', 'f40_eligibility_incomplete', structural);
+  // F40 eligibility required for SELF_REGULARIZE.
+  if (grant.capability === SELF_REGULARIZE) {
+    if (!f40 || !f40.activeMembership || !f40.confirmed || !f40.incomingCrewMember || !f40.generation) {
+      return decision('denied_capability_not_granted', 'f40_eligibility_incomplete', structural);
+    }
   }
 
-  // Exceptional reconciliation requires explicit designation.
+  // Exceptional reconciliation requires explicit designation and valid evidence.
   if (grant.capability === EXCEPTIONAL_RECONCILE) {
-    if (!grant.designation || !grant.justification?.trim() || !grant.evidenceRefs?.length || grant.evidenceRefs.some((r) => !r.trim())) {
+    if (
+      !grant.designation ||
+      (grant.designation !== 'operational_inspector' && grant.designation !== 'supervisor') ||
+      !grant.justification?.trim() ||
+      !grant.evidenceRefs?.length ||
+      grant.evidenceRefs.some((r) => !r.trim())
+    ) {
       return decision('denied_designation_missing', 'exceptional_reconciliation_requires_designation_evidence_justification', structural);
     }
   }

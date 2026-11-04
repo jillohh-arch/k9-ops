@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source_commit": "a2a7d25fbee67983805e4bbafb408af7f71b98bf",
   "generated_at": "2026-11-03T12:00:00.000Z",
   "vectors": [
@@ -497,6 +497,244 @@
       },
       "source_function": "evaluateCapability",
       "notes": "Derivado de capabilities.ts linha 12: !identity.active || !identity.confirmed"
+    },
+    {
+      "id": "capabilities-exceptional-reconcile-supervisor-without-f40-allowed",
+      "category": "capabilities",
+      "description": "EXCEPTIONAL_RECONCILE com supervisor + evidenceRefs + justification sem f40 resulta em allowed",
+      "input": {
+        "identity": {
+          "uid": "uid-sup-1",
+          "ra": "SUP01",
+          "revision": 1,
+          "active": true,
+          "confirmed": true
+        },
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+        "evidence": {
+          "identity": {
+            "uid": "uid-sup-1",
+            "ra": "SUP01",
+            "revision": 1,
+            "active": true,
+            "confirmed": true
+          },
+          "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+          "grantRevision": 1,
+          "authorityRevision": 1,
+          "designation": "supervisor",
+          "evidenceRefs": [
+            "disp-887"
+          ],
+          "justification": "Stale operational shift reconciled by supervisor"
+        }
+      },
+      "expected": {
+        "state": "allowed",
+        "reason": "explicit_evidence_and_eligibility",
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement"
+      },
+      "source_function": "evaluateCapability",
+      "notes": "RATIFY-W3-02: Supervisor reconciles without requiring incoming crew membership"
+    },
+    {
+      "id": "capabilities-exceptional-reconcile-operational-inspector-allowed",
+      "category": "capabilities",
+      "description": "EXCEPTIONAL_RECONCILE com operational_inspector e incomingCrewMember false resulta em allowed",
+      "input": {
+        "identity": {
+          "uid": "uid-insp-1",
+          "ra": "INSP01",
+          "revision": 1,
+          "active": true,
+          "confirmed": true
+        },
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+        "evidence": {
+          "identity": {
+            "uid": "uid-insp-1",
+            "ra": "INSP01",
+            "revision": 1,
+            "active": true,
+            "confirmed": true
+          },
+          "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+          "grantRevision": 2,
+          "authorityRevision": 2,
+          "designation": "operational_inspector",
+          "evidenceRefs": [
+            "insp-report-42"
+          ],
+          "justification": "Inspector closure of abandoned occupancy session"
+        },
+        "f40": {
+          "activeMembership": false,
+          "confirmed": false,
+          "incomingCrewMember": false,
+          "generation": "g0"
+        }
+      },
+      "expected": {
+        "state": "allowed",
+        "reason": "explicit_evidence_and_eligibility",
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement"
+      },
+      "source_function": "evaluateCapability",
+      "notes": "RATIFY-W3-02: Inspector reconciles regardless of incoming crew membership flag"
+    },
+    {
+      "id": "capabilities-exceptional-reconcile-invalid-designation-denied",
+      "category": "capabilities",
+      "description": "EXCEPTIONAL_RECONCILE com designation não autorizada resulta em denied",
+      "input": {
+        "identity": {
+          "uid": "uid-1",
+          "ra": "123",
+          "revision": 1,
+          "active": true,
+          "confirmed": true
+        },
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+        "evidence": {
+          "identity": {
+            "uid": "uid-1",
+            "ra": "123",
+            "revision": 1,
+            "active": true,
+            "confirmed": true
+          },
+          "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+          "grantRevision": 1,
+          "authorityRevision": 1,
+          "designation": "condutor",
+          "evidenceRefs": [
+            "ref-1"
+          ],
+          "justification": "Reconciliation attempt without supervisor role"
+        }
+      },
+      "expected": {
+        "state": "denied",
+        "reason": "designation_evidence_or_justification_missing",
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement"
+      },
+      "source_function": "evaluateCapability",
+      "notes": "RATIFY-W3-02: Only supervisor or operational_inspector designation is authorized"
+    },
+    {
+      "id": "capabilities-exceptional-reconcile-empty-evidence-refs-denied",
+      "category": "capabilities",
+      "description": "EXCEPTIONAL_RECONCILE com evidenceRefs vazio resulta em denied",
+      "input": {
+        "identity": {
+          "uid": "uid-1",
+          "ra": "123",
+          "revision": 1,
+          "active": true,
+          "confirmed": true
+        },
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+        "evidence": {
+          "identity": {
+            "uid": "uid-1",
+            "ra": "123",
+            "revision": 1,
+            "active": true,
+            "confirmed": true
+          },
+          "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+          "grantRevision": 1,
+          "authorityRevision": 1,
+          "designation": "supervisor",
+          "evidenceRefs": [],
+          "justification": "Reconciliation without evidence reference"
+        }
+      },
+      "expected": {
+        "state": "denied",
+        "reason": "designation_evidence_or_justification_missing",
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement"
+      },
+      "source_function": "evaluateCapability",
+      "notes": "RATIFY-W3-02: Engagement-specific evidence contract requires at least one non-empty evidenceRef"
+    },
+    {
+      "id": "capabilities-exceptional-reconcile-empty-justification-denied",
+      "category": "capabilities",
+      "description": "EXCEPTIONAL_RECONCILE com justificativa vazia resulta em denied",
+      "input": {
+        "identity": {
+          "uid": "uid-1",
+          "ra": "123",
+          "revision": 1,
+          "active": true,
+          "confirmed": true
+        },
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+        "evidence": {
+          "identity": {
+            "uid": "uid-1",
+            "ra": "123",
+            "revision": 1,
+            "active": true,
+            "confirmed": true
+          },
+          "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+          "grantRevision": 1,
+          "authorityRevision": 1,
+          "designation": "supervisor",
+          "evidenceRefs": [
+            "e1"
+          ],
+          "justification": "   "
+        }
+      },
+      "expected": {
+        "state": "denied",
+        "reason": "designation_evidence_or_justification_missing",
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement"
+      },
+      "source_function": "evaluateCapability",
+      "notes": "RATIFY-W3-02: Non-empty justification is required"
+    },
+    {
+      "id": "capabilities-exceptional-reconcile-whitespace-evidence-ref-denied",
+      "category": "capabilities",
+      "description": "EXCEPTIONAL_RECONCILE com ref de evidência contendo apenas espaços em branco resulta em denied",
+      "input": {
+        "identity": {
+          "uid": "uid-1",
+          "ra": "123",
+          "revision": 1,
+          "active": true,
+          "confirmed": true
+        },
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+        "evidence": {
+          "identity": {
+            "uid": "uid-1",
+            "ra": "123",
+            "revision": 1,
+            "active": true,
+            "confirmed": true
+          },
+          "capability": "vehicles.exceptionally_reconcile_operational_engagement",
+          "grantRevision": 1,
+          "authorityRevision": 1,
+          "designation": "operational_inspector",
+          "evidenceRefs": [
+            "   "
+          ],
+          "justification": "Valid justification text"
+        }
+      },
+      "expected": {
+        "state": "denied",
+        "reason": "designation_evidence_or_justification_missing",
+        "capability": "vehicles.exceptionally_reconcile_operational_engagement"
+      },
+      "source_function": "evaluateCapability",
+      "notes": "RATIFY-W3-02: Whitespace-only evidence refs fail validation"
     },
     {
       "id": "schedule-daytime-window-valid",

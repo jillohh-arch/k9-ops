@@ -114,3 +114,18 @@ describe("client.ts — initializeApp receives only the validated config", () =>
     expect(initializeApp).not.toHaveBeenCalled();
   });
 });
+
+describe("T3/R4-05 — alias / second-instance semantics (documented)", () => {
+  it("T3-06: an existing getApps() entry is REUSED as-is (SDK-level alias, app-controlled resolver bypassed for it)", async () => {
+    // The supported client path uses the SDK singleton alias when one exists.
+    // This is the Firebase SDK contract: getApps() returns already-initialized
+    // apps, and client.ts does NOT re-resolve their identity. This is DOCUMENTED
+    // as an app-path boundary: an alias with a wrong identity is NOT rejected
+    // by the resolver, because the resolver only gates the initializeApp call.
+    // Arbitrary JS that pre-populates getApps() escapes this app-level check
+    // (ASSURANCE_ARBITRARY_RUNTIME_JS: NOT_PROVEN — out of allowlist scope).
+    getApps.mockReturnValue([{ name: "legacy-alias" }]);
+    await import("@/lib/firebase/client");
+    expect(initializeApp).not.toHaveBeenCalled();
+  });
+});

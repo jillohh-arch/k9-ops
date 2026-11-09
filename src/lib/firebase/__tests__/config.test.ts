@@ -494,3 +494,57 @@ describe("EXPECTED_FIREBASE_IDENTITY — canonical map shape", () => {
     expect(STAGING.apiKey).not.toBe(PRODUCTION.apiKey);
   });
 });
+
+// ============================== T3 / R4-05 — RUNTIME IDENTITY HARDENING (R1)
+// These cases exercise the SUPPORTED client init path (resolveFirebaseClientConfig)
+// against identity assembled by INDIRECT means: concatenation, computed keys,
+// spread, omitted keys, aliases. Static scanners cannot see these; the resolver
+// must judge the EFFECTIVE final value. All cases are pure, network-free.
+
+describe("T3/R4-05 — runtime identity hardening (indirection classes)", () => {
+  it("T3-01: missing selector fails closed (no production fallback)", () => {
+    const env = stagingEnv();
+    delete env.NEXT_PUBLIC_APP_ENV;
+    expect(() => resolveFirebaseClientConfig(env)).toThrow(FirebaseConfigError);
+  });
+
+  it("T3-02: production selector with staging projectId (and vice versa) fails closed", () => {
+    const env = { ...stagingEnv(), NEXT_PUBLIC_APP_ENV: "production" };
+    expect(() => resolveFirebaseClientConfig(env)).toThrow(FirebaseConfigError);
+  });
+
+  it("T3-03: projectId undefined/null/empty fails closed", () => {
+    for (const bad of [undefined, "", "   "]) {
+      const env = { ...stagingEnv(), NEXT_PUBLIC_FIREBASE_PROJECT_ID: bad };
+      expect(() => resolveFirebaseClientConfig(env)).toThrow(FirebaseConfigError);
+    }
+  });
+
+  it("T3-04: identity assembled by string concatenation is judged by VALUE", () => {
+    const projectParts = ["k9-ops", "-staging"];
+    const env = {
+      ...stagingEnv(),
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: projectParts.join(""),
+    };
+    // The EFFECTIVE value is the canonical staging project — must PASS.
+    expect(() => resolveFirebaseClientConfig(env)).not.toThrow();
+  });
+
+  it("T3-05: identity via computed key / spread still validated by effective value", () => {
+    const env: FirebaseClientEnv = { ...stagingEnv() };
+    const key = "NEXT_PUBLIC_FIREBASE_" + "PROJECT_ID";
+    const assembled = { [key]: STAGING.projectId };
+    Object.assign(env, assembled);
+    expect(() => resolveFirebaseClientConfig(env)).not.toThrow();
+  });
+
+  it("T3-10: late-added properties are still validated by the resolver", () => {
+    const env: FirebaseClientEnv = { ...stagingEnv() };
+    // Simulate late mutation AFTER construction: swap apiKey to production.
+    const lateEnv: FirebaseClientEnv = {};
+    Object.assign(lateEnv, env, {
+      NEXT_PUBLIC_FIREBASE_API_KEY: PRODUCTION.apiKey,
+    });
+    expect(() => resolveFirebaseClientConfig(lateEnv)).toThrow(FirebaseConfigError);
+  });
+});

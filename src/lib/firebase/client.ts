@@ -6,7 +6,10 @@ import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
 import { connectToEmulators, validateEmulatorEnvironment } from "./emulator";
 
-import { resolveFirebaseClientConfig } from "@/lib/firebase/config";
+import {
+  FirebaseConfigError,
+  resolveFirebaseClientConfig,
+} from "@/lib/firebase/config";
 
 // Each `process.env.NEXT_PUBLIC_*` is read as a LITERAL member expression on
 // purpose: Next.js inlines public env vars by textual substitution at build
@@ -32,8 +35,65 @@ const firebaseClientEnv = {
 // resolved projectId matches the selector's target BEFORE initializeApp().
 const firebaseConfig = resolveFirebaseClientConfig(firebaseClientEnv);
 
-export const firebaseApp =
-  getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+/**
+ * T3-06 existing-app alias guard: when an app is already present in
+ * getApps(), it MUST be the [DEFAULT] app and its EFFECTIVE options must
+ * match the resolver's validated config field by field. This blocks reuse of
+ * a hybrid/mislabeled alias (e.g. a production-identity app captured when the
+ * selector says staging) BEFORE any dependent (auth/firestore/storage/
+ * functions) is exported. Error messages never echo option VALUES.
+ */
+function selectValidatedFirebaseApp(): import("firebase/app").FirebaseApp {
+  const existing = getApps();
+
+  if (existing.length === 0) {
+    return initializeApp(firebaseConfig);
+  }
+
+  const defaultApp = existing.find((app) => app.name === "[DEFAULT]");
+
+  if (!defaultApp) {
+    throw new FirebaseConfigError(
+      "Firebase client identity error: getApps() contains no [DEFAULT] app. " +
+        "Refusing to reuse a named alias as the client singleton.",
+    );
+  }
+
+  // The canonical client config requires every one of these fields; an app
+  // whose options omit, blank, or diverge from any of them is not a safe
+  // alias for the explicitly selected environment. Values are compared as
+  // effective strings (computed keys collapse before this check runs).
+  const requiredFields = [
+    "apiKey",
+    "authDomain",
+    "projectId",
+    "storageBucket",
+    "messagingSenderId",
+    "appId",
+  ] as const;
+
+  const options = defaultApp.options;
+  for (const field of requiredFields) {
+    const actual = options?.[field];
+    if (typeof actual !== "string" || actual.trim() === "") {
+      throw new FirebaseConfigError(
+        `Firebase client identity error: the existing [DEFAULT] app has no \`${field}\` option. `,
+      );
+    }
+  }
+
+  for (const field of requiredFields) {
+    if ((options as Record<string, unknown>)[field] !== firebaseConfig[field]) {
+      throw new FirebaseConfigError(
+        `Firebase client identity error: the existing [DEFAULT] app \`${field}\` `,
+      );
+    }
+  }
+
+  return defaultApp;
+}
+
+export const firebaseApp = selectValidatedFirebaseApp();
 
 export const auth = getAuth(firebaseApp);
 export const db = getFirestore(firebaseApp);

@@ -116,16 +116,157 @@ describe("client.ts — initializeApp receives only the validated config", () =>
 });
 
 describe("T3/R4-05 — alias / second-instance semantics (documented)", () => {
-  it("T3-06: an existing getApps() entry is REUSED as-is (SDK-level alias, app-controlled resolver bypassed for it)", async () => {
-    // The supported client path uses the SDK singleton alias when one exists.
-    // This is the Firebase SDK contract: getApps() returns already-initialized
-    // apps, and client.ts does NOT re-resolve their identity. This is DOCUMENTED
-    // as an app-path boundary: an alias with a wrong identity is NOT rejected
-    // by the resolver, because the resolver only gates the initializeApp call.
-    // Arbitrary JS that pre-populates getApps() escapes this app-level check
-    // (ASSURANCE_ARBITRARY_RUNTIME_JS: NOT_PROVEN — out of allowlist scope).
+  it("T3-06 (CLOSED): an existing getApps() entry WITHOUT a [DEFAULT] app is rejected (fail closed)", async () => {
+    // Since the T3-06 alias guard, client.ts revalidates any pre-existing app
+    // against the resolved identity before reusing it. A getApps() population
+    // lacking a [DEFAULT] instance is refused. A fully independent second
+    // initializeApp elsewhere in the runtime remains out of scope
+    // (ASSURANCE_ARBITRARY_RUNTIME_JS: NOT_PROVEN).
     getApps.mockReturnValue([{ name: "legacy-alias" }]);
-    await import("@/lib/firebase/client");
+    await expect(import("@/lib/firebase/client")).rejects.toThrow(
+      /no \[DEFAULT\] app/,
+    );
     expect(initializeApp).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * T3-06 — existing-app alias guard.
+ *
+ * When getApps() already contains a [DEFAULT] app, client.ts reuses it. The
+ * reuse MUST be identity-checked against the resolver's validated config:
+ * an app whose effective options diverge from the selected environment is a
+ * hybrid/alias identity and must be REJECTED before any dependent
+ * (auth/firestore/storage/functions) is handed out.
+ */
+describe("T3-06 — existing app alias identity guard", () => {
+  /** Build a fake FirebaseApp-like object for the getApps() mock. */
+  function fakeApp(name: string, options: Record<string, unknown> | undefined) {
+    return { name, options } as unknown;
+  }
+
+  function setExistingApps(apps: unknown[]) {
+    getApps.mockReturnValue(apps as never);
+  }
+
+  it("B1: rejects an existing DEFAULT app whose projectId targets the OPPOSITE environment", async () => {
+    setExistingApps([
+      fakeApp("[DEFAULT]", {
+        apiKey: "AIzaSyAc42tXt2jlF3ja4TQ-JQFI3S-hvdo1hqo",
+        projectId: "canil-gcm",
+        authDomain: "canil-gcm.firebaseapp.com",
+        storageBucket: "canil-gcm.firebasestorage.app",
+        messagingSenderId: "418249404282",
+        appId: "1:418249404282:web:6c0093a341e04ef518b0c3",
+      }),
+    ]);
+
+    await expect(import("@/lib/firebase/client")).rejects.toThrow(
+      /Firebase client identity error/,
+    );
+    expect(initializeApp).not.toHaveBeenCalled();
+  });
+
+  it("B2: rejects a DEFAULT app with the right projectId but a hybrid appId", async () => {
+    setExistingApps([
+      fakeApp("[DEFAULT]", {
+        apiKey: "AIzaSyAc42tXt2jlF3ja4TQ-JQFI3S-hvdo1hqo",
+        authDomain: "k9-ops-staging.firebaseapp.com",
+        projectId: "k9-ops-staging",
+        storageBucket: "k9-ops-staging.firebasestorage.app",
+        messagingSenderId: "507588808242",
+        appId: "1:418249404282:web:6c0093a341e04ef518b0c3",
+      }),
+    ]);
+
+    await expect(import("@/lib/firebase/client")).rejects.toThrow(/appId/);
+    expect(initializeApp).not.toHaveBeenCalled();
+  });
+
+  it("B3: rejects a DEFAULT app with incomplete/undefined options (fail closed)", async () => {
+    setExistingApps([fakeApp("[DEFAULT]", { projectId: "k9-ops-staging" })]);
+
+    await expect(import("@/lib/firebase/client")).rejects.toThrow(
+      /existing .DEFAULT. app/,
+    );
+    expect(initializeApp).not.toHaveBeenCalled();
+  });
+
+  it("B4: reuses a legitimately matching DEFAULT app WITHOUT a second initializeApp", async () => {
+    const app = fakeApp("[DEFAULT]", {
+      apiKey: "AIzaSyAc42tXt2jlF3ja4TQ-JQFI3S-hvdo1hqo",
+      authDomain: "k9-ops-staging.firebaseapp.com",
+      projectId: "k9-ops-staging",
+      storageBucket: "k9-ops-staging.firebasestorage.app",
+      messagingSenderId: "507588808242",
+      appId: "1:507588808242:web:89b531a8e7d358596ef62b",
+    });
+    setExistingApps([app]);
+
+    const mod = await import("@/lib/firebase/client");
+    expect(initializeApp).not.toHaveBeenCalled();
+    expect(mod.firebaseApp).toBe(app);
+  });
+
+  it("B5: selects the [DEFAULT] app among other NAMED apps, not getApps()[0]", async () => {
+    const named = fakeApp("other", { projectId: "wrong" });
+    const def = fakeApp("[DEFAULT]", {
+      apiKey: "AIzaSyAc42tXt2jlF3ja4TQ-JQFI3S-hvdo1hqo",
+      authDomain: "k9-ops-staging.firebaseapp.com",
+      projectId: "k9-ops-staging",
+      storageBucket: "k9-ops-staging.firebasestorage.app",
+      messagingSenderId: "507588808242",
+      appId: "1:507588808242:web:89b531a8e7d358596ef62b",
+    });
+    setExistingApps([named, def]);
+
+    const mod = await import("@/lib/firebase/client");
+    expect(mod.firebaseApp).toBe(def);
+    expect(initializeApp).not.toHaveBeenCalled();
+  });
+
+  it("B6: fails closed deterministically when only a NAMED app exists (no DEFAULT)", async () => {
+    setExistingApps([fakeApp("legacy-alias", { projectId: "k9-ops-staging" })]);
+
+    await expect(import("@/lib/firebase/client")).rejects.toThrow(
+      /existing .DEFAULT. app|[DEFAULT]/,
+    );
+    expect(initializeApp).not.toHaveBeenCalled();
+  });
+
+  it("B7: compares EFFECTIVE option VALUES (computed keys, not source tokens)", async () => {
+    // Build the hybrid options dynamically so any source-level token matching
+    // would be defeated; the guard must compare runtime values.
+    const key = ["app", "Id"].join("");
+    const options: Record<string, unknown> = {
+      apiKey: "AIzaSyAc42tXt2jlF3ja4TQ-JQFI3S-hvdo1hqo",
+      authDomain: "k9-ops-staging.firebaseapp.com",
+      projectId: "k9-ops-staging",
+      storageBucket: "k9-ops-staging.firebasestorage.app",
+      messagingSenderId: "507588808242",
+    };
+    options[key] = "1:999999999999:web:0000000000000000000000";
+    setExistingApps([fakeApp("[DEFAULT]", options)]);
+
+    await expect(import("@/lib/firebase/client")).rejects.toThrow(/appId/);
+    expect(initializeApp).not.toHaveBeenCalled();
+  });
+
+  it("B8: reimport (SSR/HMR) reuses the same valid DEFAULT app deterministically", async () => {
+    const app = fakeApp("[DEFAULT]", {
+      apiKey: "AIzaSyAc42tXt2jlF3ja4TQ-JQFI3S-hvdo1hqo",
+      authDomain: "k9-ops-staging.firebaseapp.com",
+      projectId: "k9-ops-staging",
+      storageBucket: "k9-ops-staging.firebasestorage.app",
+      messagingSenderId: "507588808242",
+      appId: "1:507588808242:web:89b531a8e7d358596ef62b",
+    });
+    setExistingApps([app]);
+
+    const first = await import("@/lib/firebase/client");
+    const second = await import("@/lib/firebase/client");
+    expect(initializeApp).not.toHaveBeenCalled();
+    expect(second.firebaseApp).toBe(first.firebaseApp);
+    expect(second.firebaseApp).toBe(app);
   });
 });

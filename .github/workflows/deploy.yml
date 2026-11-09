@@ -17,6 +17,33 @@ name: Release Production
 #   MUST NOT change: adminPatchK9Identity, any other backend Function,
 #                Firestore Rules, Firestore indexes, Firestore data, Auth
 #
+# PRODUCTION IDENTITY — ONE SOURCE OF TRUTH
+# -----------------------------------------
+# The Firebase Web identity is supplied ONLY through the job-level `env:` block
+# below (GitHub Environment `production` variables). Nothing writes a dotenv
+# file. That matters for two reasons:
+#
+#   1. Next.js precedence puts `process.env` ABOVE every dotenv layer, so a
+#      shell value silently beat a "correct" `.env.local` — the CF-01
+#      contradiction. One source cannot contradict itself.
+#   2. The Firebase CLI re-runs `next build` inside `firebase deploy`
+#      (frameworks prepareFrameworks), and that child process inherits this
+#      same `env:`. The rebuild therefore selects production too, instead of
+#      inventing a second, different identity from a stray file.
+#
+# Guards, in order:
+#   PRE-BUILD    scripts/ct4-web-p0-production-env-guard.cjs
+#                resolves the EFFECTIVE env (shell > .env.local > .env.<mode> >
+#                .env) and refuses to let a build start unless it is
+#                production/canil-gcm with no unexpected .env.local.
+#   POST-BUILD   scripts/ct4-web-p0-production-bundle-guard.cjs --stage post-build
+#                proves the compiled output carries the production tuple and no
+#                F60 Warehouse route.
+#   PRE-PUBLISH  the same guard, `--stage pre-publish`, wired through
+#                `hosting.predeploy` in firebase.json. The CLI runs predeploy
+#                AFTER its internal rebuild and immediately before upload, so it
+#                inspects the artifact that would actually ship.
+#
 # External configuration is provisioned separately (E9-WG-B2) and MUST exist
 # before the first dispatch:
 #   - GitHub Environment `production` (required reviewer, branch policy master)
@@ -56,6 +83,17 @@ jobs:
   validate:
     name: Validate release candidate
     runs-on: ubuntu-latest
+    # Single, explicit, reproducible source of the production identity.
+    env:
+      NEXT_PUBLIC_APP_ENV: production
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }}
+      NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION: ${{ vars.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION }}
     steps:
       - name: Checkout requested SHA
         uses: actions/checkout@v4
@@ -88,6 +126,15 @@ jobs:
           node-version: 22
           cache: npm
 
+      # The guard suite runs on bare Node (no dependencies), so it executes
+      # before `npm ci` and fails a broken guard rather than a broken install.
+      - name: Production guards self-test
+        run: node --test scripts/ct4-web-p0-production-guards.test.cjs
+
+      # PRE-BUILD: nothing below may build until the effective identity is proven.
+      - name: Production identity guard (PRE-BUILD)
+        run: node scripts/ct4-web-p0-production-env-guard.cjs --stage pre-build --root .
+
       - name: Install dependencies
         run: npm ci
 
@@ -115,16 +162,10 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          NEXT_PUBLIC_APP_ENV: production
-          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
-          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
-          NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }}
-          NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION: ${{ vars.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION }}
+
+      # POST-BUILD: prove what was produced, not what was requested.
+      - name: Production bundle guard (POST-BUILD)
+        run: node scripts/ct4-web-p0-production-bundle-guard.cjs --stage post-build --root .
 
   release:
     name: ${{ inputs.mode == 'release' && 'Release to production' || 'Auth check (read-only)' }}
@@ -133,6 +174,18 @@ jobs:
     environment:
       name: production
       url: https://canil-gcm.web.app
+    # The Firebase CLI's internal `next build` inherits this block, so the
+    # rebuild cannot select a different project than the validated one.
+    env:
+      NEXT_PUBLIC_APP_ENV: production
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }}
+      NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION: ${{ vars.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION }}
     steps:
       - name: Checkout requested SHA
         uses: actions/checkout@v4
@@ -147,6 +200,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Production guards self-test
+        run: node --test scripts/ct4-web-p0-production-guards.test.cjs
+
+      - name: Production identity guard (PRE-BUILD)
+        run: node scripts/ct4-web-p0-production-env-guard.cjs --stage pre-build --root .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -211,23 +270,10 @@ jobs:
 
       # ---- mutation: gated hard on mode == release ----
 
-      - name: Write Firebase Web config
-        if: ${{ inputs.mode == 'release' }}
-        run: |
-          set -euo pipefail
-          umask 077
-          {
-            echo "NEXT_PUBLIC_APP_ENV=production"
-            echo "NEXT_PUBLIC_FIREBASE_API_KEY=${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}"
-            echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}"
-            echo "NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}"
-            echo "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}"
-            echo "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}"
-            echo "NEXT_PUBLIC_FIREBASE_APP_ID=${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}"
-            echo "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${{ vars.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }}"
-            echo "NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION=${{ vars.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION }}"
-          } > .env.local
-
+      # No explicit build here: `firebase deploy` builds the app itself. The
+      # artifact THAT build produces is audited by PRE-PUBLISH — `hosting.predeploy`
+      # in firebase.json, which the CLI runs after its rebuild and right before
+      # upload. Building here would only audit an artifact the CLI discards.
       - name: Deploy Hosting
         if: ${{ inputs.mode == 'release' }}
         run: |
@@ -251,6 +297,8 @@ jobs:
             echo "| Firebase project | \`canil-gcm\` |"
             echo "| Hosting site | \`canil-gcm\` |"
             echo "| Frameworks backend | \`ssrcanilgcm\` (southamerica-east1) |"
+            echo "| Identity source | job env (no dotenv file) |"
+            echo "| Guards | PRE-BUILD + POST-BUILD + PRE-PUBLISH (predeploy) |"
             echo "| Workflow run | \`${{ github.run_id }}\` (attempt ${{ github.run_attempt }}) |"
             echo "| Dispatched by | \`${{ github.actor }}\` |"
             echo "| Timestamp (UTC) | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |"

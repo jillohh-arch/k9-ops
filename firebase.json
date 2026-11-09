@@ -12,6 +12,9 @@
   "hosting": {
     "site": "canil-gcm",
     "source": ".",
+    "predeploy": [
+      "node scripts/ct4-web-p0-production-bundle-guard.cjs --stage pre-publish --root ."
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",

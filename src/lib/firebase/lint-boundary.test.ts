@@ -61,7 +61,17 @@ const expectAllowed = async (filePath: string, code: string) => {
 };
 
 describe("T3-07 firebase/app import boundary (real ESLint config)", () => {
-  it("BLOCKS named import of firebase/app outside src/lib/firebase", { timeout: 20_000 }, async () => {
+  // Cold-start headroom: the FIRST test in this suite constructs the first
+  // real-project ESLint instance in the process (flat config + plugins
+  // load). Measured cold: ~29-37s under default worker contention on
+  // Windows (see gate CT4.APP-WEB.CI-COLD-START-STABILITY-AND-LOCAL-FREEZE-R1).
+  // This is one-time config-load cost, not test slowness: subsequent tests
+  // reuse the loaded config and run in <50ms. The localized 60s timeout
+  // applies ONLY to this first test (it both creates the instance and runs
+  // the assertion); it does not weaken the policy — the assertion is
+  // unchanged, and every diagnostic must still be a severity-2 boundary
+  // violation. Subsequent tests keep the default timeout.
+  it("BLOCKS named import of firebase/app outside src/lib/firebase", { timeout: 60_000 }, async () => {
     await expectBlocked(
       "src/features/foo/bar.ts",
       `import { initializeApp } from "firebase/app";\nexport const x = initializeApp;`,

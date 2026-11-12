@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   resolveReportStartDate,
@@ -573,18 +573,25 @@ describe("reports — evaluation metrics", () => {
   });
 
   it("oldest pending age is tracked", () => {
-    const veryOld = new Date("2026-06-01T10:00:00Z");
-    const recent = new Date("2026-07-10T10:00:00Z");
-    const promos = [
-      promo({ id: "p1", status: "pending", requestedAt: veryOld }),
-      promo({ id: "p2", status: "pending", requestedAt: recent }),
-    ];
-    const result = computeEvaluationMetrics(promos, null);
-    expect(result.oldestPendingAgeSeconds).not.toBeNull();
-    // The oldest is veryOld — age should be approximately 44 days
-    // Allow a range since the function uses new Date() internally
-    expect(result.oldestPendingAgeSeconds!).toBeGreaterThan(0);
-    expect(result.oldestPendingAgeSeconds!).toBeLessThan(100 * 24 * 60 * 60);
+    // The implementation reads the real clock, so freeze it inside this test
+    // only; otherwise a fixed calendar date drifts past any ceiling as real
+    // time passes. Restored in `finally` so no fake timer leaks elsewhere.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-15T10:00:00Z"));
+      const veryOld = new Date("2026-06-01T10:00:00Z");
+      const recent = new Date("2026-07-10T10:00:00Z");
+      const promos = [
+        promo({ id: "p1", status: "pending", requestedAt: veryOld }),
+        promo({ id: "p2", status: "pending", requestedAt: recent }),
+      ];
+      const result = computeEvaluationMetrics(promos, null);
+      // veryOld is the oldest pending request: 44 days = 3_801_600s before the
+      // frozen instant. `recent` (5 days) must not be the one selected.
+      expect(result.oldestPendingAgeSeconds).toBe(44 * 24 * 60 * 60);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("no pending → oldestPendingAgeSeconds is null", () => {

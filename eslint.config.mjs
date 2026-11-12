@@ -53,6 +53,21 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // CI lint exemption for production guard scripts (CT4.WEB-P0.CI-FAILURE-TARGETED-REMEDIATION-R1):
+  // these three CommonJS build-time scripts legitimately use require() for
+  // Node built-ins. The exemption is scoped to the exact files; all other
+  // .cjs files and the entire src/** tree remain subject to
+  // @typescript-eslint/no-require-imports from eslint-config-next/typescript.
+  {
+    files: [
+      "scripts/ct4-web-p0-production-env-guard.cjs",
+      "scripts/ct4-web-p0-production-bundle-guard.cjs",
+      "scripts/ct4-web-p0-production-guards.test.cjs",
+    ],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

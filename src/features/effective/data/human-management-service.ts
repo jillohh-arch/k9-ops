@@ -55,14 +55,6 @@ async function appendAuditTrail(userRa: string, entry: Omit<AuditEntry, "perform
 
 export async function toggleInstructorRole(ra: string, enabled: boolean) {
   await callSetK9InstructorRole({ ra, enabled });
-
-  const actor = currentActorInfo();
-  await appendAuditTrail(ra, {
-    action: enabled ? "role_assigned" : "role_removed",
-    actor_ra: actor.ra,
-    actor_name: actor.name,
-    details: { role: "instrutor_k9", enabled },
-  });
 }
 
 export async function setUserRoles(ra: string, roles: UserRole[]) {

@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resetHumanPassword } from "../human-management-service";
+import { resetHumanPassword, toggleInstructorRole } from "../human-management-service";
 
 const mockCallAdminResetHumanPassword = vi.fn();
+const mockCallSetK9InstructorRole = vi.fn();
 const mockUpdateDoc = vi.fn();
 
 vi.mock("@/lib/firebase/functions", () => ({
   callAdminResetHumanPassword: (args: unknown) => mockCallAdminResetHumanPassword(args),
-  callSetK9InstructorRole: vi.fn(),
+  callSetK9InstructorRole: (args: unknown) => mockCallSetK9InstructorRole(args),
 }));
 
 vi.mock("firebase/firestore", () => ({
@@ -125,5 +126,52 @@ describe("human-management-service: resetHumanPassword", () => {
       success: false,
       message: "Falha ao gerar nova senha. Tente novamente.",
     });
+  });
+});
+
+describe("human-management-service: toggleInstructorRole", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("invoca exclusivamente a callable setK9InstructorRole sem escrita direta no Firestore", async () => {
+    mockCallSetK9InstructorRole.mockResolvedValueOnce({
+      data: { ra: "990011", uid: "uid-990011", enabled: true },
+    });
+
+    await toggleInstructorRole("990011", true);
+
+    expect(mockCallSetK9InstructorRole).toHaveBeenCalledWith({
+      ra: "990011",
+      enabled: true,
+    });
+    // Invariante critico F10/F20: auditoria canonica reside no backend;
+    // o cliente nao deve tentar updateDoc direto em users/{ra}.
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("caracterizacao RED/GREEN: sucesso da callable nao eh convertido em falha por bloqueio de regras no cliente", async () => {
+    mockCallSetK9InstructorRole.mockResolvedValueOnce({
+      data: { ra: "990011", uid: "uid-990011", enabled: true },
+    });
+    mockUpdateDoc.mockRejectedValue(new Error("permission-denied: Missing or insufficient permissions"));
+
+    // No codigo legado, esta chamada rejeitava porque tentava updateDoc em users/{ra} apos sucesso no backend.
+    // Com o fix, a operacao conclui com sucesso com zero escrita client-side.
+    await expect(toggleInstructorRole("990011", true)).resolves.toBeUndefined();
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("propaga rejeicao da callable fail-closed sem tentar escrita no cliente", async () => {
+    const error = new Error("permission-denied");
+    mockCallSetK9InstructorRole.mockRejectedValueOnce(error);
+
+    await expect(toggleInstructorRole("990011", false)).rejects.toThrow("permission-denied");
+
+    expect(mockCallSetK9InstructorRole).toHaveBeenCalledWith({
+      ra: "990011",
+      enabled: false,
+    });
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
   });
 });

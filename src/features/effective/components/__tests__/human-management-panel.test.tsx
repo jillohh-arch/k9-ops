@@ -958,3 +958,82 @@ describe("F10.AUTHORIZATION-UX.V1 — perfil de acesso e desvinculação", () =>
     expect(link.getAttribute("href")).toBe("/access");
   });
 });
+
+// ---------------------------------------------------------------------------
+// L. QUALIFICAÇÃO FUNCIONAL INSTRUTOR K9 (CT4.F10.INSTRUCTOR-ROLE-AUDIT-TRAIL)
+// ---------------------------------------------------------------------------
+
+describe("CT4.F10 — qualificação funcional de Instrutor K9 no painel", () => {
+  beforeEach(() => {
+    toggleInstructorRole.mockReset();
+    getUserRoles.mockResolvedValue([]);
+  });
+
+  it("carrega estado inativo e invoca toggleInstructorRole(ra, true) ao atribuir", async () => {
+    grant({ access: true });
+    toggleInstructorRole.mockResolvedValue(undefined);
+
+    renderPanel(activeRecord());
+
+    const toggleBtn = await screen.findByRole("button", {
+      name: /atribuir role de instrutor/i,
+    });
+    expect(toggleBtn).toBeDefined();
+    expect(screen.getByText("Inativo")).toBeDefined();
+
+    fireEvent.click(toggleBtn);
+
+    await waitFor(() =>
+      expect(toggleInstructorRole).toHaveBeenCalledWith(RA, true),
+    );
+    expect(
+      await screen.findByText(/Role de instrutor atribuída com sucesso./i),
+    ).toBeDefined();
+    expect(screen.getByText("Ativo")).toBeDefined();
+  });
+
+  it("carrega estado ativo e invoca toggleInstructorRole(ra, false) ao remover", async () => {
+    grant({ access: true });
+    getUserRoles.mockResolvedValue(["instrutor_k9"]);
+    toggleInstructorRole.mockResolvedValue(undefined);
+
+    renderPanel(activeRecord());
+
+    const toggleBtn = await screen.findByRole("button", {
+      name: /remover role de instrutor/i,
+    });
+    expect(toggleBtn).toBeDefined();
+    expect(screen.getByText("Ativo")).toBeDefined();
+
+    fireEvent.click(toggleBtn);
+
+    await waitFor(() =>
+      expect(toggleInstructorRole).toHaveBeenCalledWith(RA, false),
+    );
+    expect(
+      await screen.findByText(/Role de instrutor removida com sucesso./i),
+    ).toBeDefined();
+    expect(screen.getByText("Inativo")).toBeDefined();
+  });
+
+  it("apresenta feedback de erro e preserva estado quando a callable rejeita", async () => {
+    grant({ access: true });
+    toggleInstructorRole.mockRejectedValue(new Error("permission-denied"));
+
+    renderPanel(activeRecord());
+
+    const toggleBtn = await screen.findByRole("button", {
+      name: /atribuir role de instrutor/i,
+    });
+    fireEvent.click(toggleBtn);
+
+    await waitFor(() =>
+      expect(toggleInstructorRole).toHaveBeenCalledWith(RA, true),
+    );
+    expect(
+      await screen.findByText(/Falha ao alterar role de instrutor./i),
+    ).toBeDefined();
+    // Estado permanece inalterado
+    expect(screen.getByText("Inativo")).toBeDefined();
+  });
+});

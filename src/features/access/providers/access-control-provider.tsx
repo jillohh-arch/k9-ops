@@ -10,7 +10,11 @@ import {
 } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 
-import { useAuth, type AuthProfile } from "@/features/auth/providers/auth-provider";
+import {
+  isUserMirrorCurrentlyActive,
+  useAuth,
+  type AuthProfile,
+} from "@/features/auth/providers/auth-provider";
 import { db } from "@/lib/firebase/client";
 import {
   defaultAccessProfiles,
@@ -18,6 +22,7 @@ import {
   getDefaultAccessProfile,
   getProfileIdFromLegacyValue,
   hasAccessPermission,
+  isDeprecatedAccessProfileId,
   type AccessAction,
   type AccessModuleId,
   type AccessProfile,
@@ -52,6 +57,9 @@ function getUserMirrorValue(
 
 export function resolveProfileId(profile: AuthProfile | null) {
   if (!profile) return fallbackProfile.id;
+  if (profile.userMirror && !isUserMirrorCurrentlyActive(profile.userMirror)) {
+    return fallbackProfile.id;
+  }
 
   const explicitRaw =
     getUserMirrorValue(profile, "access_profile_id") ??
@@ -68,21 +76,24 @@ export function resolveProfileId(profile: AuthProfile | null) {
 
   for (const role of profile.roles) {
     const roleProfile = getProfileIdFromLegacyValue(role);
-    if (roleProfile) return roleProfile;
-  }
-
-  if (profile.isK9Instructor) {
-    return "instrutor_k9";
+    if (roleProfile && !isDeprecatedAccessProfileId(roleProfile)) {
+      return roleProfile;
+    }
   }
 
   return "operador_k9";
 }
 
-function applyK9InstructorCapability(
+export function applyK9InstructorCapability(
   profile: AccessProfile,
   authProfile: AuthProfile | null,
 ): AccessProfile {
-  if (!authProfile?.isK9Instructor || profile.id === "instrutor_k9") {
+  if (
+    authProfile?.isK9Instructor !== true ||
+    (authProfile.userMirror != null &&
+      !isUserMirrorCurrentlyActive(authProfile.userMirror)) ||
+    profile.id === "instrutor_k9"
+  ) {
     return profile;
   }
 

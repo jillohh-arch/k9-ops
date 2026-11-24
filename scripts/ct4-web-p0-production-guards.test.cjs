@@ -917,7 +917,7 @@ test("CHECKER-6-W2: a clean hosting tree with no nested .next still passes", () 
   assert.deepEqual(report.buildIds, ["shared-build"]);
 });
 
-test("CHECKER-7-R1: a warehouse entrypoint in the SSR codebase at functions/ is caught", () => {
+test("CHECKER-7-R1: an unauthorized 12th warehouse entrypoint in functions/ is caught", () => {
   // firebase-tools writes the SSR codebase AT .firebase/<site>/functions, not
   // nested under it. That directory must be an output in its own right.
   const root = makeBundleFixture();
@@ -926,11 +926,29 @@ test("CHECKER-7-R1: a warehouse entrypoint in the SSR codebase at functions/ is 
   fs.copyFileSync(path.join(root, ".next", "static", "chunks", "main.js"),
     path.join(site, "hosting", "_next", "static", "chunks", "main.js"));
   const ssr = path.join(site, "functions");
-  const warehousePage = path.join(ssr, ".next", "server", "app", "(app)", "warehouse", "page.js");
+  const warehousePage = path.join(ssr, ".next", "server", "app", "(app)", "warehouse", "unauthorized", "page.js");
   fs.mkdirSync(path.dirname(warehousePage), { recursive: true });
   fs.writeFileSync(warehousePage, "export default function Page(){return null}");
   fs.copyFileSync(path.join(root, ".next", "BUILD_ID"), path.join(ssr, ".next", "BUILD_ID"));
   expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "pre-publish" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("CHECKER-7-R1b: authorized F60 warehouse entrypoint in functions/ and hosting/ passes", () => {
+  const root = makeBundleFixture();
+  const site = path.join(root, ".firebase", "canil-gcm");
+  fs.mkdirSync(path.join(site, "hosting", "warehouse"), { recursive: true });
+  fs.writeFileSync(path.join(site, "hosting", "warehouse", "batches.html"), "<html></html>");
+  fs.mkdirSync(path.join(site, "hosting", "_next", "static", "chunks"), { recursive: true });
+  fs.copyFileSync(path.join(root, ".next", "static", "chunks", "main.js"),
+    path.join(site, "hosting", "_next", "static", "chunks", "main.js"));
+  const ssr = path.join(site, "functions");
+  const warehousePage = path.join(ssr, ".next", "server", "app", "(app)", "warehouse", "page.js");
+  fs.mkdirSync(path.dirname(warehousePage), { recursive: true });
+  fs.writeFileSync(warehousePage, "export default function Page(){return null}");
+  fs.copyFileSync(path.join(root, ".next", "BUILD_ID"), path.join(ssr, ".next", "BUILD_ID"));
+  stampBuildId(root, site);
+  const report = bundleGuard.runBundleGuard({ root, stage: "pre-publish" });
+  assert.equal(report.result, "PASS");
 });
 
 test("CHECKER-7-R2: the same layout without a warehouse entrypoint passes", () => {
@@ -972,26 +990,40 @@ test("CHECKER-3b: a source tree with base inventory/movements routes is clean", 
   assert.equal(report.result, "PASS");
 });
 
-test("N6b: Warehouse source route fails", () => {
+test("N6b: Authorized 11 F60 source routes pass while a 12th unknown warehouse source route fails", () => {
   const root = makeBundleFixture();
-  fs.mkdirSync(path.join(root, "src", "app", "(app)", "warehouse"), { recursive: true });
-  fs.writeFileSync(path.join(root, "src", "app", "(app)", "warehouse", "page.tsx"), "x");
+  for (const sub of [
+    "", "[section]", "batches", "custody", "equipment", "equipment/[id]",
+    "inventory", "inventory/[id]", "materials", "materials/[id]", "movements",
+  ]) {
+    const dir = sub ? path.join(root, "src", "app", "(app)", "warehouse", sub) : path.join(root, "src", "app", "(app)", "warehouse");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "page.tsx"), "x");
+  }
+  const okReport = bundleGuard.runBundleGuard({ root, stage: "post-build" });
+  assert.equal(okReport.result, "PASS");
+
+  fs.mkdirSync(path.join(root, "src", "app", "(app)", "warehouse", "rogue"), { recursive: true });
+  fs.writeFileSync(path.join(root, "src", "app", "(app)", "warehouse", "rogue", "page.tsx"), "x");
   expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
 });
 
-test("N6c: Warehouse route inside the compiled manifest fails", () => {
-  const root = makeBundleFixture({ routes: ["/", "/warehouse/batches"] });
-  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+test("N6c: Authorized F60 manifest route passes while 12th unknown route fails", () => {
+  const okRoot = makeBundleFixture({ routes: ["/", "/warehouse/batches"] });
+  assert.equal(bundleGuard.runBundleGuard({ root: okRoot, stage: "post-build" }).result, "PASS");
+
+  const badRoot = makeBundleFixture({ routes: ["/", "/warehouse/rogue"] });
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root: badRoot, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
 });
 
-test("N6d: Warehouse route also caught in the app/ sub-layout manifest", () => {
+test("N6d: Unknown warehouse route also caught in the app/ sub-layout manifest", () => {
   // Next has shipped app-paths-manifest.json both under server/ and under
   // server/app/. Detection must not depend on which layout a build produced.
   const root = makeBundleFixture({ routes: ["/"] });
   fs.mkdirSync(path.join(root, ".next", "server", "app"), { recursive: true });
   fs.writeFileSync(
     path.join(root, ".next", "server", "app", "app-paths-manifest.json"),
-    JSON.stringify({ "/": "x.js", "/warehouse/inventory": "y.js" }),
+    JSON.stringify({ "/": "x.js", "/warehouse/rogue": "y.js" }),
   );
   expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
 });
@@ -1322,14 +1354,14 @@ test("FP2: a Warehouse route under a dot-dir in the HOSTING tree fails (ships)",
   );
 });
 
-test("FP3: a Warehouse page materialised inside functions/.next IS published and fails", () => {
-  // The counterpart of FP2: Functions uploads dot-directories, so a Warehouse
+test("FP3: an unauthorized 12th Warehouse page materialised inside functions/.next IS published and fails", () => {
+  // The counterpart of FP2: Functions uploads dot-directories, so an unauthorized Warehouse
   // page that reached `functions/.next/...` would really ship. Suppressing it
   // would be a blind spot, not a fix.
   const root = makeBundleFixture();
   const site = path.join(root, ".firebase", "canil-gcm");
   stampBuildId(root, site);
-  const page = path.join(site, "functions", ".next", "server", "app", "(app)", "warehouse", "page.js");
+  const page = path.join(site, "functions", ".next", "server", "app", "(app)", "warehouse", "rogue", "page.js");
   fs.mkdirSync(path.dirname(page), { recursive: true });
   fs.writeFileSync(page, "export default function Page(){return null}");
   expectBundleFailure(
@@ -1831,4 +1863,223 @@ test("H0-J (R1): direct audit probe reproduces dot-ancestor ESCAPE on Hosting", 
   const findings = bundleGuard.auditUploadTreeLinks(path.join(site, "hosting"), "hosting");
   assert.ok(Array.isArray(findings) && findings.length >= 1, "expected ESCAPE finding");
   assert.equal(findings[0].status, "ESCAPE");
+});
+
+
+// ------------------------------------------ R2: fail-closed artifact attribution
+
+test("R2-S1: an arbitrary file under server/chunks with a warehouse name fails closed", () => {
+  const root = makeBundleFixture();
+  fs.mkdirSync(path.join(root, ".next", "server", "chunks", "ssr", "warehouse"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, ".next", "server", "chunks", "ssr", "warehouse", "arbitrary_blob.js"),
+    "export default null;",
+  );
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S2: a server chunk without a warehouse name stays outside the name predicate", () => {
+  // Shared chunks are judged by trace attribution, not by name; one whose name
+  // carries no warehouse segment is outside this predicate by design.
+  const root = makeBundleFixture();
+  fs.mkdirSync(path.join(root, ".next", "server", "chunks"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".next", "server", "chunks", "shared-vendor.js"), "// benign");
+  const report = bundleGuard.runBundleGuard({ root, stage: "post-build" });
+  assert.equal(report.result, "PASS");
+});
+
+test("R2-S3: a fake artifact starting with 'page' under an authorized route fails closed", () => {
+  const root = makeBundleFixture();
+  const page = path.join(root, ".next", "server", "app", "(app)", "warehouse", "page_evil.js");
+  fs.mkdirSync(path.dirname(page), { recursive: true });
+  fs.writeFileSync(page, "export default function Page(){return null}");
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S4: a fake artifact 'pageanything' under an authorized route fails closed", () => {
+  const root = makeBundleFixture();
+  const page = path.join(root, ".next", "server", "app", "(app)", "warehouse", "batches", "pageanything");
+  fs.mkdirSync(path.dirname(page), { recursive: true });
+  fs.writeFileSync(page, "malicious");
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S5: PAGE_ARTIFACT_RE rejects spoofed basenames and accepts real page artifacts", () => {
+  for (const bad of ["page_evil.js", "pageanything", "page.ts", "page.js.bak", "pages.js", "PageX"]) {
+    assert.equal(bundleGuard.isPageArtifactName(bad), false, bad);
+  }
+  for (const good of ["page.js", "page.js.map", "page.js.nft.json", "page.rsc.js", "page.meta", "page_client-reference-manifest.js", "page_client-reference-manifest.js.map"]) {
+    assert.equal(bundleGuard.isPageArtifactName(good), true, good);
+  }
+});
+
+test("R2-S6: unauthorized /batches and /custody routes in the manifest fail closed", () => {
+  const root = makeBundleFixture({ routes: ["/page", "/batches", "/custody"] });
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S7: route inventory reconciles 60 functional + 11 F60 + 3 internal = 74", () => {
+  const root = makeBundleFixture();
+  const manifestPath = path.join(root, ".next", "server", "app-paths-manifest.json");
+  const f60 = [
+    "/(app)/warehouse/[section]/page", "/(app)/warehouse/batches/page", "/(app)/warehouse/custody/page",
+    "/(app)/warehouse/equipment/[id]/page", "/(app)/warehouse/equipment/page",
+    "/(app)/warehouse/inventory/[id]/page", "/(app)/warehouse/inventory/page",
+    "/(app)/warehouse/materials/[id]/page", "/(app)/warehouse/materials/page",
+    "/(app)/warehouse/movements/page", "/(app)/warehouse/page",
+  ];
+  const functional = Array.from({ length: 60 }, (_, i) => "/functional/route-" + i);
+  const manifest = Object.fromEntries(
+    [...f60, ...functional, "/_not-found/page", "/_global-error/page", "/favicon.ico/route"].map((r) => [r, "x.js"]),
+  );
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  const report = bundleGuard.runBundleGuard({ root, stage: "post-build" });
+  assert.equal(report.result, "PASS");
+  assert.equal(report.routeInventory.manifestEntries, 74);
+  assert.equal(report.routeInventory.authorizedF60.length, 11);
+  assert.equal(report.routeInventory.preexistingFunctional, 60);
+  assert.deepEqual(report.routeInventory.nextInternal, ["/_global-error/page", "/_not-found/page", "/favicon.ico/route"]);
+});
+
+test("R2-S8: an unknown warehouse route in the manifest fails closed", () => {
+  const root = makeBundleFixture({ routes: ["/", "/warehouse/rogue"] });
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S9: a server chunk proven by an authorized route trace is attributed and passes", () => {
+  const root = makeBundleFixture();
+  const chunkDir = path.join(root, ".next", "server", "chunks", "ssr");
+  fs.mkdirSync(chunkDir, { recursive: true });
+  const chunk = path.join(chunkDir, "some_warehouse_shared_chunk.js");
+  fs.writeFileSync(chunk, "// shared warehouse code");
+  const routeDir = path.join(root, ".next", "server", "app", "(app)", "warehouse", "batches");
+  fs.mkdirSync(routeDir, { recursive: true });
+  const trace = {
+    version: 1,
+    files: ["page.js", path.relative(routeDir, chunk)],
+  };
+  fs.writeFileSync(path.join(routeDir, "page.js.nft.json"), JSON.stringify(trace));
+  const report = bundleGuard.runBundleGuard({ root, stage: "post-build" });
+  assert.equal(report.result, "PASS");
+});
+
+test("R2-S10: the .map of an unproven warehouse chunk still fails closed", () => {
+  const root = makeBundleFixture();
+  const chunkDir = path.join(root, ".next", "server", "chunks", "ssr", "warehouse");
+  fs.mkdirSync(chunkDir, { recursive: true });
+  fs.writeFileSync(path.join(chunkDir, "orphan_chunk.js.map"), "{}");
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S11: unreferenced server/chunks/warehouse_evil_999.js fails closed (G8-2c)", () => {
+  const root = makeBundleFixture();
+  const chunkDir = path.join(root, ".next", "server", "chunks");
+  fs.mkdirSync(chunkDir, { recursive: true });
+  fs.writeFileSync(path.join(chunkDir, "warehouse_evil_999.js"), "export default null;");
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S12: unreferenced server/chunks/warehouse_evil_999.js.map fails closed (G8-2d)", () => {
+  const root = makeBundleFixture();
+  const chunkDir = path.join(root, ".next", "server", "chunks");
+  fs.mkdirSync(chunkDir, { recursive: true });
+  fs.writeFileSync(path.join(chunkDir, "warehouse_evil_999.js.map"), "{}");
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S13: unreferenced Turbopack underscore-flattened SSR chunk fails closed (TURBOPACK_ROGUE_CHUNK)", () => {
+  const root = makeBundleFixture();
+  const chunkDir = path.join(root, ".next", "server", "chunks", "ssr");
+  fs.mkdirSync(chunkDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(chunkDir, "0klw__next-internal_server_app_(app)_warehouse_rogue_page_actions_evil123.js"),
+    "export default null;",
+  );
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("R2-S14: proven Turbopack SSR chunk and .map pass while unproven functions chunk fails", () => {
+  const root = makeBundleFixture();
+  const chunkDir = path.join(root, ".next", "server", "chunks", "ssr");
+  fs.mkdirSync(chunkDir, { recursive: true });
+  const chunk = path.join(chunkDir, "0klw__next-internal_server_app_(app)_warehouse_batches_page_actions_060r6hb.js");
+  fs.writeFileSync(chunk, "// proven action chunk");
+  fs.writeFileSync(`${chunk}.map`, "{}");
+  const routeDir = path.join(root, ".next", "server", "app", "(app)", "warehouse", "batches");
+  fs.mkdirSync(routeDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(routeDir, "page.js.nft.json"),
+    JSON.stringify({ version: 1, files: ["page.js", path.relative(routeDir, chunk)] }),
+  );
+  assert.equal(bundleGuard.runBundleGuard({ root, stage: "post-build" }).result, "PASS");
+
+  // Pre-publish Functions surface must also reject an unproven Turbopack chunk.
+  const site = makeR4Upload(root);
+  const fnChunkDir = path.join(site, "functions", ".next", "server", "chunks", "ssr");
+  fs.mkdirSync(fnChunkDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(fnChunkDir, "0klw__next-internal_server_app_(app)_warehouse_rogue_page_actions_evil123.js"),
+    "export default null;",
+  );
+  expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "pre-publish" }), "E_WAREHOUSE_CONTAMINATION");
+});
+
+test("F05-S1: flattened warehouse tokens outside server/chunks fail closed on client, SSR app, and hosting surfaces", () => {
+  {
+    const root = makeBundleFixture();
+    const dir = path.join(root, ".next", "static", "chunks");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "0klw_warehouse_rogue_client.js"), "export default null;");
+    expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+  }
+  {
+    const root = makeBundleFixture();
+    const dir = path.join(root, ".next", "server", "app", "(app)");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "warehouse_rogue.js"), "export default null;");
+    expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+  }
+  {
+    const root = makeBundleFixture();
+    const site = makeR4Upload(root);
+    const dir = path.join(site, "hosting", "_next", "static", "chunks");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "0klw_warehouse_rogue_hosting.js"), "export default null;");
+    expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "pre-publish" }), "E_WAREHOUSE_CONTAMINATION");
+  }
+  {
+    const root = makeBundleFixture();
+    const site = makeR4Upload(root);
+    const dir = path.join(site, "hosting");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "warehouse_rogue.html"), "<html></html>");
+    expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "pre-publish" }), "E_WAREHOUSE_CONTAMINATION");
+  }
+  {
+    const root = makeBundleFixture();
+    const dir = path.join(root, ".next", "static", "chunks", "app", "(app)", "warehouse");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "rogue_backdoor.js"), "export default null;");
+    expectBundleFailure(() => bundleGuard.runBundleGuard({ root, stage: "post-build" }), "E_WAREHOUSE_CONTAMINATION");
+  }
+});
+
+test("F05-S2: authorized framework route-entry chunks and legitimate non-warehouse tokens pass without false positives", () => {
+  const root = makeBundleFixture();
+  const site = makeR4Upload(root);
+  const nextRouteDir = path.join(root, ".next", "static", "chunks", "app", "(app)", "warehouse", "batches");
+  fs.mkdirSync(nextRouteDir, { recursive: true });
+  fs.writeFileSync(path.join(nextRouteDir, "page-0123456789abcdef.js"), "// authorized route entry");
+  fs.writeFileSync(path.join(nextRouteDir, "page-0123456789abcdef.js.map"), "{}");
+
+  const hostingRouteDir = path.join(site, "hosting", "_next", "static", "chunks", "app", "(app)", "warehouse");
+  fs.mkdirSync(hostingRouteDir, { recursive: true });
+  fs.writeFileSync(path.join(hostingRouteDir, "layout-0123456789abcdef.js"), "// authorized layout entry");
+
+  const otherDir = path.join(root, ".next", "static", "chunks");
+  fs.mkdirSync(otherDir, { recursive: true });
+  fs.writeFileSync(path.join(otherDir, "inventory-legacy-chunk.js"), "// pre-existing inventory");
+  fs.writeFileSync(path.join(otherDir, "warehousekeeper-note.js"), "// substring without token boundary");
+
+  assert.equal(bundleGuard.runBundleGuard({ root, stage: "pre-publish" }).result, "PASS");
 });

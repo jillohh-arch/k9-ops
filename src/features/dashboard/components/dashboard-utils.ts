@@ -430,15 +430,44 @@ export function isActiveRecord(record: Record<string, unknown>) {
   ].includes(status);
 }
 
+const RATIFIED_INSTRUCTOR_ROLES = [
+  "instrutor",
+  "adestrador",
+  "instrutor_k9",
+  "adestrador_k9",
+  "k9_instructor",
+];
+
 export function isK9Instructor(record: Record<string, unknown>) {
+  if (
+    !isActiveRecord(record) ||
+    record.deleted_at != null ||
+    record.archived_at != null
+  ) {
+    return false;
+  }
+
+  if (record.is_k9_instructor === false) {
+    return false;
+  }
+
+  if (record.is_k9_instructor === true) {
+    return true;
+  }
+
+  if (record.is_k9_instructor != null) {
+    return false;
+  }
+
   const roles = asArray(record.roles).map(normalizeText);
 
   return (
-    record.is_k9_instructor === true ||
     record.training_instructor === true ||
-    normalizeText(record.training_role) === "instrutor_k9" ||
-    normalizeText(record.role) === "instrutor_k9" ||
-    roles.includes("instrutor_k9")
+    record.instrutor_k9 === true ||
+    record.instrutor === true ||
+    record.adestrador === true ||
+    RATIFIED_INSTRUCTOR_ROLES.includes(normalizeText(record.training_role)) ||
+    roles.some((role) => RATIFIED_INSTRUCTOR_ROLES.includes(role))
   );
 }
 
@@ -660,7 +689,7 @@ export function detectUserProfile(profile: {
 }): import("./dashboard-types").UserProfile {
   const roles = profile.roles ?? [];
   const claims = profile.claims ?? {};
-  const isInstructor = profile.isK9Instructor === true || roles.includes("instrutor_k9") || claims.instrutor_k9 === true;
+  const isInstructor = profile.isK9Instructor === true;
   const isAdmin = roles.includes("admin") || roles.includes("administrador") || claims.admin === true;
   const isGestor = roles.some((r) => ["gestor", "comando", "subinspetor", "inspetor", "coordenador"].includes(r));
 

@@ -13,7 +13,10 @@
     "site": "canil-gcm",
     "source": ".",
     "predeploy": [
-      "node scripts/ct4-web-p0-production-bundle-guard.cjs --stage pre-publish --root ."
+      "node scripts/ct4-web-p0-firebase-upload-boundary.cjs assert-active --root .",
+      "node scripts/ct4-web-p0-production-bundle-guard.cjs --stage pre-publish --root .",
+      "node scripts/ct4-web-p0-g8-payload-manifest.cjs build --mode firebase-predeploy --root . --from-env --out .firebase/canil-gcm-g8-predeploy-manifest.json",
+      "node scripts/ct4-web-p0-g8-payload-manifest.cjs validate --mode firebase-predeploy --root . --from-env --manifest .firebase/canil-gcm-g8-predeploy-manifest.json"
     ],
     "ignore": [
       "firebase.json",

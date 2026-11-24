@@ -387,6 +387,15 @@ const WAREHOUSE_ROUTE_PATTERNS = [
 ];
 
 /**
+ * Turbopack flattens path separators in shared server chunk filenames using
+ * underscores (e.g. `0klw__next-internal_server_app_(app)_warehouse_batches_page_actions_...js`)
+ * or hyphens/dots. Any shared server chunk carrying a token-delimited
+ * warehouse/batches/custody segment MUST be proven by `collectAuthorizedChunkProof`.
+ */
+const SHARED_SERVER_CHUNK_WAREHOUSE_PATTERN =
+  /(^|[\\/._-])(warehouse|batches|custody)([\\/._-]|$)/i;
+
+/**
  * Directories that are never uploaded by ANY Firebase surface.
  *
  * `node_modules` is excluded from a Functions source upload by the CLI default
@@ -817,6 +826,23 @@ function routeListFromManifest(dir) {
   return routes;
 }
 
+/** Read every real Next app route, including internal routes for inventory. */
+function routeEntriesFromManifest(dir) {
+  const candidates = [
+    path.join(dir, "server", "app-paths-manifest.json"),
+    path.join(dir, "server", "app", "app-paths-manifest.json"),
+    path.join(dir, "app-paths-manifest.json"),
+  ];
+  const routes = new Set();
+  for (const file of candidates) {
+    const parsed = readJson(file);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const route of Object.keys(parsed)) routes.add(route);
+    }
+  }
+  return [...routes];
+}
+
 /**
  * Pre-existing base routes that are NOT F60 Warehouse. These exist in S1
  * (commit a394b24) and must never trigger E_WAREHOUSE_CONTAMINATION.
@@ -829,25 +855,267 @@ const BASE_ROUTE_ALLOWLIST = new Set([
   "/humans/movements",
 ]);
 
+/**
+ * Exact 11 F60 Warehouse routes authorized under OD-02 Option B.
+ * Any 12th or unknown warehouse/batches/custody route MUST fail closed.
+ */
+const AUTHORIZED_F60_ROUTES = new Set([
+  "/warehouse",
+  "/warehouse/[section]",
+  "/warehouse/batches",
+  "/warehouse/custody",
+  "/warehouse/equipment",
+  "/warehouse/equipment/[id]",
+  "/warehouse/inventory",
+  "/warehouse/inventory/[id]",
+  "/warehouse/materials",
+  "/warehouse/materials/[id]",
+  "/warehouse/movements",
+  "/(app)/warehouse/page",
+  "/(app)/warehouse/[section]/page",
+  "/(app)/warehouse/batches/page",
+  "/(app)/warehouse/custody/page",
+  "/(app)/warehouse/equipment/page",
+  "/(app)/warehouse/equipment/[id]/page",
+  "/(app)/warehouse/inventory/page",
+  "/(app)/warehouse/inventory/[id]/page",
+  "/(app)/warehouse/materials/page",
+  "/(app)/warehouse/materials/[id]/page",
+  "/(app)/warehouse/movements/page",
+]);
+
+const AUTHORIZED_F60_SUBDIRS = new Set([
+  "",
+  "[section]",
+  "batches",
+  "custody",
+  "equipment",
+  "equipment/[id]",
+  "inventory",
+  "inventory/[id]",
+  "materials",
+  "materials/[id]",
+  "movements",
+]);
+
+const AUTHORIZED_F60_SOURCE_PAGES = new Set(
+  [...AUTHORIZED_F60_SUBDIRS].map((sub) =>
+    sub ? `src/app/(app)/warehouse/${sub}/page.tsx` : "src/app/(app)/warehouse/page.tsx",
+  ),
+);
+
+function normalizeSlashPath(p) {
+  return String(p || "").replace(/\\/g, "/");
+}
+
+/** Per-route metadata Next writes into `<route>/page/` next to `page.js`. */
+const ROUTE_METADATA_FILES = new Set([
+  "app-paths-manifest.json",
+  "build-manifest.json",
+  "next-font-manifest.json",
+  "react-loadable-manifest.json",
+  "server-reference-manifest.json",
+]);
+
+/**
+ * Compiled page-entry artifact basename. Turbopack emits `page.js` plus its
+ * sidecars (`page.js.map`, `page.js.nft.json`, `page.rsc.js`, `page.meta`) and
+ * the `page_client-reference-manifest.js` variant. An artifact that merely
+ * BEGINS with "page" (e.g. `page_evil.js`, `pageanything`, `page.ts`) is not
+ * a Next page entry and must not be authorized.
+ */
+const PAGE_ARTIFACT_RE = /^page(\.js(\.map|\.nft\.json)?|\.rsc\.js|\.meta)?$/i;
+const PAGE_CLIENT_REFERENCE_RE = /^page_client-reference-manifest\.js(\.map)?$/i;
+
+/** True only for a real Next page-entry artifact basename. */
+function isPageArtifactName(name) {
+  return PAGE_ARTIFACT_RE.test(name) || PAGE_CLIENT_REFERENCE_RE.test(name);
+}
+
+/**
+ * Server chunks are SHARED by many routes. Their name does not identify the
+ * route that owns the code inside them, and `page.js.nft.json` lists them by
+ * resolved path rather than by shipped module, so no per-name attribution is
+ * sound. They are authorized only when a manifest PROVES the exact file is an
+ * input of one of the 11 authorized F60 routes (see
+ * collectAuthorizedChunkProof). Anything else under these prefixes matching a
+ * warehouse segment fails closed.
+ */
+const SHARED_SERVER_CHUNK_PREFIXES = [
+  "server/chunks/",
+  ".next/server/chunks/",
+];
+
+/**
+ * Explicit allowlist of client route-entry chunk file names (webpack/Next app-router style)
+ * that may live directly inside an authorized F60 route directory. Anything else (for example
+ * `rogue_backdoor.js`) is unattributed and fails closed.
+ */
+const AUTHORIZED_CLIENT_ROUTE_CHUNK_LEAF =
+  /^(?:page|layout|loading|error|template|not-found|default)-[0-9a-f]{8,32}\.js(?:\.map)?$/;
+
+function isSharedServerChunkPath(norm) {
+  return SHARED_SERVER_CHUNK_PREFIXES.some((prefix) => norm.startsWith(prefix));
+}
+
+/**
+ * Which server chunks may ship because an AUTHORIZED F60 route really
+ * depends on them.
+ *
+ * Proof source: Next writes `page.js.nft.json` per route, listing every file
+ * that route needs, by path relative to the route directory. A chunk is
+ * attributed to a route only when that route is one of the exact 11 AND its
+ * trace resolves to the chunk on disk. The trace is what ties a shared,
+ * hash-named chunk to a route; the chunk name alone proves nothing.
+ *
+ * A `.map` sidecar is accepted only when its `.js` sibling is proven: the map
+ * describes the same module, so it cannot introduce different code.
+ */
+function collectAuthorizedChunkProof(output, surface) {
+  const proof = new Set();
+  const appRoot =
+    surface === "functions"
+      ? path.join(output.dir, ".next", "server", "app")
+      : path.join(output.dir, "server", "app");
+  const warehouseRoot = path.join(appRoot, "(app)", "warehouse");
+  if (!exists(warehouseRoot)) return proof;
+
+  for (const sub of AUTHORIZED_F60_SUBDIRS) {
+    const routeDir = sub ? path.join(warehouseRoot, sub) : warehouseRoot;
+    const traceFile = path.join(routeDir, "page.js.nft.json");
+    const parsed = readJson(traceFile);
+    if (!parsed || !Array.isArray(parsed.files)) continue;
+    for (const rel of parsed.files) {
+      if (typeof rel !== "string") continue;
+      const absolute = path.resolve(routeDir, rel);
+      proof.add(canonicalSlash(absolute));
+      if (absolute.endsWith(".js")) proof.add(canonicalSlash(`${absolute}.map`));
+    }
+  }
+  return proof;
+}
+
+function canonicalSlash(file) {
+  return path.resolve(file).replace(/\\/g, "/").toLowerCase();
+}
+
+function isAuthorizedF60ArtifactPath(insideTree, surface, evidence) {
+  const norm = normalizeSlashPath(insideTree);
+  if (surface === "next" || surface === "functions") {
+    const serverPrefix = surface === "functions" ? ".next/server/app/(app)/warehouse" : "server/app/(app)/warehouse";
+    if (norm === serverPrefix || norm.startsWith(`${serverPrefix}/`)) {
+      const rest = norm.slice(serverPrefix.length).replace(/^\/+/, "");
+      const parts = rest.split("/");
+      if (parts.length === 1 && isPageArtifactName(parts[0])) return true;
+      if (parts.length === 2 && parts[0] === "page" && ROUTE_METADATA_FILES.has(parts[1])) return true;
+      if (parts.length === 2 && AUTHORIZED_F60_SUBDIRS.has(parts[0]) && isPageArtifactName(parts[1])) return true;
+      if (parts.length === 3 && AUTHORIZED_F60_SUBDIRS.has(parts[0]) && parts[1] === "page" && ROUTE_METADATA_FILES.has(parts[2])) return true;
+      if (parts.length === 3 && AUTHORIZED_F60_SUBDIRS.has(`${parts[0]}/${parts[1]}`) && isPageArtifactName(parts[2])) return true;
+      if (parts.length === 4 && AUTHORIZED_F60_SUBDIRS.has(`${parts[0]}/${parts[1]}`) && parts[2] === "page" && ROUTE_METADATA_FILES.has(parts[3])) return true;
+      return false;
+    }
+    const staticPrefix = surface === "functions" ? ".next/static/chunks/app/(app)/warehouse/" : "static/chunks/app/(app)/warehouse/";
+    if (norm.startsWith(staticPrefix)) {
+      const rest = norm.slice(staticPrefix.length);
+      const dir = rest.includes("/") ? rest.slice(0, rest.lastIndexOf("/")) : "";
+      // F05: a file inside an authorized route dir is NOT authorized by location alone.
+      // Only framework-named route entry chunks (`page-<hash>.js`, `layout-<hash>.js`, ...) pass.
+      const leaf = rest.includes("/") ? rest.slice(rest.lastIndexOf("/") + 1) : rest;
+      if ((dir === "" || AUTHORIZED_F60_SUBDIRS.has(dir)) && AUTHORIZED_CLIENT_ROUTE_CHUNK_LEAF.test(leaf)) return true;
+      return false;
+    }
+    // Server chunks are shared and hash-named. Authorize one only when an
+    // authorized route trace (or a trace of its .js sibling) proves the exact
+    // file on disk. Anything else fails closed.
+    if (isSharedServerChunkPath(norm) && evidence && evidence.chunks && evidence.absolutePath) {
+      return evidence.chunks.has(canonicalSlash(evidence.absolutePath));
+    }
+  }
+  if (surface === "hosting") {
+    if (norm === "warehouse.html" || norm === "warehouse.rsc" || norm === "warehouse/index.html") return true;
+    if (norm.startsWith("warehouse/")) {
+      const rest = norm.slice("warehouse/".length);
+      for (const sub of AUTHORIZED_F60_SUBDIRS) {
+        if (!sub) continue;
+        if (rest === `${sub}.html` || rest === `${sub}.rsc` || rest === `${sub}/index.html`) return true;
+      }
+      return false;
+    }
+    if (norm.startsWith("_next/static/chunks/app/(app)/warehouse/")) {
+      const rest = norm.slice("_next/static/chunks/app/(app)/warehouse/".length);
+      const dir = rest.includes("/") ? rest.slice(0, rest.lastIndexOf("/")) : "";
+      const leaf = rest.includes("/") ? rest.slice(rest.lastIndexOf("/") + 1) : rest;
+      if ((dir === "" || AUTHORIZED_F60_SUBDIRS.has(dir)) && AUTHORIZED_CLIENT_ROUTE_CHUNK_LEAF.test(leaf)) return true;
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Internal Next.js runtime routes: Next generates these itself and they have
+ * no page.tsx of their own. `/page` is NOT internal — it is the app root
+ * (`src/app/page.tsx`).
+ */
+const NEXT_INTERNAL_ROUTES = new Set([
+  "/_not-found/page",
+  "/_global-error/page",
+  "/favicon.ico/route",
+]);
+
+/**
+ * Reconcile the delivered app-paths manifest into three named buckets: the 11
+ * authorized F60 routes, pre-existing functional routes, and Next internals.
+ * Every entry that does not land in a bucket is listed by name so the counts
+ * cannot drift silently. 71 = 60 + 11 is a claim about functional routes only;
+ * the manifest additionally carries the Next internals, so its total is
+ * higher by exactly those.
+ */
+function reconcileRouteInventory(outputs) {
+  const seen = new Set();
+  const f60 = new Set();
+  const internal = new Set();
+  const base = new Set();
+  for (const output of outputs) {
+    const manifestDir = output.kind === "next" ? output.dir : path.join(output.dir, ".next");
+    if (!exists(manifestDir)) continue;
+    for (const route of routeEntriesFromManifest(manifestDir)) {
+      seen.add(route);
+      if (AUTHORIZED_F60_ROUTES.has(route)) f60.add(route);
+      else if (NEXT_INTERNAL_ROUTES.has(route)) internal.add(route);
+      else base.add(route);
+    }
+  }
+  return {
+    manifestEntries: seen.size,
+    authorizedF60: [...f60].sort(),
+    preexistingFunctional: base.size,
+    nextInternal: [...internal].sort(),
+  };
+}
+
 function detectWarehouseRoutes(root, outputs) {
   const hits = [];
 
-  // 1. Source-tree: only src/features/warehouse is definitive F60 presence.
-  const warehouseSrc = path.join(root, "src", "features", "warehouse");
-  if (exists(warehouseSrc)) hits.push({ where: "src/features/warehouse", kind: "source" });
+  // 1. Source-tree: src/features/warehouse is authorized under OD-02 Option B.
 
-  // 2. Source app routes — only match WAREHOUSE_ROUTE_PATTERNS (no inventory/movements).
+  // 2. Source app routes — only exact 11 F60 pages under src/app/(app)/warehouse are authorized.
   const warehouseApp = path.join(root, "src", "app");
   if (exists(warehouseApp)) {
     walk(warehouseApp, (entry) => {
-      if (entry.isDir && entry.name.toLowerCase() === "warehouse") {
-        hits.push({ where: path.relative(root, entry.path), kind: "source-route-dir" });
+      const rel = normalizeSlashPath(path.relative(root, entry.path));
+      if (entry.isDir && entry.name.toLowerCase() === "warehouse" && rel !== "src/app/(app)/warehouse") {
+        hits.push({ where: rel, kind: "source-route-dir" });
       }
       // Test the path RELATIVE to the candidate. Testing the absolute path
       // makes any checkout whose own location contains "warehouse", "batches"
       // or "custody" fail on a perfectly clean tree.
-      if (!entry.isDir && WAREHOUSE_ROUTE_PATTERNS.some((re) => re.test(path.relative(root, entry.path)))) {
-        hits.push({ where: path.relative(root, entry.path), kind: "source-route" });
+      if (
+        !entry.isDir &&
+        WAREHOUSE_ROUTE_PATTERNS.some((re) => re.test(rel)) &&
+        !AUTHORIZED_F60_SOURCE_PAGES.has(rel)
+      ) {
+        hits.push({ where: rel, kind: "source-route" });
       }
     });
   }
@@ -863,13 +1131,18 @@ function detectWarehouseRoutes(root, outputs) {
     const manifestDir = output.kind === "next" ? output.dir : path.join(output.dir, ".next");
     if (exists(manifestDir)) {
       for (const route of routeListFromManifest(manifestDir)) {
-        if (BASE_ROUTE_ALLOWLIST.has(route)) continue;
+        if (BASE_ROUTE_ALLOWLIST.has(route) || AUTHORIZED_F60_ROUTES.has(route)) continue;
         if (WAREHOUSE_ROUTE_PATTERNS.some((re) => re.test(route))) {
           hits.push({ where: `${path.relative(root, manifestDir)}${route}`, kind: "manifest-route" });
         }
       }
     }
 
+    const surface = surfaceFor(output);
+    const evidence = {
+      chunks: collectAuthorizedChunkProof(output, surface),
+      absolutePath: null,
+    };
     walk(output.dir, (entry) => {
       if (entry.isDir) return;
       const rel = path.relative(root, entry.path);
@@ -881,8 +1154,24 @@ function detectWarehouseRoutes(root, outputs) {
       // dot-file rule: Hosting excludes dot-directories, Functions does not. Judging it
       // per surface removes the `node_modules`/dot-dir false positive without
       // blinding the guard to a Warehouse page that really is uploaded.
-      if (isUnpublishedPath(insideTree, surfaceFor(output))) return;
-      if (WAREHOUSE_ROUTE_PATTERNS.some((re) => re.test(rel))) {
+      if (isUnpublishedPath(insideTree, surface)) return;
+      evidence.absolutePath = entry.path;
+      const normInside = normalizeSlashPath(insideTree);
+      // F05 (NEON-FINDINGS-CLOSURE-R1): the token-delimited pattern covers EVERY delivered
+      // surface (client static chunks, hosting root/_next, SSR app dir, server chunks), because
+      // Turbopack/hosting names may be flattened with `_`, `-` or `.` instead of `/`.
+      // It runs on the path INSIDE the delivered tree (never on the repo-relative path, which
+      // would match the checkout directory name). Slash-segment patterns keep their repo-relative
+      // behaviour for non-chunk artifacts. Legitimate files are NOT excluded by name: they must be
+      // authorized by explicit allowlist or by route-trace proof in isAuthorizedF60ArtifactPath.
+      const matchesWarehouse = isSharedServerChunkPath(normInside)
+        ? SHARED_SERVER_CHUNK_WAREHOUSE_PATTERN.test(normInside)
+        : SHARED_SERVER_CHUNK_WAREHOUSE_PATTERN.test(normInside) ||
+          WAREHOUSE_ROUTE_PATTERNS.some((re) => re.test(rel));
+      if (
+        matchesWarehouse &&
+        !isAuthorizedF60ArtifactPath(insideTree, surface, evidence)
+      ) {
         hits.push({ where: rel, kind: "artifact-entrypoint" });
       }
     });
@@ -1479,8 +1768,8 @@ function runBundleGuard(options) {
   if (warehouseHits.length > 0) {
     throw new BundleGuardFailure(
       "E_WAREHOUSE_CONTAMINATION",
-      "F60 Warehouse footprint detected in the candidate or its artifact. " +
-        "Warehouse is out of scope for this gate.",
+      "F60 Warehouse footprint detected outside the exact 11 routes authorized " +
+        "by OD-02 Option B, or an artifact that cannot be attributed to one of them.",
       { hits: warehouseHits.slice(0, 10) },
     );
   }
@@ -1656,6 +1945,7 @@ function runBundleGuard(options) {
     buildIds: [...buildIds],
     outputs: perOutput,
     warehouseHits: 0,
+    routeInventory: reconcileRouteInventory(outputs),
     identitySelection: selection,
     identityProofScope: stage === "post-build" ? "compiled-next-output" : "firebase-upload-tree",
   };
@@ -1663,12 +1953,19 @@ function runBundleGuard(options) {
 
 module.exports = {
   BundleGuardFailure,
+  PAGE_ARTIFACT_RE,
+  PAGE_CLIENT_REFERENCE_RE,
+  isPageArtifactName,
+  ROUTE_METADATA_FILES,
+  NEXT_INTERNAL_ROUTES,
   PRODUCTION_MARKERS,
   PRODUCTION_PROJECT_ID,
   STAGING_MARKERS,
   STAGING_PROJECT_ID,
   classifyStagingTuples,
   detectWarehouseRoutes,
+  isAuthorizedF60ArtifactPath,
+  isSharedServerChunkPath,
   discoverOutputs,
   extractEnvSelectionObjects,
   forEachTextFile,
@@ -1712,7 +2009,11 @@ function main(argv) {
       console.log(`CT4 WEB-P0 bundle guard [${stage}]: PASS`);
       console.log(`  build id: ${report.buildIds.length === 0 ? "(not carried by this tree)" : report.buildIds.join(", ")}`);
       console.log(`  outputs: ${report.outputs.map((o) => `${o.kind}${o.site ? `:${o.site}` : ""}`).join(", ")}`);
-      console.log(`  warehouse routes: 0`);
+      const inventory = report.routeInventory;
+      console.log(
+        `  routes: manifest=${inventory.manifestEntries} f60=${inventory.authorizedF60.length}` +
+        ` preexisting=${inventory.preexistingFunctional} internal=${inventory.nextInternal.length}`,
+      );
       console.log(`  identity: verdict=${report.identitySelection.verdict}` +
         ` keyedLiterals=${report.identitySelection.keyedIdentityLiterals}` +
         ` keyedViolations=${report.identitySelection.keyedViolations.length}` +

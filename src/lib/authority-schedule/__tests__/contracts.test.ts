@@ -1,0 +1,1 @@
+import { describe, expect, it } from "vitest"; import { SELF_REGULARIZE, EXCEPTIONALLY_RECONCILE } from "../capabilities"; describe("contracts",()=>it("keeps ratified identifiers exact",()=>expect([SELF_REGULARIZE,EXCEPTIONALLY_RECONCILE]).toEqual(["vehicles.self_regularize_prior_occupancy","vehicles.exceptionally_reconcile_operational_engagement"])));

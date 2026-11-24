@@ -83,6 +83,10 @@ jobs:
   validate:
     name: Validate release candidate
     runs-on: ubuntu-latest
+    outputs:
+      validated_commit: ${{ steps.binding_outputs.outputs.validated_commit }}
+      validated_tree: ${{ steps.binding_outputs.outputs.validated_tree }}
+      validated_identity_digest: ${{ steps.binding_outputs.outputs.validated_identity_digest }}
     # Single, explicit, reproducible source of the production identity.
     env:
       NEXT_PUBLIC_APP_ENV: production
@@ -107,16 +111,25 @@ jobs:
           SHA='${{ inputs.sha }}'
           echo "Requested mode:        ${{ inputs.mode }}"
           echo "Requested release SHA: ${SHA}"
+          if ! [[ "${SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Requested SHA must be a full 40-character lowercase hex commit SHA."
+            exit 1
+          fi
           git fetch --no-tags origin master
           if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
             echo "::error::SHA ${SHA} does not exist in this repository."
+            exit 1
+          fi
+          RESOLVED_SHA="$(git rev-parse "${SHA}^{commit}")"
+          if [ "${RESOLVED_SHA}" != "${SHA}" ]; then
+            echo "::error::Resolved commit ${RESOLVED_SHA} differs from requested SHA ${SHA}."
             exit 1
           fi
           if ! git merge-base --is-ancestor "${SHA}" origin/master; then
             echo "::error::SHA ${SHA} is not an ancestor of origin/master. Only integrated commits may be released."
             exit 1
           fi
-          echo "Resolved commit: $(git rev-parse "${SHA}")"
+          echo "Resolved commit: ${RESOLVED_SHA}"
           echo "origin/master:   $(git rev-parse origin/master)"
           echo "SHA is integrated in master."
 
@@ -131,12 +144,21 @@ jobs:
       - name: Production guards self-test
         run: node --test scripts/ct4-web-p0-production-guards.test.cjs
 
+      - name: G8 payload manifest self-test
+        run: node --test scripts/ct4-web-p0-g8-payload-manifest.test.cjs
+
       # PRE-BUILD: nothing below may build until the effective identity is proven.
       - name: Production identity guard (PRE-BUILD)
         run: node scripts/ct4-web-p0-production-env-guard.cjs --stage pre-build --root .
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify pinned Firebase CLI integrity
+        run: node scripts/ct4-web-p0-firebase-upload-boundary.cjs verify-cli --root .
+
+      - name: Firebase upload boundary self-test
+        run: node --test scripts/ct4-web-p0-firebase-upload-boundary.test.cjs
 
       - name: Typecheck
         run: npm run typecheck
@@ -167,6 +189,29 @@ jobs:
       - name: Production bundle guard (POST-BUILD)
         run: node scripts/ct4-web-p0-production-bundle-guard.cjs --stage post-build --root .
 
+      - name: Emit validated binding outputs
+        id: binding_outputs
+        run: |
+          set -euo pipefail
+          IDENTITY_DIGEST="$(node -e '
+            const g8 = require("./scripts/ct4-web-p0-g8-payload-manifest.cjs");
+            const digest = g8.computeIdentityDigest({
+              projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+              apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+              authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+              storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+              messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+              appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+              measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+            });
+            process.stdout.write(digest);
+          ')"
+          {
+            echo "validated_commit=$(git rev-parse HEAD)"
+            echo "validated_tree=$(git rev-parse HEAD^{tree})"
+            echo "validated_identity_digest=${IDENTITY_DIGEST}"
+          } >> "$GITHUB_OUTPUT"
+
   release:
     name: ${{ inputs.mode == 'release' && 'Release to production' || 'Auth check (read-only)' }}
     needs: validate
@@ -174,8 +219,8 @@ jobs:
     environment:
       name: production
       url: https://canil-gcm.web.app
-    # The Firebase CLI's internal `next build` inherits this block, so the
-    # rebuild cannot select a different project than the validated one.
+    # The Firebase CLI's internal rebuild inherits this block, so it cannot
+    # select a different project than the validated one.
     env:
       NEXT_PUBLIC_APP_ENV: production
       NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
@@ -190,7 +235,7 @@ jobs:
       - name: Checkout requested SHA
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.sha }}
+          ref: ${{ needs.validate.outputs.validated_commit }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -198,11 +243,51 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Verify commit, tree, and identityDigest parity with validate job
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          TREE_SHA="$(git rev-parse HEAD^{tree})"
+          IDENTITY_DIGEST="$(node -e '
+            const g8 = require("./scripts/ct4-web-p0-g8-payload-manifest.cjs");
+            const digest = g8.computeIdentityDigest({
+              projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+              apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+              authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+              storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+              messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+              appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+              measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+            });
+            process.stdout.write(digest);
+          ')"
+          if [ "${HEAD_SHA}" != "${{ needs.validate.outputs.validated_commit }}" ]; then
+            echo "::error::Commit drift between validate (${{ needs.validate.outputs.validated_commit }}) and release (${HEAD_SHA})."
+            exit 1
+          fi
+          if [ "${TREE_SHA}" != "${{ needs.validate.outputs.validated_tree }}" ]; then
+            echo "::error::Tree drift between validate (${{ needs.validate.outputs.validated_tree }}) and release (${TREE_SHA})."
+            exit 1
+          fi
+          if [ "${IDENTITY_DIGEST}" != "${{ needs.validate.outputs.validated_identity_digest }}" ]; then
+            echo "::error::Firebase identityDigest drift between validate and release jobs."
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
       - name: Production guards self-test
         run: node --test scripts/ct4-web-p0-production-guards.test.cjs
+
+      - name: G8 payload manifest self-test
+        run: node --test scripts/ct4-web-p0-g8-payload-manifest.test.cjs
+
+      - name: Verify pinned Firebase CLI integrity
+        run: node scripts/ct4-web-p0-firebase-upload-boundary.cjs verify-cli --root .
+
+      - name: Firebase upload boundary self-test
+        run: node --test scripts/ct4-web-p0-firebase-upload-boundary.test.cjs
 
       - name: Production identity guard (PRE-BUILD)
         run: node scripts/ct4-web-p0-production-env-guard.cjs --stage pre-build --root .
@@ -268,46 +353,171 @@ jobs:
           fi
           rm -f sites.json
 
+      - name: Export G8 predeploy binding context
+        run: |
+          set -euo pipefail
+          {
+            echo "CT4_GIT_COMMIT_SHA=$(git rev-parse HEAD)"
+            echo "CT4_GIT_TREE_SHA=$(git rev-parse HEAD^{tree})"
+            echo "CT4_FIREBASE_SITE=canil-gcm"
+            echo "CT4_FIREBASE_CLI_VERSION=15.25.1"
+          } >> "$GITHUB_ENV"
+
       # ---- mutation: gated hard on mode == release ----
 
-      # No explicit build here: `firebase deploy` builds the app itself. The
-      # artifact THAT build produces is audited by PRE-PUBLISH — `hosting.predeploy`
-      # in firebase.json, which the CLI runs after its rebuild and right before
-      # upload. Building here would only audit an artifact the CLI discards.
       - name: Deploy Hosting
+        id: deploy
         if: ${{ inputs.mode == 'release' }}
         run: |
-          npx --no-install firebase deploy \
+          node scripts/ct4-web-p0-firebase-upload-boundary.cjs exec \
+            --root . \
+            --from-env \
+            --predeploy-manifest .firebase/canil-gcm-g8-predeploy-manifest.json \
+            --attestation-out .firebase/canil-gcm-g8-upload-attestation.json \
+            --verify-git \
+            -- firebase deploy \
             --only hosting \
             --project canil-gcm \
             --non-interactive
+
+      - name: Revalidate G8 predeploy manifest and upload attestation
+        id: revalidate
+        if: ${{ inputs.mode == 'release' && steps.deploy.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          MANIFEST_PATH=".firebase/canil-gcm-g8-predeploy-manifest.json"
+          ATTEST_PATH=".firebase/canil-gcm-g8-upload-attestation.json"
+          if [ ! -f "${MANIFEST_PATH}" ]; then
+            echo "::error::G8 predeploy manifest ${MANIFEST_PATH} is missing after deploy."
+            exit 1
+          fi
+          if [ ! -f "${ATTEST_PATH}" ]; then
+            echo "::error::G8 upload boundary attestation ${ATTEST_PATH} is missing after deploy."
+            exit 1
+          fi
+          node scripts/ct4-web-p0-g8-payload-manifest.cjs validate \
+            --mode firebase-predeploy \
+            --root . \
+            --from-env \
+            --verify-git \
+            --manifest "${MANIFEST_PATH}" > g8-predeploy-validation.json
+          node scripts/ct4-web-p0-firebase-upload-boundary.cjs validate \
+            --root . \
+            --from-env \
+            --verify-git \
+            --require-release-complete \
+            --predeploy-manifest "${MANIFEST_PATH}" \
+            --attestation "${ATTEST_PATH}" > g8-upload-validation.json
+          MANIFEST_SHA256="$(sha256sum "${MANIFEST_PATH}" | awk '{print $1}')"
+          ATTEST_SHA256="$(sha256sum "${ATTEST_PATH}" | awk '{print $1}')"
+          {
+            echo "CT4_G8_PREDEPLOY_MANIFEST_SHA256=${MANIFEST_SHA256}"
+            echo "CT4_G8_UPLOAD_ATTESTATION_SHA256=${ATTEST_SHA256}"
+            python3 - <<'PY'
+          import json
+          pre = json.load(open("g8-predeploy-validation.json", encoding="utf-8"))
+          att = json.load(open("g8-upload-validation.json", encoding="utf-8"))
+          print("CT4_G8_PREDEPLOY_MANIFEST_DIGEST=" + pre["digest"])
+          print("CT4_G8_PREDEPLOY_BUILD_ID=" + pre["binding"]["buildId"])
+          print("CT4_G8_UPLOAD_ATTESTATION_DIGEST=" + att["digest"])
+          print("CT4_G8_RAW_SURFACE_DIGEST=" + att["rawSurfaceDigest"])
+          print("CT4_G8_FUNCTIONS_ARCHIVE_SHA256=" + att["functionsArchiveSha256"])
+          PY
+          } >> "$GITHUB_ENV"
+          rm -f g8-predeploy-validation.json g8-upload-validation.json
+
+      - name: Upload forensic G8 manifests
+        id: upload_forensic
+        if: ${{ always() && inputs.mode == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: g8-upload-attestation-canil-gcm-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .firebase/canil-gcm-g8-predeploy-manifest.json
+            .firebase/canil-gcm-g8-upload-attestation.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Enforce fail-closed G8 attestation and artifact upload on release success
+        if: ${{ inputs.mode == 'release' && steps.deploy.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.revalidate.outcome }}" != "success" ]; then
+            echo "::error::G8 manifest/attestation revalidation did not succeed."
+            exit 1
+          fi
+          if [ "${{ steps.upload_forensic.outcome }}" != "success" ]; then
+            echo "::error::Forensic artifact upload failed on a successful deploy."
+            exit 1
+          fi
+          if [ ! -f ".firebase/canil-gcm-g8-predeploy-manifest.json" ] || [ ! -f ".firebase/canil-gcm-g8-upload-attestation.json" ]; then
+            echo "::error::Required G8 manifest or upload attestation file missing after deploy."
+            exit 1
+          fi
 
       - name: Record provenance
         if: ${{ always() }}
         run: |
           set -euo pipefail
+          RESOLVED_SHA="$(git rev-parse HEAD 2>/dev/null || echo unavailable)"
+          MODE="${{ inputs.mode }}"
+          DEPLOY_OUTCOME="${{ steps.deploy.outcome }}"
+          REVAL_OUTCOME="${{ steps.revalidate.outcome }}"
+          UPLOAD_OUTCOME="${{ steps.upload_forensic.outcome }}"
+          if [ "${MODE}" != "release" ]; then
+            RELEASE_OUTCOME="AUTH_CHECK_READ_ONLY"
+            PROD_MUTATION="NO"
+            DEPLOY_STEP_STATUS="SKIPPED"
+          elif [ "${DEPLOY_OUTCOME}" = "success" ] && [ "${REVAL_OUTCOME}" = "success" ] && [ "${UPLOAD_OUTCOME}" = "success" ]; then
+            RELEASE_OUTCOME="RELEASED_AND_ATTESTED"
+            PROD_MUTATION="YES (Hosting + ssrcanilgcm)"
+            DEPLOY_STEP_STATUS="EXECUTED"
+          elif [ "${DEPLOY_OUTCOME}" = "success" ]; then
+            RELEASE_OUTCOME="RELEASED_ATTESTATION_INCOMPLETE"
+            PROD_MUTATION="YES (ATTESTATION_OR_ARTIFACT_FAILED)"
+            DEPLOY_STEP_STATUS="EXECUTED_UNATTESTED"
+          elif [ ! -f ".firebase/canil-gcm-g8-predeploy-manifest.json" ]; then
+            RELEASE_OUTCOME="PRE_DEPLOY_ABORT_NO_MUTATION"
+            PROD_MUTATION="NO_PREDEPLOY_ABORT"
+            DEPLOY_STEP_STATUS="FAILED_BEFORE_UPLOAD"
+          else
+            RELEASE_OUTCOME="MID_DEPLOY_FAILURE_OR_CANCELLED_INCIDENT"
+            PROD_MUTATION="INDETERMINATE_MID_DEPLOY_FAILURE"
+            DEPLOY_STEP_STATUS="FAILED_OR_CANCELLED"
+          fi
           {
-            echo "## Production Web ${{ inputs.mode }}"
+            echo "## Production Web ${MODE}"
             echo
             echo "| Field | Value |"
             echo "| --- | --- |"
-            echo "| Mode | \`${{ inputs.mode }}\` |"
+            echo "| Outcome classification | \`${RELEASE_OUTCOME}\` |"
+            echo "| Mode | \`${MODE}\` |"
             echo "| Requested SHA | \`${{ inputs.sha }}\` |"
-            echo "| Resolved SHA | \`$(git rev-parse HEAD)\` |"
+            echo "| Resolved SHA | \`${RESOLVED_SHA}\` |"
+            echo "| Tree SHA | \`${CT4_GIT_TREE_SHA:-unknown}\` |"
             echo "| Firebase project | \`canil-gcm\` |"
             echo "| Hosting site | \`canil-gcm\` |"
             echo "| Frameworks backend | \`ssrcanilgcm\` (southamerica-east1) |"
             echo "| Identity source | job env (no dotenv file) |"
-            echo "| Guards | PRE-BUILD + POST-BUILD + PRE-PUBLISH (predeploy) |"
+            echo "| Guards | PRE-BUILD + POST-BUILD + PRE-PUBLISH (assert-active + bundle-guard + g8-predeploy) + UPLOAD-BOUNDARY + PRE-RELEASE-BARRIER |"
             echo "| Workflow run | \`${{ github.run_id }}\` (attempt ${{ github.run_attempt }}) |"
             echo "| Dispatched by | \`${{ github.actor }}\` |"
             echo "| Timestamp (UTC) | \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\` |"
-            echo
-            if [ "${{ inputs.mode }}" = "release" ]; then
-              echo "PRODUCTION MUTATION = YES (Hosting + ssrcanilgcm)"
-              echo "DEPLOY STEP = EXECUTED"
+            if [ "${MODE}" = "release" ]; then
+              echo "| G8 predeploy manifest | \`.firebase/canil-gcm-g8-predeploy-manifest.json\` |"
+              echo "| G8 predeploy sha256 | \`${CT4_G8_PREDEPLOY_MANIFEST_SHA256:-unavailable}\` |"
+              echo "| G8 predeploy digest | \`${CT4_G8_PREDEPLOY_MANIFEST_DIGEST:-unavailable}\` |"
+              echo "| G8 materialized buildId | \`${CT4_G8_PREDEPLOY_BUILD_ID:-unavailable}\` |"
+              echo "| G8 upload attestation | \`.firebase/canil-gcm-g8-upload-attestation.json\` |"
+              echo "| G8 upload attestation sha256 | \`${CT4_G8_UPLOAD_ATTESTATION_SHA256:-unavailable}\` |"
+              echo "| G8 upload attestation digest | \`${CT4_G8_UPLOAD_ATTESTATION_DIGEST:-unavailable}\` |"
+              echo "| G8 raw surface digest | \`${CT4_G8_RAW_SURFACE_DIGEST:-unavailable}\` |"
+              echo "| G8 functions archive sha256 | \`${CT4_G8_FUNCTIONS_ARCHIVE_SHA256:-unavailable}\` |"
+              echo "| Remote cloud persistence | \`CLI_TRANSPORT_OBSERVED_NOT_INDEPENDENTLY_VERIFIED (independent cloud readback required)\` |"
             else
-              echo "PRODUCTION MUTATION = NO"
-              echo "DEPLOY STEP = SKIPPED"
+              echo "| G8 attestation scope | \`NOT_APPLICABLE_IN_AUTH_CHECK\` |"
             fi
+            echo
+            echo "PRODUCTION MUTATION = ${PROD_MUTATION}"
+            echo "DEPLOY STEP = ${DEPLOY_STEP_STATUS}"
           } >> "$GITHUB_STEP_SUMMARY"

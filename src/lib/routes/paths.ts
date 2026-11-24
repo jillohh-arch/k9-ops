@@ -21,6 +21,7 @@ export const paths = {
   trainingMatrix: "/training-matrix",
   health: "/health",
   inventory: "/inventory",
+  warehouse: "/warehouse",
   reports: "/reports",
   access: "/access",
   shifts: "/shifts",

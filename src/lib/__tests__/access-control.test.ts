@@ -22,7 +22,10 @@ import {
   type AccessProfile,
 } from "../permissions/access-control";
 import { accessProfileForFunction } from "@/features/access/data/access-profile-service";
-import { resolveProfileId } from "@/features/access/providers/access-control-provider";
+import {
+  applyK9InstructorCapability,
+  resolveProfileId,
+} from "@/features/access/providers/access-control-provider";
 import {
   CAPABILITY_LABELS,
   LEGACY_TO_GRANULAR,
@@ -705,6 +708,152 @@ describe("CT3.F10.OPERATOR-HEALTH-ROUTINE-CAPABILITY-REPAIR-R1", () => {
 
     expect(resolveProfileId(userProfile as never)).toBe(
       "stg_health_readiness_homologator",
+    );
+  });
+});
+
+describe("R1 Instructor Role Parity & Zero Access Profile Fabrication", () => {
+  function makeAuthProfile(overrides: {
+    access_profile_id?: string;
+    active?: boolean;
+    deleted_at?: unknown;
+    archived_at?: unknown;
+    status?: string;
+    roles?: string[];
+    isK9Instructor?: boolean;
+  }) {
+    const userMirror: Record<string, unknown> = {};
+    if (overrides.access_profile_id !== undefined) {
+      userMirror.access_profile_id = overrides.access_profile_id;
+    }
+    if (overrides.active !== undefined) userMirror.active = overrides.active;
+    if (overrides.deleted_at !== undefined) {
+      userMirror.deleted_at = overrides.deleted_at;
+    }
+    if (overrides.archived_at !== undefined) {
+      userMirror.archived_at = overrides.archived_at;
+    }
+    if (overrides.status !== undefined) userMirror.status = overrides.status;
+
+    return {
+      uid: "uid-r1",
+      email: "r1@gcm.com.br",
+      displayName: "R1 User",
+      photoUrl: null,
+      ra: "777",
+      roles: overrides.roles ?? [],
+      isK9Instructor: overrides.isK9Instructor ?? false,
+      claims: {},
+      userMirror,
+    };
+  }
+
+  it("IR-01 / IR-02: revoked instructor with legacy roles never resolves deprecated 'instrutor_k9'", () => {
+    const profile = makeAuthProfile({
+      isK9Instructor: false,
+      roles: ["instrutor", "adestrador", "instrutor_k9"],
+    });
+    expect(resolveProfileId(profile as never)).toBe("operador_k9");
+  });
+
+  it("IR-03: active canonical instructor with explicit base profile preserves base profile", () => {
+    const operadorProfile = makeAuthProfile({
+      isK9Instructor: true,
+      access_profile_id: "operador_k9",
+    });
+    const almoxProfile = makeAuthProfile({
+      isK9Instructor: true,
+      access_profile_id: "almoxarifado",
+    });
+    expect(resolveProfileId(operadorProfile as never)).toBe("operador_k9");
+    expect(resolveProfileId(almoxProfile as never)).toBe("almoxarifado");
+  });
+
+  it("IR-04: active canonical instructor without access_profile_id NEVER fabricates 'instrutor_k9'", () => {
+    const profile = makeAuthProfile({
+      isK9Instructor: true,
+      roles: [],
+    });
+    const resolved = resolveProfileId(profile as never);
+    expect(resolved).not.toBe("instrutor_k9");
+    expect(resolved).toBe("operador_k9");
+  });
+
+  it("IR-05: ratified legacy instructor roles without access_profile_id NEVER fabricate 'instrutor_k9'", () => {
+    const profile = makeAuthProfile({
+      isK9Instructor: true,
+      roles: ["instrutor_k9", "instrutor", "adestrador"],
+    });
+    const resolved = resolveProfileId(profile as never);
+    expect(resolved).not.toBe("instrutor_k9");
+    expect(resolved).toBe("operador_k9");
+  });
+
+  it("IR-07: inactive/deleted/archived userMirror falls back to 'operador_k9' even if explicit profile was admin", () => {
+    expect(
+      resolveProfileId(
+        makeAuthProfile({
+          access_profile_id: "administrador",
+          active: false,
+          isK9Instructor: false,
+        }) as never,
+      ),
+    ).toBe("operador_k9");
+    expect(
+      resolveProfileId(
+        makeAuthProfile({
+          access_profile_id: "administrador",
+          deleted_at: "2026-01-01T00:00:00Z",
+        }) as never,
+      ),
+    ).toBe("operador_k9");
+    expect(
+      resolveProfileId(
+        makeAuthProfile({
+          access_profile_id: "administrador",
+          archived_at: "2026-01-01T00:00:00Z",
+        }) as never,
+      ),
+    ).toBe("operador_k9");
+    expect(
+      resolveProfileId(
+        makeAuthProfile({
+          access_profile_id: "administrador",
+          status: "Inativo",
+        }) as never,
+      ),
+    ).toBe("operador_k9");
+  });
+
+  it("applyK9InstructorCapability grants orthogonal training view/approve without mutating profile.id or unrelated permissions", () => {
+    const almox = defaultAccessProfiles.find((p) => p.id === "almoxarifado")!;
+    const instructorAuth = makeAuthProfile({
+      access_profile_id: "almoxarifado",
+      isK9Instructor: true,
+    });
+
+    const enhanced = applyK9InstructorCapability(almox, instructorAuth as never);
+    expect(enhanced.id).toBe("almoxarifado");
+    expect(hasAccessPermission(enhanced, "training", "view")).toBe(true);
+    expect(hasAccessPermission(enhanced, "training", "approve")).toBe(true);
+    expect(hasAccessPermission(enhanced, "training_matrix", "view")).toBe(true);
+    expect(hasAccessPermission(enhanced, "training_matrix", "approve")).toBe(true);
+    expect(hasAccessPermission(enhanced, "k9", "approve")).toBe(false);
+    expect(hasAccessPermission(enhanced, "audit", "view")).toBe(false);
+
+    const revokedAuth = makeAuthProfile({
+      access_profile_id: "operador_k9",
+      isK9Instructor: false,
+    });
+    const operador = defaultAccessProfiles.find((p) => p.id === "operador_k9")!;
+    const notEnhanced = applyK9InstructorCapability(
+      operador,
+      revokedAuth as never,
+    );
+    expect(notEnhanced.id).toBe("operador_k9");
+    expect(hasAccessPermission(notEnhanced, "training", "approve")).toBe(false);
+    expect(hasAccessPermission(notEnhanced, "training_matrix", "approve")).toBe(
+      false,
     );
   });
 });

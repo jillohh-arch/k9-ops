@@ -101,9 +101,10 @@ const navItems = [
   },
   { href: paths.health, icon: HeartPulse, label: "Saúde", moduleId: "health" },
   {
-    href: paths.inventory,
+    activePrefixes: [paths.warehouse, paths.inventory],
+    href: paths.warehouse,
     icon: Boxes,
-    label: "Estoque",
+    label: "Almoxarifado",
     moduleId: "inventory",
   },
   {
@@ -167,6 +168,7 @@ const routeAccessRules: RouteAccessRule[] = [
   { prefix: paths.occurrences, modules: ["occurrences"] },
   { prefix: paths.health, modules: ["health"] },
   { prefix: paths.inventory, modules: ["inventory"] },
+  { prefix: paths.warehouse, modules: ["inventory"] },
   { prefix: paths.reports, modules: ["reports"] },
   { prefix: paths.access, modules: ["access"] },
   { prefix: paths.shifts, modules: ["shifts"] },

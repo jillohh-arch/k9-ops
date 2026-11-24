@@ -3,7 +3,7 @@ import type { AuthorityEnvelope, ServerAttestation } from '../runtime-authority-
 import { evaluateStructuralValidity, evaluateTrustedAuthority, EXCEPTIONAL_RECONCILE, SELF_REGULARIZE } from '../runtime-authority-boundary';
 
 const validActor = { uid: 'uid-1', ra: 'RA01', revision: 1, active: true, confirmed: true };
-const validGrant = { capability: SELF_REGULARIZE as const, grantRevision: 1, authorityRevision: 1 };
+const validGrant = { capability: SELF_REGULARIZE, grantRevision: 1, authorityRevision: 1 };
 const validF40 = { activeMembership: true, confirmed: true, incomingCrewMember: true, generation: 'g1' };
 const validSchedule = { snapshotId: 'snap-1', revision: 1, serviceDate: '2026-01-15', timezone: 'America/Sao_Paulo', start: '2026-01-15T08:00:00Z', end: '2026-01-15T17:00:00Z', source: 'server', integrity: 'abc' };
 const validEnvelope: AuthorityEnvelope = { actor: validActor, grant: validGrant, f40: validF40, schedule: validSchedule };

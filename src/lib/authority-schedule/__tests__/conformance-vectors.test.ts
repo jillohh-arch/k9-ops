@@ -13,6 +13,139 @@ import {
   verifySnapshot,
 } from '../snapshots';
 import { assertAuthorityRevision } from '../authority-revisions';
+import type {
+  AuthorityEvidence,
+  AuthorityRevision,
+  CalculatedScheduleWindow,
+  CrewSchedule,
+  F40Eligibility,
+  IdentityBinding,
+  ScheduleSnapshot,
+  TrustedIdentity,
+} from '../contracts';
+
+interface SerializedScheduleWindow {
+  scheduleId: string;
+  revision: number;
+  timezone: string;
+  serviceDate: string;
+  start: string;
+  end: string;
+  inclusiveStart: true;
+  exclusiveEnd: true;
+}
+
+interface ConformanceVectorExpected {
+  state?: string;
+  result?: unknown;
+  error?: string | null;
+  reason?: string;
+  capability?: string;
+  durationMs?: number;
+  startIso?: string;
+  inclusiveStart?: boolean;
+  exclusiveEnd?: boolean;
+  verifyResult?: boolean;
+  frozen?: boolean;
+  supersededSnapshotId?: string;
+}
+
+type ConformanceVector =
+  | {
+      id: string;
+      category: 'identity';
+      source_function: 'resolveUniqueBinding';
+      input: {
+        bindings: IdentityBinding[];
+        uid: string;
+        requestedRa?: string;
+      };
+      expected: ConformanceVectorExpected;
+    }
+  | {
+      id: string;
+      category: 'identity';
+      source_function: 'validateBindingUniqueness';
+      input: {
+        bindings: IdentityBinding[];
+      };
+      expected: ConformanceVectorExpected;
+    }
+  | {
+      id: string;
+      category: 'identity';
+      source_function: 'validateIdentityBinding';
+      input: {
+        binding: Partial<IdentityBinding>;
+      };
+      expected: ConformanceVectorExpected;
+    }
+  | {
+      id: string;
+      category: 'capabilities';
+      source_function: 'evaluateCapability';
+      input: {
+        identity?: TrustedIdentity;
+        capability: unknown;
+        evidence?: AuthorityEvidence;
+        f40?: F40Eligibility;
+      };
+      expected: ConformanceVectorExpected;
+    }
+  | {
+      id: string;
+      category: 'schedule';
+      source_function: 'calculateCrewWindow';
+      input: CrewSchedule;
+      expected: ConformanceVectorExpected;
+    }
+  | {
+      id: string;
+      category: 'snapshots';
+      source_function: 'createSnapshot';
+      input: {
+        window?: SerializedScheduleWindow;
+        source: string;
+        snapshotId: string;
+        createdAt: string;
+        supersedesSnapshotId?: string;
+      };
+      expected: ConformanceVectorExpected;
+    }
+  | {
+      id: string;
+      category: 'snapshots';
+      source_function: 'verifySnapshot';
+      input: {
+        originalSource?: string;
+        modifiedSource?: string;
+      };
+      expected: ConformanceVectorExpected;
+    }
+  | {
+      id: string;
+      category: 'snapshots';
+      source_function: 'buildSupersessionRecord';
+      input: {
+        oldSnapshot: ScheduleSnapshot;
+        replacementSnapshot: ScheduleSnapshot;
+        reason: string;
+        createdBy: string;
+        recordId: string;
+        createdAt: string;
+      };
+      expected: ConformanceVectorExpected;
+    }
+  | {
+      id: string;
+      category: 'authority_revisions';
+      source_function: 'assertAuthorityRevision';
+      input: {
+        expected?: number | null;
+        current?: AuthorityRevision | null;
+      };
+      expected: ConformanceVectorExpected;
+    };
 
 describe('conformance vectors v1.1.0 suite integrity', () => {
   it('has version 1.1.0', () => {
@@ -30,10 +163,11 @@ describe('conformance vectors v1.1.0 suite integrity', () => {
 describe('conformance vectors execution', () => {
   for (const vector of vectorsPayload.vectors) {
     it(`executes vector: ${vector.id} (${vector.category})`, () => {
-      const { category, input, expected, source_function } = vector as any;
+      const typedVector = vector as unknown as ConformanceVector;
 
-      if (category === 'identity') {
-        if (source_function === 'resolveUniqueBinding') {
+      if (typedVector.category === 'identity') {
+        if (typedVector.source_function === 'resolveUniqueBinding') {
+          const { input, expected } = typedVector;
           const result = resolveUniqueBinding(
             input.bindings,
             input.uid,
@@ -44,10 +178,12 @@ describe('conformance vectors execution', () => {
           } else {
             expect(result).toEqual(expected.result);
           }
-        } else if (source_function === 'validateBindingUniqueness') {
+        } else if (typedVector.source_function === 'validateBindingUniqueness') {
+          const { input, expected } = typedVector;
           const result = validateBindingUniqueness(input.bindings);
           expect(result).toBe(expected.result);
-        } else if (source_function === 'validateIdentityBinding') {
+        } else if (typedVector.source_function === 'validateIdentityBinding') {
+          const { input, expected } = typedVector;
           if (expected.error) {
             expect(() => validateIdentityBinding(input.binding)).toThrow(
               expected.error,
@@ -58,8 +194,9 @@ describe('conformance vectors execution', () => {
             );
           }
         }
-      } else if (category === 'capabilities') {
-        if (source_function === 'evaluateCapability') {
+      } else if (typedVector.category === 'capabilities') {
+        if (typedVector.source_function === 'evaluateCapability') {
+          const { input, expected } = typedVector;
           const decision = evaluateCapability({
             identity: input.identity,
             capability: input.capability,
@@ -74,14 +211,15 @@ describe('conformance vectors execution', () => {
             expect(decision.capability).toBe(expected.capability);
           }
         }
-      } else if (category === 'schedule') {
-        if (source_function === 'calculateCrewWindow') {
+      } else if (typedVector.category === 'schedule') {
+        if (typedVector.source_function === 'calculateCrewWindow') {
+          const { input, expected } = typedVector;
           if (expected.error) {
-            expect(() => calculateCrewWindow(input as any)).toThrow(
+            expect(() => calculateCrewWindow(input)).toThrow(
               expected.error,
             );
           } else {
-            const window = calculateCrewWindow(input as any);
+            const window = calculateCrewWindow(input);
             if (expected.durationMs !== undefined) {
               expect(window.end.getTime() - window.start.getTime()).toBe(
                 expected.durationMs,
@@ -98,8 +236,9 @@ describe('conformance vectors execution', () => {
             }
           }
         }
-      } else if (category === 'snapshots') {
-        if (source_function === 'createSnapshot') {
+      } else if (typedVector.category === 'snapshots') {
+        if (typedVector.source_function === 'createSnapshot') {
+          const { input, expected } = typedVector;
           if (expected.error) {
             expect(() =>
               createSnapshot(
@@ -109,7 +248,7 @@ describe('conformance vectors execution', () => {
                       start: new Date(input.window.start),
                       end: new Date(input.window.end),
                     }
-                  : (undefined as any),
+                  : (undefined as unknown as CalculatedScheduleWindow),
                 input.source,
                 input.snapshotId,
                 input.createdAt,
@@ -117,6 +256,8 @@ describe('conformance vectors execution', () => {
               ),
             ).toThrow(expected.error);
           } else {
+            expect(input.window).toBeDefined();
+            if (!input.window) return;
             const snapshot = createSnapshot(
               {
                 ...input.window,
@@ -135,7 +276,8 @@ describe('conformance vectors execution', () => {
               expect(Object.isFrozen(snapshot)).toBe(true);
             }
           }
-        } else if (source_function === 'verifySnapshot') {
+        } else if (typedVector.source_function === 'verifySnapshot') {
+          const { input, expected } = typedVector;
           if (input.originalSource && input.modifiedSource) {
             const win = {
               scheduleId: 's',
@@ -156,7 +298,8 @@ describe('conformance vectors execution', () => {
             const tampered = { ...snap, source: input.modifiedSource };
             expect(verifySnapshot(tampered)).toBe(expected.verifyResult);
           }
-        } else if (source_function === 'buildSupersessionRecord') {
+        } else if (typedVector.source_function === 'buildSupersessionRecord') {
+          const { input, expected } = typedVector;
           if (expected.error) {
             expect(() =>
               buildSupersessionRecord(
@@ -182,8 +325,9 @@ describe('conformance vectors execution', () => {
             );
           }
         }
-      } else if (category === 'authority_revisions') {
-        if (source_function === 'assertAuthorityRevision') {
+      } else if (typedVector.category === 'authority_revisions') {
+        if (typedVector.source_function === 'assertAuthorityRevision') {
+          const { input, expected } = typedVector;
           const decision = assertAuthorityRevision(
             input.expected ?? undefined,
             input.current ?? undefined,
